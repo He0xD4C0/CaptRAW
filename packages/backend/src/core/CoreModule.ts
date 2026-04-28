@@ -16,6 +16,8 @@ import { UserSearchService } from '@/core/UserSearchService.js';
 import { WebhookTestService } from '@/core/WebhookTestService.js';
 import { FlashService } from '@/core/FlashService.js';
 import { ChannelMutingService } from '@/core/ChannelMutingService.js';
+import { OIDCKeypairService } from '@/core/OIDCKeypairService.js';
+import { OIDCTokenService } from '@/core/OIDCTokenService.js';
 import { AccountMoveService } from './AccountMoveService.js';
 import { AccountUpdateService } from './AccountUpdateService.js';
 import { AiService } from './AiService.js';
@@ -379,6 +381,8 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ChannelFollowingService,
 		ChannelMutingService,
 		ChatService,
+		OIDCKeypairService,
+		OIDCTokenService,
 		RegistryApiService,
 		ReversiService,
 		PageService,
@@ -679,6 +683,8 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ChannelFollowingService,
 		ChannelMutingService,
 		ChatService,
+		OIDCKeypairService,
+		OIDCTokenService,
 		RegistryApiService,
 		ReversiService,
 		PageService,

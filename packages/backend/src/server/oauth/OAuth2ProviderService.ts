@@ -31,6 +31,7 @@ import Logger from '@/logger.js';
 import { StatusError } from '@/misc/status-error.js';
 import { HtmlTemplateService } from '@/server/web/HtmlTemplateService.js';
 import { OAuthPage } from '@/server/web/views/oauth.js';
+import { OIDCTokenService } from '@/core/OIDCTokenService.js';
 import type { ServerResponse } from 'node:http';
 import type { FastifyInstance } from 'fastify';
 
@@ -321,6 +322,7 @@ export class OAuth2ProviderService {
 		private cacheService: CacheService,
 		loggerService: LoggerService,
 		private htmlTemplateService: HtmlTemplateService,
+		private oidcTokenService: OIDCTokenService,
 	) {
 		this.#logger = loggerService.getLogger('oauth');
 
@@ -344,13 +346,16 @@ export class OAuth2ProviderService {
 			modes: getQueryMode(config.url),
 		}, (client, redirectUri, token, ares, areq, locals, done) => {
 			(async (): Promise<OmitFirstElement<Parameters<typeof done>>> => {
-				this.#logger.info(`Checking the user before sending authorization code to ${client.id}`);
-
 				if (!token) {
 					throw new AuthorizationError('No user', 'invalid_request');
 				}
-				const user = await this.cacheService.localUserByNativeTokenCache.fetch(token,
-					() => this.usersRepository.findOneBy({ token }) as Promise<MiLocalUser | null>);
+				// Try direct DB query first to avoid stale cache entries
+				let user = await this.usersRepository.findOneBy({ token });
+				if (!user) {
+					// Cache might have a stale null entry, try fetching with cache bypass
+					user = await this.cacheService.localUserByNativeTokenCache.fetch(token,
+						() => this.usersRepository.findOneBy({ token }) as Promise<MiLocalUser | null>);
+				}
 				if (!user) {
 					throw new AuthorizationError('No such user', 'invalid_request');
 				}
@@ -402,6 +407,13 @@ export class OAuth2ProviderService {
 				const accessToken = secureRndstr(128);
 				const now = new Date();
 
+				// Fetch user for id_token generation
+				const user = await this.usersRepository.findOneBy({ id: granted.userId });
+				if (!user) {
+					this.#logger.error(`User ${granted.userId} not found for token exchange`);
+					return;
+				}
+
 				// NOTE: we don't have a setup for automatic token expiration
 				await accessTokensRepository.insert({
 					id: idService.gen(now.getTime()),
@@ -422,7 +434,14 @@ export class OAuth2ProviderService {
 				granted.grantedToken = accessToken;
 				this.#logger.info(`Generated access token for ${granted.clientId} for user ${granted.userId}, with scope: [${granted.scopes}]`);
 
-				return [accessToken, undefined, { scope: granted.scopes.join(' ') }];
+				// Only generate id_token if 'openid' scope is requested (OIDC spec)
+				const extraParams: Record<string, unknown> = { scope: granted.scopes.join(' ') };
+				if (granted.scopes.includes('openid')) {
+					const idToken = await this.oidcTokenService.generateIdToken(user, granted.clientId);
+					extraParams.id_token = idToken;
+				}
+
+				return [accessToken, undefined, extraParams];
 			})().then(args => done(null, ...args ?? []), err => done(err));
 		}));
 	}
@@ -445,26 +464,11 @@ export class OAuth2ProviderService {
 
 	@bindThis
 	public async createServer(fastify: FastifyInstance): Promise<void> {
-		fastify.get('/authorize', async (request, reply) => {
-			const oauth2 = (request.raw as MiddlewareRequest).oauth2;
-			if (!oauth2) {
-				throw new Error('Unexpected lack of authorization information');
-			}
-
-			this.#logger.info(`Rendering authorization page for "${oauth2.client.name}"`);
-
-			reply.header('Cache-Control', 'no-store');
-			return await HtmlTemplateService.replyHtml(reply, OAuthPage({
-				...await this.htmlTemplateService.getCommonData(),
-				transactionId: oauth2.transactionID,
-				clientName: oauth2.client.name,
-				clientLogo: oauth2.client.logo ?? undefined,
-				scope: oauth2.req.scope,
-			}));
-		});
-		fastify.post('/decision', async () => { });
-
+		// Register @fastify/express FIRST so that Express middleware works properly
 		await fastify.register(fastifyExpress);
+
+		// Register Express middleware for /authorize BEFORE Fastify routes
+		// so that oauth2orize can intercept and process the request
 		fastify.use('/authorize', this.#server.authorize(((areq, done) => {
 			(async (): Promise<Parameters<typeof done>> => {
 				// This should return client/redirectURI AND the error, or
@@ -497,7 +501,11 @@ export class OAuth2ProviderService {
 				}
 
 				try {
-					const scopes = [...new Set(scope)].filter(s => (<readonly string[]>kinds).includes(s));
+					// OIDC standard scopes that are not in the Misskey permissions list
+					const oidcScopes = ['openid', 'profile', 'email'];
+					const scopes = [...new Set(scope)].filter(s =>
+						(<readonly string[]>kinds).includes(s) || oidcScopes.includes(s)
+					);
 					if (!scopes.length) {
 						throw new AuthorizationError('`scope` parameter has no known scope', 'invalid_scope');
 					}
@@ -525,6 +533,7 @@ export class OAuth2ProviderService {
 		}));
 		fastify.use('/authorize', this.#server.errorHandler());
 
+		// Register Express middleware for /decision BEFORE Fastify routes
 		fastify.use('/decision', bodyParser.urlencoded({ extended: false }));
 		fastify.use('/decision', this.#server.decision((req, done) => {
 			const { body } = req as OAuth2DecisionRequest;
@@ -533,6 +542,26 @@ export class OAuth2ProviderService {
 			done(null, undefined);
 		}));
 		fastify.use('/decision', this.#server.errorHandler());
+
+		// Fastify GET route for /authorize - renders the authorization page
+		// This runs AFTER Express middleware has processed the request
+		fastify.get('/authorize', async (request, reply) => {
+			const oauth2 = (request.raw as MiddlewareRequest).oauth2;
+			if (!oauth2) {
+				throw new Error('Unexpected lack of authorization information');
+			}
+
+			this.#logger.info(`Rendering authorization page for "${oauth2.client.name}"`);
+
+			reply.header('Cache-Control', 'no-store');
+			return await HtmlTemplateService.replyHtml(reply, OAuthPage({
+				...await this.htmlTemplateService.getCommonData(),
+				transactionId: oauth2.transactionID,
+				clientName: oauth2.client.name,
+				clientLogo: oauth2.client.logo ?? undefined,
+				scope: oauth2.req.scope,
+			}));
+		});
 
 		// Return 404 for any unknown paths under /oauth so that clients can know
 		// whether a certain endpoint is supported or not.

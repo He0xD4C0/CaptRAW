@@ -15,8 +15,10 @@ import type { MiUser } from '@/models/User.js';
 import * as Acct from '@/misc/acct.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { bindThis } from '@/decorators.js';
+import { permissions as kinds } from 'misskey-js';
 import { NodeinfoServerService } from './NodeinfoServerService.js';
 import { OAuth2ProviderService } from './oauth/OAuth2ProviderService.js';
+import { OIDCKeypairService } from '@/core/OIDCKeypairService.js';
 import type { FindOptionsWhere } from 'typeorm';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 
@@ -35,6 +37,7 @@ export class WellKnownServerService {
 		private nodeinfoServerService: NodeinfoServerService,
 		private userEntityService: UserEntityService,
 		private oauth2ProviderService: OAuth2ProviderService,
+		private oidcKeypairService: OIDCKeypairService,
 	) {
 		//this.createServer = this.createServer.bind(this);
 	}
@@ -109,6 +112,52 @@ export class WellKnownServerService {
 
 		fastify.get('/.well-known/oauth-authorization-server', async () => {
 			return this.oauth2ProviderService.generateRFC8414();
+		});
+
+		fastify.get('/.well-known/openid-configuration', async (request, reply) => {
+			reply.header('Content-Type', 'application/json');
+			reply.header('Cache-Control', 'public, max-age=86400');
+
+			return {
+				issuer: this.config.url,
+				authorization_endpoint: new URL('/oauth/authorize', this.config.url).toString(),
+				token_endpoint: new URL('/oauth/token', this.config.url).toString(),
+				userinfo_endpoint: new URL('/oauth/userinfo', this.config.url).toString(),
+				jwks_uri: new URL('/oauth/jwks', this.config.url).toString(),
+				
+				// Supported response types and grant types
+				response_types_supported: ['code'],
+				grant_types_supported: ['authorization_code'],
+				
+				// Token endpoint authentication methods
+				token_endpoint_auth_methods_supported: ['none'],
+				
+				// Subject types
+				subject_types_supported: ['public'],
+				
+				// ID token signing algorithms
+				id_token_signing_alg_values_supported: ['RS256'],
+				
+				// PKCE support
+				code_challenge_methods_supported: ['S256'],
+				
+				// Scopes (Misskey API permissions + OIDC standard scopes)
+				scopes_supported: [...kinds, 'openid', 'profile', 'email'],
+				
+				// Claims
+				claims_supported: [
+					'sub',
+					'name',
+					'preferred_username',
+					'picture',
+					'email',
+					'email_verified',
+				],
+				
+				// Additional OIDC capabilities
+				require_pkce_for_public_clients: true,
+				authorization_response_iss_parameter_supported: true,
+			};
 		});
 
 		/* TODO
