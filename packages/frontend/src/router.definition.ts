@@ -109,10 +109,6 @@ export const ROUTE_DEF = [{
 		name: 'email',
 		component: page(() => import('@/pages/settings/email.vue')),
 	}, {
-		path: '/phone',
-		name: 'phone',
-		component: page(() => import('@/pages/settings/phone.vue')),
-	}, {
 		path: '/security',
 		name: 'security',
 		component: page(() => import('@/pages/settings/security.vue')),
@@ -482,10 +478,6 @@ export const ROUTE_DEF = [{
 		path: '/object-storage',
 		name: 'object-storage',
 		component: page(() => import('@/pages/admin/object-storage.vue')),
-	}, {
-		path: '/phone',
-		name: 'phone',
-		component: page(() => import('@/pages/settings/phone.vue')),
 	}, {
 		path: '/security',
 		name: 'security',
