@@ -118,6 +118,14 @@ export class WellKnownServerService {
 			reply.header('Content-Type', 'application/json');
 			reply.header('Cache-Control', 'public, max-age=86400');
 
+			if (!this.meta.enableOidc) {
+				reply.code(404);
+				return {
+					error: 'not_found',
+					error_description: 'OIDC is not enabled on this server',
+				};
+			}
+
 			return {
 				issuer: this.config.url,
 				authorization_endpoint: new URL('/oauth/authorize', this.config.url).toString(),

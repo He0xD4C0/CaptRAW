@@ -53,6 +53,8 @@
 		"utf-8-validate": "6.0.6"
 	},
 	"dependencies": {
+		"@alicloud/dysmsapi20170525": "4.5.1",
+		"@alicloud/openapi-client": "0.4.15",
 		"@aws-sdk/client-s3": "3.1057.0",
 		"@aws-sdk/lib-storage": "3.1057.0",
 		"@fastify/accepts": "5.0.4",
@@ -105,9 +107,9 @@
 		"ip-cidr": "4.0.2",
 		"ipaddr.js": "2.4.0",
 		"is-svg": "6.1.0",
+		"jose": "^5.2.0",
 		"json5": "2.2.3",
 		"jsonld": "9.0.0",
-		"jose": "^5.2.0",
 		"juice": "11.1.1",
 		"meilisearch": "0.58.0",
 		"mfm-js": "0.26.0",

@@ -43,10 +43,10 @@ export class OIDCServerService {
 			reply.header('Content-Type', 'application/json');
 			reply.header('Cache-Control', 'public, max-age=604800'); // 1 week
 
-			const jwk = await this.oidcKeypairService.getPublicKeyForJWKS();
+			const keys = await this.oidcKeypairService.getAllPublicKeysForJWKS();
 
 			return {
-				keys: [jwk],
+				keys,
 			};
 		});
 

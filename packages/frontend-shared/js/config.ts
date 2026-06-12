@@ -13,7 +13,7 @@ export const url = address.origin;
 export const port = address.port;
 export const apiUrl = window.location.origin + '/api';
 export const wsOrigin = window.location.origin;
-export const lang = localStorage.getItem('lang') ?? 'en-US';
+export const lang = localStorage.getItem('lang') ?? 'zh-CN';
 export const langs = _LANGS_;
 export const version = _VERSION_;
 export const instanceName = (siteName === 'Misskey' || siteName == null) ? host : siteName;

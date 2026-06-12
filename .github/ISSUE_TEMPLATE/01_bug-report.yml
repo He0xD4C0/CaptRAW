@@ -73,7 +73,7 @@ body:
         If you are using a managed service, put that after the version.
 
         Examples:
-          * Installation Method or Hosting Service: docker compose, k8s/docker, systemd, "Misskey install shell script", development environment
+          * Installation Method or Hosting Service: systemd, "Misskey install shell script", development environment
           * Misskey: 2026.x.x
           * Node: 20.x.x
           * PostgreSQL: 18.x.x

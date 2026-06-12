@@ -2321,6 +2321,10 @@ export interface Locale extends ILocale {
      */
     "objectStorageSetPublicRead": string;
     /**
+     * OIDC
+     */
+    "oidc": string;
+    /**
      * s3ForcePathStyleを有効にすると、バケット名をURLのホスト名ではなくパスの一部として指定することを強制します。セルフホストされたMinioなどの使用時に有効にする必要がある場合があります。
      */
     "s3ForcePathStyleDesc": string;
@@ -6448,6 +6452,76 @@ export interface Locale extends ILocale {
              */
             "softwareSuspended": string;
         };
+    };
+    "_oidc": {
+        /**
+         * OpenID Connect エンドポイントを有効にします (/.well-known/openid-configuration, /oauth/jwks, /oauth/userinfo)
+         */
+        "enableDescription": string;
+        /**
+         * JWKS エンドポイント
+         */
+        "jwksEndpoint": string;
+        /**
+         * 署名アルゴリズム
+         */
+        "signingAlgorithm": string;
+        /**
+         * アクティブな鍵
+         */
+        "keyCount": string;
+        /**
+         * ディスカバリー エンドポイント
+         */
+        "discovery": string;
+        /**
+         * OAuth アプリ
+         */
+        "oauthApps": string;
+        /**
+         * アプリ ID
+         */
+        "appId": string;
+        /**
+         * 権限
+         */
+        "permissions": string;
+        /**
+         * アクティブなトークン
+         */
+        "activeTokens": string;
+        /**
+         * コールバック URL
+         */
+        "callbackUrl": string;
+        /**
+         * アプリを作成
+         */
+        "createApp": string;
+        /**
+         * 名前
+         */
+        "createAppName": string;
+        /**
+         * 説明
+         */
+        "createAppDescription": string;
+        /**
+         * コールバック URL
+         */
+        "createAppCallbackUrl": string;
+        /**
+         * ネイティブアプリの場合は空にしてください
+         */
+        "createAppCallbackUrlDesc": string;
+        /**
+         * 権限
+         */
+        "createAppPermissions": string;
+        /**
+         * カンマ区切り、例: read:account, write:notes
+         */
+        "createAppPermissionsDesc": string;
     };
     "_bubbleGame": {
         /**

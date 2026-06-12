@@ -1,63 +1,114 @@
-<div align="center">
-<a href="https://misskey-hub.net">
-	<img src="./assets/title_float.svg" alt="Misskey logo" style="border-radius:50%" width="300"/>
-</a>
+# CaptRAW
 
-**🌎 **Misskey** is an open source, federated social media platform that's free forever! 🚀**
+CaptRAW is a fork of [Misskey](https://github.com/misskey-dev/misskey) with enhanced enterprise-grade authentication and authorization capabilities.
 
-[Learn more](https://misskey-hub.net/)
+*Read this in [Japanese](README_JP.md) | [简体中文](README_ZH-CN.md)*
+
+## Key Features
+
+### OIDC Provider
+
+Full OpenID Connect 1.0 provider implementation:
+
+- Authorization Code Flow with mandatory PKCE (S256)
+- ID Token issuance (RS256 JWT signing)
+- UserInfo endpoint (GET/POST)
+- JWKS endpoint (multi-key, auto-rotation)
+- OIDC Discovery (`/.well-known/openid-configuration`)
+- OAuth 2.0 Authorization Server Metadata (RFC 8414)
+- `nonce` parameter and `auth_time` claim support
+
+Toggle via admin panel at `/admin/oidc-settings`.
+
+### Phone SMS Verification
+
+Phone number verification via SMS for registration and login:
+
+- Extensible `ISmsProvider` interface for multi-provider support
+- Alibaba Cloud SMS provider (HMAC-SHA1 signing)
+- Verification code send and verify APIs
+- Optional mandatory phone requirement for signup (`phoneRequiredForSignup`)
+
+Configure via admin panel at `/admin/sms-settings`.
+
+### Admin Tools
+
+- OAuth application management (`/admin/oauth-apps`) — list, create, delete
+- Default language: Chinese (zh-CN)
+
+## Requirements
+
+- **Node.js** 22.x
+- **PostgreSQL** 18
+- **Redis** 7
+
+This project does **not** support Docker deployment. Install the middleware directly.
+
+## Quick Start
+
+```bash
+# Install dependencies
+pnpm install
+
+# Start PostgreSQL / Redis (macOS / Homebrew)
+brew services start postgresql@18
+brew services start redis
+createdb misskey-dev
+
+# Create config
+cp .config/example.yml .config/default.yml
+# Edit default.yml with your DB/Redis credentials
+
+# Build
+pnpm build
+
+# Run database migrations
+pnpm --filter backend migrate
+
+# Start development server
+pnpm dev
+```
+
+Visit `http://localhost:3000` and create an admin account using the setup password from `default.yml`.
+
+## Configuration
+
+```yaml
+url: http://localhost:3000
+port: 3000
+
+db:
+  host: localhost
+  port: 5432
+  db: misskey-dev
+  user: <your-db-user>
+  pass: ''
+
+redis:
+  host: localhost
+  port: 6379
+
+setupPassword: <your-setup-password>
+```
+
+## Development
+
+```bash
+pnpm dev         # Dev server (HMR)
+pnpm lint        # Lint & typecheck
+pnpm build       # Production build
+```
+
+## License
+
+CaptRAW is based on Misskey and is licensed under [AGPL-3.0](LICENSE).
+
+## Acknowledgements
+
+Built on [Misskey](https://github.com/misskey-dev/misskey). Thanks to all Misskey contributors.
 
 ---
 
-<a href="https://misskey-hub.net/servers/">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/find_an-instance-acea31?logoColor=acea31&style=for-the-badge&logo=misskey&labelColor=363B40" alt="find an instance"/></a>
-
-<a href="https://misskey-hub.net/docs/for-admin/install/guides/">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/create_an-instance-FBD53C?logoColor=FBD53C&style=for-the-badge&logo=server&labelColor=363B40" alt="create an instance"/></a>
-
-<a href="./CONTRIBUTING.md">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/become_a-contributor-A371F7?logoColor=A371F7&style=for-the-badge&logo=git-merge&labelColor=363B40" alt="become a contributor"/></a>
-
-<a href="https://discord.gg/Wp8gVStHW3">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/join_the-community-5865F2?logoColor=5865F2&style=for-the-badge&logo=discord&labelColor=363B40" alt="join the community"/></a>
-
-<a href="https://www.patreon.com/syuilo">
-		<img src="https://custom-icon-badges.herokuapp.com/badge/become_a-patron-F96854?logoColor=F96854&style=for-the-badge&logo=patreon&labelColor=363B40" alt="become a patron"/></a>
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/misskey-dev/misskey)
-
-<a href="https://flatt.tech/oss/gmo/trampoline" target="_blank"><img src="https://flatt.tech/assets/images/badges/gmo-oss.svg" height="24px"/></a>
-
-</div>
-
-## Thanks
-
-<a href="https://sentry.io/"><img src="https://github.com/misskey-dev/misskey/assets/4439005/98576556-222f-467a-94be-e98dbda1d852" height="30" alt="Sentry" /></a>
-
-Thanks to [Sentry](https://sentry.io/) for providing the error tracking platform that helps us catch unexpected errors.
-
-<a href="https://www.chromatic.com/"><img src="https://user-images.githubusercontent.com/321738/84662277-e3db4f80-af1b-11ea-88f5-91d67a5e59f6.png" height="30" alt="Chromatic" /></a>
-
-Thanks to [Chromatic](https://www.chromatic.com/) for providing the visual testing platform that helps us review UI changes and catch visual regressions.
-
-<a href="https://about.codecov.io/for/open-source/"><img src="https://about.codecov.io/wp-content/themes/codecov/assets/brand/sentry-cobranding/logos/codecov-by-sentry-logo.svg" height="30" alt="Codecov" /></a>
-
-Thanks to [Codecov](https://about.codecov.io/for/open-source/) for providing the code coverage platform that helps us improve our test coverage.
-
-<a href="https://crowdin.com/"><img src="https://user-images.githubusercontent.com/20679825/230709597-1299a011-171a-4294-a91e-355a9b37c672.svg" height="30" alt="Crowdin" /></a>
-
-Thanks to [Crowdin](https://crowdin.com/) for providing the localization platform that helps us translate Misskey into many languages.
-
-<a href="https://hub.docker.com/"><img src="https://user-images.githubusercontent.com/20679825/230148221-f8e73a32-a49b-47c3-9029-9a15c3824f92.png" height="30" alt="Docker" /></a>
-
-Thanks to [Docker](https://hub.docker.com/) for providing the container platform that helps us run Misskey in production.
-
----
-
 <div align="center">
-	
-Support us with a ⭐ !
-
-[![Star History Chart](https://api.star-history.com/svg?repos=misskey-dev/misskey&type=Date)](https://star-history.com/#misskey-dev/misskey&Date)
-
+CaptRAW — Enterprise-ready Misskey fork
 </div>

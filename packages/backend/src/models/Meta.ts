@@ -192,6 +192,42 @@ export class MiMeta {
 	@Column('boolean', {
 		default: false,
 	})
+	public enableSms: boolean;
+
+	@Column('varchar', {
+		length: 32,
+		default: 'alibaba',
+	})
+	public smsProvider: string;
+
+	@Column('varchar', {
+		length: 128, nullable: true,
+	})
+	public smsAliAccessKeyId: string | null;
+
+	@Column('varchar', {
+		length: 256, nullable: true,
+	})
+	public smsAliAccessKeySecret: string | null;
+
+	@Column('varchar', {
+		length: 64, nullable: true,
+	})
+	public smsAliSignName: string | null;
+
+	@Column('varchar', {
+		length: 64, nullable: true,
+	})
+	public smsAliTemplateCode: string | null;
+
+	@Column('boolean', {
+		default: false,
+	})
+	public phoneRequiredForSignup: boolean;
+
+	@Column('boolean', {
+		default: false,
+	})
 	public enableHcaptcha: boolean;
 
 	@Column('varchar', {
@@ -730,6 +766,11 @@ export class MiMeta {
 		showTimelineForVisitor: boolean;
 		showActivitiesForVisitor: boolean;
 	};
+
+	@Column('boolean', {
+		default: true,
+	})
+	public enableOidc: boolean;
 }
 
 export type SoftwareSuspension = {

@@ -28,6 +28,11 @@ export class MiUserPending {
 	public email: string;
 
 	@Column('varchar', {
+		length: 32, nullable: true,
+	})
+	public phone: string | null;
+
+	@Column('varchar', {
 		length: 128,
 	})
 	public password: string;

@@ -34,6 +34,34 @@ export const meta = {
 				type: 'boolean',
 				optional: false, nullable: false,
 			},
+			phoneRequiredForSignup: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
+			enableSms: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
+			smsProvider: {
+				type: 'string',
+				optional: false, nullable: false,
+			},
+			smsAliAccessKeyId: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			smsAliAccessKeySecret: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			smsAliSignName: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			smsAliTemplateCode: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
 			enableHcaptcha: {
 				type: 'boolean',
 				optional: false, nullable: false,
@@ -596,6 +624,10 @@ export const meta = {
 				type: 'boolean',
 				optional: false, nullable: false,
 			},
+			enableOidc: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
 		},
 	},
 } as const;
@@ -638,6 +670,13 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				inquiryUrl: instance.inquiryUrl,
 				disableRegistration: instance.disableRegistration,
 				emailRequiredForSignup: instance.emailRequiredForSignup,
+			phoneRequiredForSignup: instance.phoneRequiredForSignup,
+			enableSms: instance.enableSms,
+			smsProvider: instance.smsProvider,
+			smsAliAccessKeyId: instance.smsAliAccessKeyId,
+			smsAliAccessKeySecret: instance.smsAliAccessKeySecret ? '••••••••' : null,
+			smsAliSignName: instance.smsAliSignName,
+			smsAliTemplateCode: instance.smsAliTemplateCode,
 				enableHcaptcha: instance.enableHcaptcha,
 				hcaptchaSiteKey: instance.hcaptchaSiteKey,
 				enableMcaptcha: instance.enableMcaptcha,
@@ -752,6 +791,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				remoteNotesCleaningExpiryDaysForEachNotes: instance.remoteNotesCleaningExpiryDaysForEachNotes,
 				remoteNotesCleaningMaxProcessingDurationInMinutes: instance.remoteNotesCleaningMaxProcessingDurationInMinutes,
 				showRoleBadgesOfRemoteUsers: instance.showRoleBadgesOfRemoteUsers,
+				enableOidc: instance.enableOidc,
 			};
 		});
 	}

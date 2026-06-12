@@ -263,6 +263,21 @@ type AdminInviteListResponse = operations['admin___invite___list']['responses'][
 type AdminMetaResponse = operations['admin___meta']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type AdminOidcAppDeleteRequest = operations['admin___oidc___app-delete']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminOidcAppShowRequest = operations['admin___oidc___app-show']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminOidcAppShowResponse = operations['admin___oidc___app-show']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type AdminOidcAppsRequest = operations['admin___oidc___apps']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminOidcAppsResponse = operations['admin___oidc___apps']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type AdminPromoCreateRequest = operations['admin___promo___create']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -1607,6 +1622,11 @@ declare namespace entities {
         AdminInviteListRequest,
         AdminInviteListResponse,
         AdminMetaResponse,
+        AdminOidcAppDeleteRequest,
+        AdminOidcAppShowRequest,
+        AdminOidcAppShowResponse,
+        AdminOidcAppsRequest,
+        AdminOidcAppsResponse,
         AdminPromoCreateRequest,
         AdminQueueClearRequest,
         AdminQueueDeliverDelayedResponse,

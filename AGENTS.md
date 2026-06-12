@@ -72,6 +72,13 @@
 13. **`working-on-frontend` スキルを参照せずに `packages/frontend/` 配下のファイルを編集・追加しない**
 14. **`shipping-misskey-change` スキルを参照せずに commit / PR 作成 / 作業をユーザーに返さない**
 
+### CaptRAW フォーク固有のルール
+
+15. **Docker / Dev Container / Kubernetes Chart 関連ファイルを追加しない**（本プロジェクトは Docker 非対応）
+16. **`locales/ja-JP.yml` と `locales/zh-CN.yml` 以外の locale YAML を手動編集しない**
+17. **電話番号を必須とする登録フローが有効な場合、それに依存する UI / API の整合性を保つこと**
+18. **OIDC / SMS 関連機能の変更時は CHANGELOG.md に記録すること**
+
 ---
 
 ## 変更を出す前の最低チェック

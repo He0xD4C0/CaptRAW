@@ -18,11 +18,19 @@ export interface IDTokenPayload {
 	iss: string; // Issuer (server URL)
 	iat: number; // Issued at
 	exp: number; // Expiration time
+	auth_time?: number; // Time of authentication (OIDC spec)
+	nonce?: string; // Nonce value from authorization request (OIDC spec)
 	preferred_username?: string;
 	name?: string;
 	picture?: string;
 	email?: string;
 	email_verified?: boolean;
+}
+
+export interface IDTokenOptions {
+	nonce?: string;
+	authTime?: number;
+	expiresIn?: number;
 }
 
 @Injectable()
@@ -41,10 +49,11 @@ export class OIDCTokenService {
 	public async generateIdToken(
 		user: MiUser | MiLocalUser,
 		clientId: string,
-		expiresIn: number = 3600, // 1 hour in seconds
+		options?: IDTokenOptions,
 	): Promise<string> {
 		const keypair = await this.oidcKeypairService.getOrGenerateKeyPair();
 		const now = Math.floor(Date.now() / 1000);
+		const expiresIn = options?.expiresIn ?? 3600; // 1 hour default
 
 		// Fetch user profile for email information
 		const userProfile = await this.userProfilesRepository.findOneBy({ userId: user.id });
@@ -56,12 +65,18 @@ export class OIDCTokenService {
 			iss: this.config.url,
 			iat: now,
 			exp: now + expiresIn,
+			auth_time: options?.authTime ?? now,
 			preferred_username: user.username,
 			name: user.name ?? undefined,
 			picture: user.avatarUrl ?? undefined,
 			email: userProfile?.email ?? undefined,
 			email_verified: userProfile?.emailVerified ?? false,
 		};
+
+		// Include nonce if provided (OIDC spec: required when nonce was sent in auth request)
+		if (options?.nonce) {
+			payload.nonce = options.nonce;
+		}
 
 		// Filter out undefined values
 		const claims = Object.fromEntries(
@@ -86,6 +101,7 @@ export class OIDCTokenService {
 		clientId: string,
 		accessToken: string,
 		scope: string[] = [],
+		options?: IDTokenOptions,
 	): Promise<{
 		access_token: string;
 		id_token: string;
@@ -93,13 +109,13 @@ export class OIDCTokenService {
 		expires_in: number;
 		scope: string;
 	}> {
-		const idToken = await this.generateIdToken(user, clientId);
+		const idToken = await this.generateIdToken(user, clientId, options);
 
 		return {
 			access_token: accessToken,
 			id_token: idToken,
 			token_type: 'Bearer',
-			expires_in: 3600,
+			expires_in: options?.expiresIn ?? 3600,
 			scope: scope.join(' '),
 		};
 	}

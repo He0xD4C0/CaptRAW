@@ -29,6 +29,7 @@ import type { AccessTokensRepository, UsersRepository } from '@/models/_.js';
 import { IdService } from '@/core/IdService.js';
 import { CacheService } from '@/core/CacheService.js';
 import type { MiLocalUser } from '@/models/User.js';
+import type { MiMeta } from '@/models/Meta.js';
 import { MemoryKVCache } from '@/misc/cache.js';
 import { LoggerService } from '@/core/LoggerService.js';
 import { OIDCTokenService } from '@/core/OIDCTokenService.js';
@@ -114,6 +115,8 @@ interface AuthorizationRequest {
 	scopes: string[];
 	codeChallenge: string;
 	codeChallengeMethod: string;
+	nonce?: string;
+	maxAge?: number;
 }
 
 interface AuthorizationRequestSeed {
@@ -124,6 +127,9 @@ interface AuthorizationRequestSeed {
 	requestedScope: string[];
 	codeChallenge?: string;
 	codeChallengeMethod?: string;
+	nonce?: string;
+	maxAge?: number;
+	prompt?: string;
 }
 
 interface AuthorizationTransaction {
@@ -137,6 +143,8 @@ interface AuthorizationCodeGrant {
 	redirectUri: string;
 	codeChallenge: string;
 	scopes: string[];
+	nonce?: string;
+	authTime?: number;
 	grantedToken?: string;
 	revoked?: boolean;
 	used?: boolean;
@@ -396,6 +404,8 @@ export class OAuth2ProviderService implements OnApplicationShutdown {
 		private accessTokensRepository: AccessTokensRepository,
 		@Inject(DI.usersRepository)
 		private usersRepository: UsersRepository,
+		@Inject(DI.meta)
+		private meta: MiMeta,
 		private idService: IdService,
 		private httpRequestService: HttpRequestService,
 		private cacheService: CacheService,
@@ -415,9 +425,18 @@ export class OAuth2ProviderService implements OnApplicationShutdown {
 		const state = firstValue(params.state);
 		const codeChallenge = firstValue(params.code_challenge);
 		const codeChallengeMethod = firstValue(params.code_challenge_method);
+		const nonce = firstValue(params.nonce);
+		const maxAgeValue = firstValue(params.max_age);
+		const prompt = firstValue(params.prompt);
 		const requestedScope = normalizeScope(params.scope);
 
-		this.#logger.info(`Validating authorization parameters, with client_id: ${clientId}, redirect_uri: ${redirectUriValue}, scope: ${requestedScope.join(' ')}`);
+		// Parse max_age as integer if provided
+		const maxAge = maxAgeValue != null ? parseInt(maxAgeValue, 10) : undefined;
+		if (maxAge !== undefined && (isNaN(maxAge) || maxAge < 0)) {
+			throw new InvalidRequestError('max_age must be a non-negative integer');
+		}
+
+		this.#logger.info(`Validating authorization parameters, with client_id: ${clientId}, redirect_uri: ${redirectUriValue}, scope: ${requestedScope.join(' ')}, nonce: ${nonce}, max_age: ${maxAge}, prompt: ${prompt}`);
 
 		if (responseType !== 'code') {
 			throw createUnsupportedResponseTypeError();
@@ -457,6 +476,9 @@ export class OAuth2ProviderService implements OnApplicationShutdown {
 			requestedScope,
 			codeChallenge,
 			codeChallengeMethod,
+			nonce,
+			maxAge,
+			prompt,
 		};
 	}
 
@@ -485,6 +507,8 @@ export class OAuth2ProviderService implements OnApplicationShutdown {
 			scopes,
 			codeChallenge: seed.codeChallenge,
 			codeChallengeMethod: seed.codeChallengeMethod,
+			nonce: seed.nonce,
+			maxAge: seed.maxAge,
 		};
 	}
 
@@ -510,11 +534,15 @@ export class OAuth2ProviderService implements OnApplicationShutdown {
 	// https://datatracker.ietf.org/doc/html/rfc8414.html
 	// https://indieauth.spec.indieweb.org/#indieauth-server-metadata
 	public generateRFC8414() {
+		const scopes = this.meta.enableOidc
+			? [...kinds, ...oidcScopes]
+			: [...kinds];
+
 		return {
 			issuer: this.config.url,
 			authorization_endpoint: new URL('/oauth/authorize', this.config.url),
 			token_endpoint: new URL('/oauth/token', this.config.url),
-			scopes_supported: [...kinds, ...oidcScopes],
+			scopes_supported: scopes,
 			response_types_supported: ['code'],
 			grant_types_supported: ['authorization_code'],
 			service_documentation: 'https://misskey-hub.net',
@@ -609,6 +637,8 @@ export class OAuth2ProviderService implements OnApplicationShutdown {
 					redirectUri: transaction.request.redirectUri,
 					codeChallenge: transaction.request.codeChallenge,
 					scopes: transaction.request.scopes,
+					nonce: transaction.request.nonce,
+					authTime: Math.floor(Date.now() / 1000),
 				});
 
 				redirectWithQuery(reply, transaction.request.redirectUri, appendIssuer({
@@ -723,7 +753,10 @@ export class OAuth2ProviderService implements OnApplicationShutdown {
 				if (granted.scopes.includes('openid')) {
 					const user = await this.usersRepository.findOneBy({ id: granted.userId });
 					if (user) {
-						const idToken = await this.oidcTokenService.generateIdToken(user, granted.clientId);
+						const idToken = await this.oidcTokenService.generateIdToken(user, granted.clientId, {
+							nonce: granted.nonce,
+							authTime: granted.authTime,
+						});
 						response.id_token = idToken;
 					}
 				}

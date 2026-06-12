@@ -1,3 +1,30 @@
+## Unreleased
+
+### General
+- Feat: OIDC Provider の完全実装（Authorization Code Flow + ID Token + UserInfo + JWKS + Discovery）
+- Feat: 管理パネルに OIDC 設定ページを追加
+- Feat: 管理パネルに OAuth アプリ管理ページを追加
+- Feat: 電話番号 SMS 検証によるユーザー登録・ログイン機能
+- Feat: 管理パネルに SMS 設定ページを追加（阿里雲短信対応）
+- Feat: デフォルト言語を中国語（zh-CN）に変更
+- Feat: キーの永続化と自動ローテーションに対応
+- Feat: OIDC nonce パラメータ、auth_time クレームをサポート
+- Enhance: 電話番号必須登録オプション（phoneRequiredForSignup）
+
+### Client
+- Feat: OIDC 設定管理画面（/admin/oidc-settings）
+- Feat: OAuth アプリケーション管理画面（/admin/oauth-apps）
+- Feat: SMS 設定管理画面（/admin/sms-settings）
+- Feat: アプリ作成フォームを管理パネルに統合
+
+### Server
+- Feat: OIDC 完全実装 — Authorization Code Flow, ID Token (RS256), UserInfo エンドポイント
+- Feat: JWKS エンドポイント（マルチキー対応）、OIDC Discovery
+- Feat: OIDC 有効/無効トグル（enableOidc メタ設定）
+- Feat: 電話番号検証 SMS サービス（SmsService）、阿里雲 SMS プロバイダ
+- Feat: 電話番号更新・検証 API（phone/available, phone/send-code, phone/verify-code, i/update-phone）
+- Feat: ismsProvider インターフェースによるマルチプロバイダ対応
+
 ## 2026.6.0
 
 ### General

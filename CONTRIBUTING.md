@@ -168,26 +168,16 @@ There are a few ways to proceed.
 #### Use system-wide software
 You could install them in system-wide (such as from package manager).
 
-#### Use `docker compose`
-You could obtain middleware container by typing `docker compose -f $PROJECT_ROOT/compose.local-db.yml up -d`.
-
-#### Use Devcontainer
-Devcontainer also has necessary setting. This method can be done by connecting from VSCode.
-
-Instead of running `pnpm` locally, you can use Dev Container to set up your development environment.
-To use Dev Container, open the project directory on VSCode with Dev Containers installed.
-**Note:** If you are using Windows, please clone the repository with WSL. Using Git for Windows will result in broken files due to the difference in how newlines are handled.
-
-It will run the following command automatically inside the container.
-``` bash
-git submodule update --init
-pnpm install --frozen-lockfile
-cp .devcontainer/devcontainer.yml .config/default.yml
-pnpm build
-pnpm migrate
+#### Use local services
+Install and run PostgreSQL and Redis locally. On macOS with Homebrew:
+```bash
+brew install postgresql@18 redis
+brew services start postgresql@18
+brew services start redis
+createdb misskey-dev
 ```
-
-After finishing the migration, you can proceed.
+Then create `.config/default.yml` with your local database and Redis settings.
+See [.config/example.yml](.config/example.yml) for the configuration format.
 
 #### Cloudflare tunnel
 Cloudflare tunnelを使うとローカルのMisskeyサーバーをインターネットに公開できます。
@@ -231,11 +221,7 @@ There are three types of test codes for the backend:
 cp .github/misskey/test.yml .config/
 ```
 
-2. Start DB and Redis servers for testing:
-```sh
-docker compose -f packages/backend/test/compose.yml up
-```
-Instead, you can prepare an empty (data can be erased) DB and edit `.config/test.yml` appropriately.
+2. Start DB and Redis servers for testing. Prepare an empty (data can be erased) DB and edit `.config/test.yml` appropriately.
 
 3. Run all tests:
 ```sh

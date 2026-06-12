@@ -109,6 +109,10 @@ export const ROUTE_DEF = [{
 		name: 'email',
 		component: page(() => import('@/pages/settings/email.vue')),
 	}, {
+		path: '/phone',
+		name: 'phone',
+		component: page(() => import('@/pages/settings/phone.vue')),
+	}, {
 		path: '/security',
 		name: 'security',
 		component: page(() => import('@/pages/settings/security.vue')),
@@ -479,6 +483,10 @@ export const ROUTE_DEF = [{
 		name: 'object-storage',
 		component: page(() => import('@/pages/admin/object-storage.vue')),
 	}, {
+		path: '/phone',
+		name: 'phone',
+		component: page(() => import('@/pages/settings/phone.vue')),
+	}, {
 		path: '/security',
 		name: 'security',
 		component: page(() => import('@/pages/admin/security.vue')),
@@ -494,6 +502,18 @@ export const ROUTE_DEF = [{
 		path: '/performance',
 		name: 'performance',
 		component: page(() => import('@/pages/admin/performance.vue')),
+	}, {
+		path: '/oidc-settings',
+		name: 'oidc-settings',
+		component: page(() => import('@/pages/admin/oidc-settings.vue')),
+	}, {
+		path: '/oauth-apps',
+		name: 'oauth-apps',
+		component: page(() => import('@/pages/admin/oauth-apps.vue')),
+	}, {
+		path: '/sms-settings',
+		name: 'sms-settings',
+		component: page(() => import('@/pages/admin/sms-settings.vue')),
 	}, {
 		path: '/invites',
 		name: 'invites',

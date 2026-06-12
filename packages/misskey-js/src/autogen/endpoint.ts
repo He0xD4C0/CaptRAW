@@ -74,6 +74,11 @@ import type {
 	AdminInviteListRequest,
 	AdminInviteListResponse,
 	AdminMetaResponse,
+	AdminOidcAppDeleteRequest,
+	AdminOidcAppShowRequest,
+	AdminOidcAppShowResponse,
+	AdminOidcAppsRequest,
+	AdminOidcAppsResponse,
 	AdminPromoCreateRequest,
 	AdminQueueClearRequest,
 	AdminQueueDeliverDelayedResponse,
@@ -720,6 +725,9 @@ export type Endpoints = {
 	'admin/invite/create': { req: AdminInviteCreateRequest; res: AdminInviteCreateResponse };
 	'admin/invite/list': { req: AdminInviteListRequest; res: AdminInviteListResponse };
 	'admin/meta': { req: EmptyRequest; res: AdminMetaResponse };
+	'admin/oidc/app-delete': { req: AdminOidcAppDeleteRequest; res: EmptyResponse };
+	'admin/oidc/app-show': { req: AdminOidcAppShowRequest; res: AdminOidcAppShowResponse };
+	'admin/oidc/apps': { req: AdminOidcAppsRequest; res: AdminOidcAppsResponse };
 	'admin/promo/create': { req: AdminPromoCreateRequest; res: EmptyResponse };
 	'admin/queue/clear': { req: AdminQueueClearRequest; res: EmptyResponse };
 	'admin/queue/deliver-delayed': { req: EmptyRequest; res: AdminQueueDeliverDelayedResponse };

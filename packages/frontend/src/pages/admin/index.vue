@@ -229,6 +229,21 @@ const menuDef = computed<SuperMenuDef[]>(() => [{
 		text: i18n.ts.performance,
 		to: '/admin/performance',
 		active: currentPage.value?.route.name === 'performance',
+	}, {
+		icon: 'ti ti-key',
+		text: 'OIDC',
+		to: '/admin/oidc-settings',
+		active: currentPage.value?.route.name === 'oidc-settings',
+	}, {
+		icon: 'ti ti-apps',
+		text: 'OAuth Apps',
+		to: '/admin/oauth-apps',
+		active: currentPage.value?.route.name === 'oauth-apps',
+	}, {
+		icon: 'ti ti-phone',
+		text: 'SMS',
+		to: '/admin/sms-settings',
+		active: currentPage.value?.route.name === 'sms-settings',
 	}],
 }, {
 	title: i18n.ts.info,

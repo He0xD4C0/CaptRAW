@@ -79,6 +79,13 @@ export const paramDef = {
 		cacheRemoteFiles: { type: 'boolean' },
 		cacheRemoteSensitiveFiles: { type: 'boolean' },
 		emailRequiredForSignup: { type: 'boolean' },
+		phoneRequiredForSignup: { type: 'boolean' },
+		enableSms: { type: 'boolean' },
+		smsProvider: { type: 'string' },
+		smsAliAccessKeyId: { type: 'string', nullable: true },
+		smsAliAccessKeySecret: { type: 'string', nullable: true },
+		smsAliSignName: { type: 'string', nullable: true },
+		smsAliTemplateCode: { type: 'string', nullable: true },
 		enableHcaptcha: { type: 'boolean' },
 		hcaptchaSiteKey: { type: 'string', nullable: true },
 		hcaptchaSecretKey: { type: 'string', nullable: true },
@@ -218,6 +225,7 @@ export const paramDef = {
 		remoteNotesCleaningExpiryDaysForEachNotes: { type: 'number' },
 		remoteNotesCleaningMaxProcessingDurationInMinutes: { type: 'number' },
 		showRoleBadgesOfRemoteUsers: { type: 'boolean' },
+		enableOidc: { type: 'boolean' },
 	},
 	required: [],
 } as const;
@@ -356,6 +364,34 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (ps.emailRequiredForSignup !== undefined) {
 				set.emailRequiredForSignup = ps.emailRequiredForSignup;
+			}
+
+			if (ps.phoneRequiredForSignup !== undefined) {
+				set.phoneRequiredForSignup = ps.phoneRequiredForSignup;
+			}
+
+			if (ps.enableSms !== undefined) {
+				set.enableSms = ps.enableSms;
+			}
+
+			if (ps.smsProvider !== undefined) {
+				set.smsProvider = ps.smsProvider;
+			}
+
+			if (ps.smsAliAccessKeyId !== undefined) {
+				set.smsAliAccessKeyId = ps.smsAliAccessKeyId;
+			}
+
+			if (ps.smsAliAccessKeySecret !== undefined && ps.smsAliAccessKeySecret !== '••••••••') {
+				set.smsAliAccessKeySecret = ps.smsAliAccessKeySecret;
+			}
+
+			if (ps.smsAliSignName !== undefined) {
+				set.smsAliSignName = ps.smsAliSignName;
+			}
+
+			if (ps.smsAliTemplateCode !== undefined) {
+				set.smsAliTemplateCode = ps.smsAliTemplateCode;
 			}
 
 			if (ps.enableHcaptcha !== undefined) {
@@ -760,6 +796,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (ps.showRoleBadgesOfRemoteUsers !== undefined) {
 				set.showRoleBadgesOfRemoteUsers = ps.showRoleBadgesOfRemoteUsers;
+			}
+
+			if (ps.enableOidc !== undefined) {
+				set.enableOidc = ps.enableOidc;
 			}
 
 			const before = await this.metaService.fetch(true);

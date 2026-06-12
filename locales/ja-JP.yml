@@ -577,6 +577,7 @@ objectStorageUseSSLDesc: "API接続にhttpsを使用しない場合はオフに�
 objectStorageUseProxy: "Proxyを利用する"
 objectStorageUseProxyDesc: "API接続にproxyを利用しない場合はオフにしてください"
 objectStorageSetPublicRead: "アップロード時に'public-read'を設定する"
+oidc: "OIDC"
 s3ForcePathStyleDesc: "s3ForcePathStyleを有効にすると、バケット名をURLのホスト名ではなくパスの一部として指定することを強制します。セルフホストされたMinioなどの使用時に有効にする必要がある場合があります。"
 serverLogs: "サーバーログ"
 deleteAll: "全て削除"
@@ -1630,6 +1631,25 @@ _delivery:
     goneSuspended: "サーバー削除のため停止中"
     autoSuspendedForNotResponding: "サーバー応答なしのため停止中"
     softwareSuspended: "配信停止中のソフトウェアであるため停止中"
+
+_oidc:
+  enableDescription: "OpenID Connect エンドポイントを有効にします (/.well-known/openid-configuration, /oauth/jwks, /oauth/userinfo)"
+  jwksEndpoint: "JWKS エンドポイント"
+  signingAlgorithm: "署名アルゴリズム"
+  keyCount: "アクティブな鍵"
+  discovery: "ディスカバリー エンドポイント"
+  oauthApps: "OAuth アプリ"
+  appId: "アプリ ID"
+  permissions: "権限"
+  activeTokens: "アクティブなトークン"
+  callbackUrl: "コールバック URL"
+  createApp: "アプリを作成"
+  createAppName: "名前"
+  createAppDescription: "説明"
+  createAppCallbackUrl: "コールバック URL"
+  createAppCallbackUrlDesc: "ネイティブアプリの場合は空にしてください"
+  createAppPermissions: "権限"
+  createAppPermissionsDesc: "カンマ区切り、例: read:account, write:notes"
 
 _bubbleGame:
   howToPlay: "遊び方"

@@ -84,3 +84,7 @@ vite.config.local-dev.ts.timestamp-*
 
 # Affinity
 *.af~lock~
+
+# Claude Code MCP
+.mcp.json
+.playwright-mcp/

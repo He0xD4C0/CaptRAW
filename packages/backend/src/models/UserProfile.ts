@@ -96,6 +96,22 @@ export class MiUserProfile {
 	})
 	public emailNotificationTypes: string[];
 
+	@Column('varchar', {
+		length: 32, nullable: true,
+		comment: 'The phone number of the User.',
+	})
+	public phone: string | null;
+
+	@Column('varchar', {
+		length: 16, nullable: true,
+	})
+	public phoneVerifyCode: string | null;
+
+	@Column('boolean', {
+		default: false,
+	})
+	public phoneVerified: boolean;
+
 	@Column('boolean', {
 		default: true,
 	})
