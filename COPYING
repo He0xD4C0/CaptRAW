@@ -1,7 +1,22 @@
-Unless otherwise stated this repository is
-Copyright © 2014-2026 syuilo and contributors
+Unless otherwise stated, this repository is based on Misskey
+Copyright (C) 2014-2026 syuilo and contributors
 
-And is distributed under The GNU Affero General Public License Version 3, you should have received a copy of the license file as LICENSE.
+Modifications and additional components in this repository are
+Copyright (C) 2026 CaptRAW community contributors
+
+All files are distributed under the GNU Affero General Public License Version 3.
+You should have received a copy of the license file as LICENSE.
+
+Any modified version of this software, including all its parts, must be made
+available under the same license when distributed or made available as a
+network service, as required by AGPL-3.0 Section 13.
+
+Individual files carry SPDX license identifiers and copyright notices.
+See each file's header for specific authorship information.
+
+---
+
+Third-party components included in this repository:
 
 RsaSignature2017 implementation by Transmute Industries Inc
 License: MIT

@@ -1,14 +1,16 @@
-# CaptRAW
+# Misskey — CaptRAW Community Edition
 
-CaptRAW is a fork of [Misskey](https://github.com/misskey-dev/misskey) with enhanced enterprise-grade authentication and authorization capabilities.
+This is a customized distribution of [Misskey](https://github.com/misskey-dev/misskey), tailored for the CaptRAW community.
 
 *Read this in [Japanese](README_JP.md) | [简体中文](README_ZH-CN.md)*
 
-## Key Features
+## What's Different
+
+This distribution extends upstream Misskey with the following additions:
 
 ### OIDC Provider
 
-Full OpenID Connect 1.0 provider implementation:
+Full OpenID Connect 1.0 provider — act as an identity provider for third-party applications.
 
 - Authorization Code Flow with mandatory PKCE (S256)
 - ID Token issuance (RS256 JWT signing)
@@ -27,14 +29,16 @@ Phone number verification via SMS for registration and login:
 - Extensible `ISmsProvider` interface for multi-provider support
 - Alibaba Cloud SMS provider (HMAC-SHA1 signing)
 - Verification code send and verify APIs
-- Optional mandatory phone requirement for signup (`phoneRequiredForSignup`)
+- Optional mandatory phone requirement for signup
 
 Configure via admin panel at `/admin/sms-settings`.
 
-### Admin Tools
+### Other Changes
 
-- OAuth application management (`/admin/oauth-apps`) — list, create, delete
+- OAuth application management page (`/admin/oauth-apps`)
 - Default language: Chinese (zh-CN)
+- Docker deployment not supported — use direct middleware installation
+- Key persistence with automatic rotation
 
 ## Requirements
 
@@ -42,73 +46,39 @@ Configure via admin panel at `/admin/sms-settings`.
 - **PostgreSQL** 18
 - **Redis** 7
 
-This project does **not** support Docker deployment. Install the middleware directly.
-
 ## Quick Start
 
 ```bash
-# Install dependencies
 pnpm install
 
-# Start PostgreSQL / Redis (macOS / Homebrew)
+# Start middleware (macOS / Homebrew)
 brew services start postgresql@18
 brew services start redis
 createdb misskey-dev
 
-# Create config
+# Configure
 cp .config/example.yml .config/default.yml
-# Edit default.yml with your DB/Redis credentials
 
-# Build
+# Build and migrate
 pnpm build
-
-# Run database migrations
 pnpm --filter backend migrate
 
-# Start development server
+# Run
 pnpm dev
 ```
 
 Visit `http://localhost:3000` and create an admin account using the setup password from `default.yml`.
 
-## Configuration
+## Upstream
 
-```yaml
-url: http://localhost:3000
-port: 3000
-
-db:
-  host: localhost
-  port: 5432
-  db: misskey-dev
-  user: <your-db-user>
-  pass: ''
-
-redis:
-  host: localhost
-  port: 6379
-
-setupPassword: <your-setup-password>
-```
-
-## Development
-
-```bash
-pnpm dev         # Dev server (HMR)
-pnpm lint        # Lint & typecheck
-pnpm build       # Production build
-```
+This distribution tracks the upstream Misskey repository. See [Misskey](https://github.com/misskey-dev/misskey) for the original project.
 
 ## License
 
-CaptRAW is based on Misskey and is licensed under [AGPL-3.0](LICENSE).
-
-## Acknowledgements
-
-Built on [Misskey](https://github.com/misskey-dev/misskey). Thanks to all Misskey contributors.
+Based on Misskey, distributed under [AGPL-3.0](LICENSE).
 
 ---
 
 <div align="center">
-CaptRAW — Enterprise-ready Misskey fork
+Misskey — CaptRAW Community Edition
 </div>
