@@ -235,18 +235,18 @@ export class ClientServerService {
 			});
 		} else {
 			console.log('[ClientServerService] Proxying to Vite dev server.');
-			const urlOriginWithoutPort = configUrl.origin.replace(/:\d+$/, '');
+			const viteHost = 'http://localhost';
 
 			const port = (process.env.VITE_PORT ?? '5173');
 			fastify.register(fastifyProxy, {
-				upstream: urlOriginWithoutPort + ':' + port,
+				upstream: viteHost + ':' + port,
 				prefix: '/vite',
 				rewritePrefix: '/vite',
 			});
 
 			const embedPort = (process.env.EMBED_VITE_PORT ?? '5174');
 			fastify.register(fastifyProxy, {
-				upstream: urlOriginWithoutPort + ':' + embedPort,
+				upstream: viteHost + ':' + embedPort,
 				prefix: '/embed_vite',
 				rewritePrefix: '/embed_vite',
 			});

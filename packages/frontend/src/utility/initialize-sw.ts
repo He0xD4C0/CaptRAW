@@ -8,11 +8,15 @@ import { lang } from '@@/js/config.js';
 export async function initializeSw() {
 	if (!('serviceWorker' in navigator)) return;
 
-	navigator.serviceWorker.register('/sw.js', { scope: '/', type: 'classic' });
-	navigator.serviceWorker.ready.then(registration => {
+	try {
+		await navigator.serviceWorker.register('/sw.js', { scope: '/', type: 'classic' });
+		const registration = await navigator.serviceWorker.ready;
+		console.log('[sw] ServiceWorker ready:', registration);
 		registration.active?.postMessage({
 			msg: 'initialize',
 			lang,
 		});
-	});
+	} catch (err) {
+		console.error('[sw] ServiceWorker registration failed:', err);
+	}
 }

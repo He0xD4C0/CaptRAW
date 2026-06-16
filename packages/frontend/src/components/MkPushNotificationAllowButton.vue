@@ -73,17 +73,31 @@ const supported = ref(false);
 const pushSubscription = ref<PushSubscription | null>(null);
 const pushRegistrationInServer = ref<{ state?: string; key?: string; userId: string; endpoint: string; sendReadMessage: boolean; } | undefined>();
 
+const SUBSCRIBE_TIMEOUT_MS = 30000; // 30s timeout for push subscription
+
 async function subscribe() {
-	if (!registration.value || !supported.value || !instance.swPublickey) return;
+	if (!registration.value || !supported.value || !instance.swPublickey) {
+		console.warn('[push] Cannot subscribe — missing prereqs:', {
+			registration: !!registration.value,
+			supported: supported.value,
+			swPublickey: !!instance.swPublickey,
+		});
+		return;
+	}
+
+	console.log('[push] Notification permission status:', Notification.permission);
 
 	if ('Notification' in window) {
 		let permission = Notification.permission;
 
 		if (Notification.permission === 'default') {
+			console.log('[push] Requesting notification permission...');
 			permission = await promiseDialog(Notification.requestPermission(), null, null, i18n.ts.pleaseAllowPushNotification);
+			console.log('[push] Permission result:', permission);
 		}
 
 		if (permission !== 'granted') {
+			console.warn('[push] Permission not granted:', permission);
 			alert({
 				type: 'error',
 				title: i18n.ts.browserPushNotificationDisabled,
@@ -93,24 +107,41 @@ async function subscribe() {
 		}
 	}
 
-	// SEE: https://developer.mozilla.org/en-US/docs/Web/API/PushManager/subscribe#Parameters
-	await promiseDialog(registration.value.pushManager.subscribe({
+	console.log('[push] Calling pushManager.subscribe() with VAPID key (first 20 chars):', instance.swPublickey.substring(0, 20) + '...');
+
+	const subscribePromise = registration.value.pushManager.subscribe({
 		userVisibleOnly: true,
 		applicationServerKey: urlBase64ToUint8Array(instance.swPublickey),
-	})
+	});
+
+	const timeoutPromise = new Promise<never>((_, reject) =>
+		setTimeout(() => reject(new Error(`pushManager.subscribe() timed out after ${SUBSCRIBE_TIMEOUT_MS / 1000}s`)), SUBSCRIBE_TIMEOUT_MS)
+	);
+
+	// SEE: https://developer.mozilla.org/en-US/docs/Web/API/PushManager/subscribe#Parameters
+	await promiseDialog(Promise.race([subscribePromise, timeoutPromise])
 		.then(async subscription => {
+			console.log('[push] pushManager.subscribe succeeded, endpoint:', subscription.endpoint);
 			pushSubscription.value = subscription;
 
 			// Register
-			pushRegistrationInServer.value = await misskeyApi('sw/register', {
-				endpoint: subscription.endpoint,
-				auth: encode(subscription.getKey('auth')),
-				publickey: encode(subscription.getKey('p256dh')),
-			});
+			try {
+				console.log('[push] Registering push subscription with server (sw/register)...');
+				pushRegistrationInServer.value = await misskeyApi('sw/register', {
+					endpoint: subscription.endpoint,
+					auth: encode(subscription.getKey('auth')),
+					publickey: encode(subscription.getKey('p256dh')),
+				});
+				console.log('[push] Server registration succeeded:', pushRegistrationInServer.value);
+			} catch (apiErr) {
+				console.error('[push] Server sw/register API failed:', apiErr);
+				throw apiErr;
+			}
 		}, async err => { // When subscribe failed
+			console.error('[push] pushManager.subscribe failed:', err?.name, err?.message, err);
 			// 通知が許可されていなかったとき
 			if (err?.name === 'NotAllowedError') {
-				console.info('User denied the notification permission request.');
+				console.info('[push] User denied the notification permission request.');
 				return;
 			}
 
@@ -118,6 +149,7 @@ async function subscribe() {
 			// 既に存在していることが原因でエラーになった可能性があるので、
 			// そのサブスクリプションを解除しておく
 			// （これは実行されなさそうだけど、おまじない的に古い実装から残してある）
+			console.log('[push] Attempting to clean up old push subscription...');
 			await unsubscribe();
 		}), null, null);
 }
@@ -174,10 +206,13 @@ if (navigator.serviceWorker == null) {
 
 		pushSubscription.value = await registration.value.pushManager.getSubscription();
 
+		console.log('[push] Init — swPublickey:', !!instance.swPublickey, 'PushManager:', 'PushManager' in window, 'loggedIn:', !!($i && $i.token));
+
 		if (instance.swPublickey && ('PushManager' in window) && $i && $i.token) {
 			supported.value = true;
 
 			if (pushSubscription.value) {
+				console.log('[push] Existing push subscription found:', pushSubscription.value.endpoint);
 				const res = await misskeyApi('sw/show-registration', {
 					endpoint: pushSubscription.value.endpoint,
 				});
