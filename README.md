@@ -69,6 +69,47 @@ pnpm dev
 
 Visit `http://localhost:3000` and create an admin account using the setup password from `default.yml`.
 
+## Production Deployment
+
+This project uses a **build-once, run-production** workflow (similar to Cloudflare Workers). All code is compiled to `built/`, then a single Node.js process serves the application.
+
+### Commands
+
+| Command | Description |
+|---|---|
+| `pnpm prod:build` | Full production build (all packages → `built/`) |
+| `pnpm prod:start` | Start detached production server (with log file) |
+| `pnpm prod:stop` | Gracefully stop the production server |
+| `pnpm prod:restart` | Stop → Build → Start (single-command deploy) |
+| `pnpm prod:deploy` | Alias for `prod:restart` |
+| `pnpm prod:status` | Check if the server is running |
+| `pnpm prod:logs` | View last 80 lines of server logs |
+| `pnpm prod:logs-window` | Open live log viewer in a separate window |
+
+### Typical Workflow
+
+```bash
+# First-time setup
+pnpm prod:build
+pnpm prod:start
+
+# After code changes
+pnpm prod:restart
+
+# Monitor
+pnpm prod:logs-window   # live tail in a separate window
+pnpm prod:status         # quick health check
+
+# Stop
+pnpm prod:stop
+```
+
+### Development Mode
+
+For development with hot-reload, use `pnpm dev` instead. This starts Vite dev servers, nodemon watchers, and all sub-package watch processes.
+
+**Note:** Do not run `pnpm dev` and `pnpm prod:start` simultaneously — they will conflict on ports.
+
 ## Upstream
 
 This distribution tracks the upstream Misskey repository. See [Misskey](https://github.com/misskey-dev/misskey) for the original project.

@@ -67,6 +67,47 @@ pnpm dev
 
 访问 `http://localhost:3000`，使用 `default.yml` 中的初始化密码创建管理员账户。
 
+## 生产部署
+
+本项目采用 **一次构建、生产运行** 的工作流（类似 Cloudflare Workers）。所有代码编译到 `built/` 目录，然后由单个 Node.js 进程提供服务。
+
+### 命令
+
+| 命令 | 说明 |
+|---|---|
+| `pnpm prod:build` | 完整生产构建（所有包 → `built/`） |
+| `pnpm prod:start` | 以守护进程方式启动生产服务器（带日志文件） |
+| `pnpm prod:stop` | 优雅停止生产服务器 |
+| `pnpm prod:restart` | 停止 → 构建 → 启动（一键部署） |
+| `pnpm prod:deploy` | `prod:restart` 的别名 |
+| `pnpm prod:status` | 检查服务器是否运行中 |
+| `pnpm prod:logs` | 查看最近 80 行服务器日志 |
+| `pnpm prod:logs-window` | 在新窗口中实时查看日志 |
+
+### 典型工作流
+
+```bash
+# 首次部署
+pnpm prod:build
+pnpm prod:start
+
+# 代码修改后
+pnpm prod:restart
+
+# 监控
+pnpm prod:logs-window   # 在新窗口实时查看日志
+pnpm prod:status         # 快速健康检查
+
+# 停止
+pnpm prod:stop
+```
+
+### 开发模式
+
+如需热重载开发，请使用 `pnpm dev`。该命令会启动 Vite 开发服务器、nodemon 监听器及所有子包的 watch 进程。
+
+**注意：** 不要同时运行 `pnpm dev` 和 `pnpm prod:start`，端口会冲突。
+
 ## 上游
 
 本版本跟踪 Misskey 上游仓库。原始项目请参阅 [Misskey](https://github.com/misskey-dev/misskey)。

@@ -67,6 +67,47 @@ pnpm dev
 
 `http://localhost:3000` にアクセスし、`default.yml` の初期セットアップパスワードで管理者アカウントを作成。
 
+## 本番デプロイ
+
+本プロジェクトは **ビルドしてから本番稼働** のワークフロー（Cloudflare Workers に類似）。全コードを `built/` にビルドし、単一 Node.js プロセスで配信する。
+
+### コマンド
+
+| コマンド | 説明 |
+|---|---|
+| `pnpm prod:build` | 本番ビルド（全パッケージ → `built/`） |
+| `pnpm prod:start` | デタッチモードで本番サーバー起動（ログファイル付き） |
+| `pnpm prod:stop` | 本番サーバー停止 |
+| `pnpm prod:restart` | 停止→ビルド→起動（ワンコマンドデプロイ） |
+| `pnpm prod:deploy` | `prod:restart` のエイリアス |
+| `pnpm prod:status` | サーバー稼働状態確認 |
+| `pnpm prod:logs` | 直近 80 行のログ表示 |
+| `pnpm prod:logs-window` | 別ウィンドウでリアルタイムログ表示 |
+
+### 一般的なワークフロー
+
+```bash
+# 初回デプロイ
+pnpm prod:build
+pnpm prod:start
+
+# コード変更後
+pnpm prod:restart
+
+# 監視
+pnpm prod:logs-window   # 別ウィンドウでリアルタイム表示
+pnpm prod:status         # 稼働確認
+
+# 停止
+pnpm prod:stop
+```
+
+### 開発モード
+
+ホットリロード付きの開発には `pnpm dev` を使用。Vite 開発サーバー、nodemon watcher、全サブパッケージの watch プロセスが起動する。
+
+**注意:** `pnpm dev` と `pnpm prod:start` を同時に実行しない（ポート競合）。
+
 ## アップストリーム
 
 Misskey 本体を追従しています。オリジナルプロジェクトは [Misskey](https://github.com/misskey-dev/misskey) を参照してください。

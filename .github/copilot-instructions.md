@@ -71,6 +71,21 @@
 
 変更範囲に応じて最も近いコマンドから優先して検証し、必要なら全体コマンドに広げること。
 
+## Production Deployment コマンド
+
+CaptRAW は build-once / run-production ワークフロー。`pnpm dev`（開発モード）ではなく `pnpm prod:*` コマンドで管理する。
+
+- 本番ビルド: `pnpm prod:build`
+- 本番サーバー起動 (デタッチ): `pnpm prod:start`
+- 本番サーバー停止: `pnpm prod:stop`
+- 停止→ビルド→起動 (ワンコマンドデプロイ): `pnpm prod:restart`
+- デプロイ (restart のエイリアス): `pnpm prod:deploy`
+- 稼働状態確認: `pnpm prod:status`
+- ログ表示 (直近 80 行): `pnpm prod:logs`
+- ログを別ウィンドウでリアルタイム表示: `pnpm prod:logs-window`
+
+**運用フロー:** コード変更後 → `pnpm prod:restart`（停止・ビルド・起動を一括実行）。`pnpm dev` と `pnpm prod:start` を同時に実行しない（ポート競合）。
+
 ## Editing hints
 
 - Backend の API / migration / TypeORM 変更は `packages/backend` を見る

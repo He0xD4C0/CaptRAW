@@ -109,3 +109,26 @@
 | 開発サーバー (backend + frontend watch) | `pnpm dev` |
 
 **注意:** backend テスト (`test` / `test:e2e` / `test:fed`) 実行前に `.config/test.yml` が必要 (`ncp .github/misskey/test.yml .config/test.yml` または `cp .github/misskey/test.yml .config/test.yml` で作成)。
+
+### Production deployment commands
+
+CaptRAW は build-once / run-production ワークフローを採用する。`pnpm dev`（開発モード）ではなく `pnpm prod:*` コマンドで管理する。
+
+| 用途 | コマンド |
+| --- | --- |
+| 本番ビルド | `pnpm prod:build` |
+| 本番サーバー起動 (デタッチ) | `pnpm prod:start` |
+| 本番サーバー停止 | `pnpm prod:stop` |
+| 停止→ビルド→起動 (ワンコマンドデプロイ) | `pnpm prod:restart` |
+| デプロイ (restart のエイリアス) | `pnpm prod:deploy` |
+| 稼働状態確認 | `pnpm prod:status` |
+| ログ表示 (直近 80 行) | `pnpm prod:logs` |
+| ログを別ウィンドウでリアルタイム表示 | `pnpm prod:logs-window` |
+
+**運用フロー:**
+1. コード変更後 → `pnpm prod:restart`（停止・ビルド・起動を一括実行）
+2. ログ監視 → `pnpm prod:logs-window`（別ウィンドウでリアルタイム表示）
+3. 確認 → `pnpm prod:status`
+4. 停止 → `pnpm prod:stop`
+
+**注意:** `pnpm dev` と `pnpm prod:start` を同時に実行しない（ポート競合が発生する）。
