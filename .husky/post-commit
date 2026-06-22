@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Post-commit hook: kill stale Vite/backend dev processes on known ports.
+# The user should run `pnpm dev` (or `pnpm restart`) manually afterward.
+
+echo ""
+echo "🔄 post-commit: Cleaning up dev server ports..."
+node scripts/kill-port.mjs
+
+echo ""
+echo "💡 Dev processes killed. Run 'pnpm dev' (or 'pnpm restart') to start fresh."
