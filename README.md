@@ -85,6 +85,7 @@ This project uses a **build-once, run-production** workflow (similar to Cloudfla
 | `pnpm prod:status` | Check if the server is running |
 | `pnpm prod:logs` | View last 80 lines of server logs |
 | `pnpm prod:logs-window` | Open live log viewer in a separate window |
+| `pnpm prod:supervisor` | Self-daemon: auto-restart on crash + health checks |
 
 ### Typical Workflow
 
@@ -92,6 +93,10 @@ This project uses a **build-once, run-production** workflow (similar to Cloudfla
 # First-time setup
 pnpm prod:build
 pnpm prod:start
+
+# Recommended for production (self-daemon mode)
+pnpm prod:build
+pnpm prod:supervisor    # foreground with auto-restart + health checks
 
 # After code changes
 pnpm prod:restart
@@ -109,6 +114,29 @@ pnpm prod:stop
 For development with hot-reload, use `pnpm dev` instead. This starts Vite dev servers, nodemon watchers, and all sub-package watch processes.
 
 **Note:** Do not run `pnpm dev` and `pnpm prod:start` simultaneously — they will conflict on ports.
+
+#### Dev Port Management
+
+| Command | Description |
+|---|---|
+| `pnpm kill:ports` | Release Vite ports (5173, 5174) |
+| `pnpm kill:ports:all` | Release Vite + backend ports (5173, 5174, 3000) |
+| `pnpm restart` | Release ports + restart dev server (one-click) |
+| `pnpm dev:safe` | Nodemon wrapper — auto-restart on crash |
+| `node scripts/kill-port.mjs 8080` | Kill a custom port |
+
+Husky `post-commit` hook auto-releases ports 5173/5174 after every `git commit`. Run `pnpm dev` or `pnpm restart` in another terminal afterward.
+
+#### One-Click Deploy (after git sync)
+
+```bash
+pnpm deploy              # Full deploy: git pull → build → migrate → restart
+pnpm deploy:dry          # Dry run (show steps without executing)
+pnpm deploy -- --skip-pull   # Skip git pull
+pnpm deploy -- --skip-build  # Skip build
+```
+
+Env vars: `MISSKEY_SERVICE_PORT` (default 3000), `MISSKEY_LOG_FILE`, `GIT_BRANCH`, `SKIP_BUILD`
 
 ## Upstream
 

@@ -39,6 +39,7 @@
 		"prod:logs": "node scripts/prod-server.mjs logs",
 		"prod:logs-window": "node scripts/prod-server.mjs logs-window",
 		"prod:deploy": "pnpm prod:restart",
+		"prod:supervisor": "node scripts/prod-server.mjs supervisor",
 		"cli": "cd packages/backend && pnpm cli",
 		"init": "pnpm migrate",
 		"migrate": "cd packages/backend && pnpm migrate",

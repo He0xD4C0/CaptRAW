@@ -1,7 +1,7 @@
 # Misskey – Claude Code Guide
 
-ルール本体は [AGENTS.md](AGENTS.md) (Codex / Copilot と共有する単一ソース)。本ファイルは Claude Code 用の薄いラッパーで、`@AGENTS.md` 構文で本体規約をセッション開始時にコンテキストへ展開する。
+The main rules live in [AGENTS.md](AGENTS.md) (shared single source of truth for Codex / Copilot). This file is a thin wrapper for Claude Code — the `@AGENTS.md` syntax expands the full rule set into the session context at startup.
 
-Claude Code 固有の補助 (skills / agents / slash commands / docs) は `.claude/` 配下にコミット済。個人ローカル設定は `.claude/settings.local.json` に、MCP 認証情報は `.claude/.credentials.json` に置く (いずれも `.gitignore` 済)。
+Claude Code-specific resources (skills / agents / slash commands / docs) are committed under `.claude/`. Personal local settings go in `.claude/settings.local.json`; MCP credentials go in `.claude/.credentials.json` (both are `.gitignore`d).
 
 @AGENTS.md

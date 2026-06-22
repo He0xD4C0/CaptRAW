@@ -1,16 +1,16 @@
 # Copilot Instructions for Misskey
 
-このファイルは GitHub Copilot の repository-wide instructions として使われる。Copilot code review では `AGENTS.md` が読まれない環境があるため、レビューや軽微な実装判断に必要な規約はこのファイル単体で満たすこと。
+This file serves as the repository-wide instructions for GitHub Copilot. Because `AGENTS.md` may not be available in some Copilot code-review environments, this file alone must contain all rules needed for review and light implementation decisions.
 
-リポジトリは Misskey の pnpm workspace モノレポ。主要な実装は `packages/backend` (NestJS / TypeORM) と `packages/frontend` (Vue 3) にある。より詳しいガイドはリポジトリルートの `AGENTS.md` を参照してよいが、このファイルの要件を省略してそちらへの参照だけで済ませないこと。
+The repository is a pnpm workspace monorepo. The primary implementations are in `packages/backend` (NestJS / TypeORM) and `packages/frontend` (Vue 3). A more detailed guide exists at the repository root in `AGENTS.md` — you may consult it, but you must not omit this file's requirements in favor of simply pointing there.
 
-## 絶対にやってはいけない事
+## Absolute Prohibitions
 
-違反すると CI 失敗 / 本番事故 になる。
+Violations will cause CI failures / production incidents.
 
-### コード・データ関連
+### Code & Data
 
-- **SPDX ヘッダー必須**: AGPL-3.0-only 管轄かつ SPDX CI 対象ディレクトリに新規 `.ts` / `.js` / `.cjs` / `.mjs` / `.scss` / `.vue` / `.html` ファイルを追加する場合は冒頭に必ず付ける。詳細な対象判定は `.github/workflows/check-spdx-license-id.yml` を参照。
+- **SPDX header required**: when adding new `.ts` / `.js` / `.cjs` / `.mjs` / `.scss` / `.vue` / `.html` files to AGPL-controlled, SPDX CI-targeted directories, the header is mandatory. See `.github/workflows/check-spdx-license-id.yml` for exact scope.
 
   ```text
   /*
@@ -19,7 +19,7 @@
    */
   ```
 
-  新規 `.vue` / `.html` ファイルは HTML コメント形式で:
+  New `.vue` / `.html` files use HTML comment form:
 
   ```text
   <!--
@@ -28,68 +28,99 @@
   -->
   ```
 
-  `packages/misskey-js` は MIT ライセンスのサブパッケージなので、この AGPL ヘッダーを一律に付けない (サブパッケージ固有の `package.json` / `LICENSE` / 既存ファイルのヘッダーに従う)。
+  `packages/misskey-js` is an MIT-licensed sub-package; do **not** stamp the AGPL header on it (follow the sub-package's own `package.json` / `LICENSE` / existing file headers).
 
-- **`locales/ja-JP.yml` 以外の locale YAML を編集しない**。他言語ファイル (`en-US.yml` など `ja-JP.yml` 以外すべて) は Crowdin の自動配信先で、手動編集すると次の同期で上書き喪失する。
-- **マージ済 migration を編集しない**。`packages/backend/migration/{timestamp}-*.js` のうち既に `develop` / `master` に入ったものは絶対に変更しない。スキーマ変更が必要なら新しい timestamp で新規ファイルを追加し、`up()` と `down()` の両方を実装する。
-- **secrets / 認証情報をリポジトリにコミットしない** (`.config/*.yml` の本番値、`.env` ファイル、API token、private key 等)。
+- **Do not edit any locale YAML other than `locales/ja-JP.yml`.** All other language files are Crowdin auto-delivery targets; manual edits will be overwritten on the next sync.
+- **Do not edit merged migrations.** Files under `packages/backend/migration/{timestamp}-*.js` that have already entered `develop` / `master` must never be altered. If a schema change is needed, add a new file with a new timestamp and implement both `up()` and `down()`.
+- **Do not commit secrets or credentials** (production values in `.config/*.yml`, `.env` files, API tokens, private keys, etc.).
 
-### Git / リポジトリ操作
+### Git / Repository Operations
 
-- `git push --force` / `--force-with-lease` を `main` / `develop` / `master` にしない
-- `git commit --no-verify` で hook をスキップしない
-- マージ済 / プッシュ済コミットを `git commit --amend` で書き換えない
-- 他人のブランチを `git reset --hard` / `git branch -D` で破壊しない
-- `git config` をユーザーに無断で書き換えない (特に `user.name` / `user.email` / `commit.gpgsign`)
+- Do not `git push --force` / `--force-with-lease` to `main` / `develop` / `master`.
+- Do not bypass hooks with `git commit --no-verify`.
+- Do not `git commit --amend` already-merged or already-pushed commits.
+- Do not `git reset --hard` / `git branch -D` someone else's branch.
+- Do not change `git config` without the user's explicit consent (especially `user.name` / `user.email` / `commit.gpgsign`).
 
-### Issue / PR / 外部送信
+### Issues / PRs / External Communication
 
-- ユーザーの明示指示なしに PR を merge / close / force-push しない
-- ユーザーの明示指示なしに external service (GitHub comments / Slack / メール 等) へ送信しない
+- Do not merge / close / force-push a PR without the user's explicit instruction.
+- Do not send to any external service (GitHub comments / Slack / email, etc.) without the user's explicit instruction.
 
-## 変更を出す前の最低チェック
+## Minimum Checks Before Shipping
 
-1. `pnpm lint` が通る (typecheck + eslint, 全パッケージ)
-2. backend で `meta` / `paramDef` / `res` を変更した → `pnpm build-misskey-js-with-types` を実行し `packages/misskey-js/src/autogen/` の差分も commit に含めた
-3. entity / migration を変更した → `pnpm --filter backend check-migrations` が pending DDL 0 件で通る / 新規 migration は `up()` と `down()` 両方実装済
-4. 新規 `.ts` / `.js` / `.cjs` / `.mjs` / `.vue` / `.scss` / `.html` ファイルを追加した → SPDX ヘッダーを付けた
-5. ユーザー影響のある変更 → `CHANGELOG.md` の `## Unreleased` 配下の該当サブセクション (`### General` / `### Client` / `### Server`) に `- <Feat|Enhance|Fix>: <概要>` を 1 行追記
-6. `locales/` を編集した場合、`git diff --name-only develop -- 'locales/*.yml' | grep -v '^locales/ja-JP\.yml$'` が空 (ja-JP.yml 以外に差分が無い) ことを確認
+1. `pnpm lint` passes (typecheck + eslint, all packages).
+2. If you changed `meta` / `paramDef` / `res` in the backend → run `pnpm build-misskey-js-with-types` and include the diff under `packages/misskey-js/src/autogen/` in the commit.
+3. If you changed entities / migrations → `pnpm --filter backend check-migrations` passes with 0 pending DDL; new migrations implement both `up()` and `down()`.
+4. New `.ts` / `.js` / `.cjs` / `.mjs` / `.vue` / `.scss` / `.html` files → SPDX header added.
+5. User-facing changes → add a line `- <Feat|Enhance|Fix>: <summary>` under the appropriate subsection (`### General` / `### Client` / `### Server`) in `## Unreleased` of `CHANGELOG.md`.
+6. If you edited `locales/`, verify `git diff --name-only develop -- 'locales/*.yml' | grep -v '^locales/ja-JP\.yml$'` is empty (no diff outside ja-JP.yml).
 
-## Validation コマンド
+## Validation Commands
 
-- 全体ビルド: `pnpm build`
-- 全体 lint / typecheck: `pnpm lint`
+- Full build: `pnpm build`
+- Full lint / typecheck: `pnpm lint`
 - Backend unit test: `pnpm --filter backend test`
 - Backend e2e test: `pnpm --filter backend test:e2e`
 - Backend federation test: `pnpm --filter backend test:fed`
 - Frontend test: `pnpm --filter frontend test`
-- Migration 差分検査: `pnpm --filter backend check-migrations`
-- `misskey-js` 再生成 (API 変更後必須): `pnpm build-misskey-js-with-types`
+- Migration diff check: `pnpm --filter backend check-migrations`
+- `misskey-js` regeneration (required after API changes): `pnpm build-misskey-js-with-types`
 
-**注意:** backend テスト (`test` / `test:e2e` / `test:fed`) 実行前に `.config/test.yml` が必要。未作成の場合は `ncp .github/misskey/test.yml .config/test.yml` (または `cp .github/misskey/test.yml .config/test.yml`) を実行してから走らせる。各テストスクリプトが内部で `cross-env NODE_ENV=test pnpm compile-config` を呼ぶため、コピー済みであれば追加の compile-config は不要。
+**Note:** Backend tests (`test` / `test:e2e` / `test:fed`) require `.config/test.yml`. Create it with `ncp .github/misskey/test.yml .config/test.yml` (or `cp .github/misskey/test.yml .config/test.yml`) before running. Each test script internally calls `cross-env NODE_ENV=test pnpm compile-config`, so no separate compile-config step is needed once the file exists.
 
-変更範囲に応じて最も近いコマンドから優先して検証し、必要なら全体コマンドに広げること。
+Use the most specific command first; widen to full-build if needed.
 
-## Production Deployment コマンド
+## Production Deployment Commands
 
-CaptRAW は build-once / run-production ワークフロー。`pnpm dev`（開発モード）ではなく `pnpm prod:*` コマンドで管理する。
+CaptRAW uses a build-once / run-production workflow. Use `pnpm prod:*` commands (not `pnpm dev`) for production management.
 
-- 本番ビルド: `pnpm prod:build`
-- 本番サーバー起動 (デタッチ): `pnpm prod:start`
-- 本番サーバー停止: `pnpm prod:stop`
-- 停止→ビルド→起動 (ワンコマンドデプロイ): `pnpm prod:restart`
-- デプロイ (restart のエイリアス): `pnpm prod:deploy`
-- 稼働状態確認: `pnpm prod:status`
-- ログ表示 (直近 80 行): `pnpm prod:logs`
-- ログを別ウィンドウでリアルタイム表示: `pnpm prod:logs-window`
+- Production build: `pnpm prod:build`
+- Start production server (detached): `pnpm prod:start`
+- Stop production server: `pnpm prod:stop`
+- Stop → Build → Start (single-command deploy): `pnpm prod:restart`
+- Deploy (alias for restart): `pnpm prod:deploy`
+- Check running status: `pnpm prod:status`
+- View last 80 lines of logs: `pnpm prod:logs`
+- Open live log viewer in a separate window: `pnpm prod:logs-window`
+- Self-daemon: `pnpm prod:supervisor` (auto-restart master on death, exponential backoff, health checks)
 
-**運用フロー:** コード変更後 → `pnpm prod:restart`（停止・ビルド・起動を一括実行）。`pnpm dev` と `pnpm prod:start` を同時に実行しない（ポート競合）。
+**Operational workflow:** After code changes → `pnpm prod:restart` (stop · build · start). Recommended for production → `pnpm prod:supervisor`. Do not run `pnpm dev` and `pnpm prod:start` simultaneously (port conflict).
 
-## Editing hints
+## Dev Environment: Port Management & Auto-Restart
 
-- Backend の API / migration / TypeORM 変更は `packages/backend` を見る
-- Frontend の Vue コンポーネントやページ変更は `packages/frontend` を見る
-- `AGENTS.md` 内の相対リンクはリポジトリルート起点で解決する想定
+Process management scripts live in `scripts/`. `pnpm dev` starts frontend (5173), frontend-embed (5174), and backend (3000).
 
-**補足:** `AGENTS.md` はより詳細な正典 (Codex / Claude Code が読み込む)。Copilot code review ではこのファイルが主な入口になる。両方が読まれる環境では `AGENTS.md` を補助情報として使ってよい。
+| Purpose | Command |
+| --- | --- |
+| Release Vite ports (5173, 5174) | `pnpm kill:ports` |
+| Release Vite + backend ports | `pnpm kill:ports:all` |
+| Release ports + restart dev server | `pnpm restart` |
+| Nodemon auto-restart on crash | `pnpm dev:safe` |
+| Custom port | `node scripts/kill-port.mjs 8080 9090` |
+
+`.husky/post-commit` runs `node scripts/kill-port.mjs` after every `git commit`, cleaning up residual processes on ports 5173/5174. Restart manually with `pnpm dev` or `pnpm restart` afterward.
+
+- `scripts/kill-port.mjs`: cross-platform script (Windows PowerShell + Unix lsof).
+- Husky 9.1.7 installed as a root devDependency. `core.hooksPath` is `.husky/_`.
+- `packages/frontend/vite.config.ts` has `strictPort: true` and `port: 5173`.
+
+## Production Environment: Auto-Deploy
+
+| Purpose | Command |
+| --- | --- |
+| Full deploy (pull + build + migrate + restart) | `pnpm deploy` |
+| Dry run (show steps without executing) | `pnpm deploy:dry` |
+| Skip git pull | `pnpm deploy -- --skip-pull` |
+| Skip build | `pnpm deploy -- --skip-build` |
+| Linux shell version (for cron) | `bash scripts/update-and-restart.sh` |
+
+Env vars: `MISSKEY_SERVICE_PORT` (default 3000), `MISSKEY_LOG_FILE` (default `./misskey.log`), `GIT_BRANCH` (default current branch), `SKIP_BUILD` (set `1` to skip).
+
+## Editing Hints
+
+- Backend API / migration / TypeORM changes → look at `packages/backend`.
+- Frontend Vue component and page changes → look at `packages/frontend`.
+- Relative links in `AGENTS.md` are resolved from the repository root.
+
+**Note:** `AGENTS.md` is the canonical detailed guide (read by Codex / Claude Code). This file is the primary entry point for Copilot code review. In environments where both are read, `AGENTS.md` may be used as supplementary material.

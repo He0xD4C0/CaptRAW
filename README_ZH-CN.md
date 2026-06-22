@@ -83,6 +83,7 @@ pnpm dev
 | `pnpm prod:status` | 检查服务器是否运行中 |
 | `pnpm prod:logs` | 查看最近 80 行服务器日志 |
 | `pnpm prod:logs-window` | 在新窗口中实时查看日志 |
+| `pnpm prod:supervisor` | 自守护模式：自动重启崩溃的 master 进程 + 健康检查 |
 
 ### 典型工作流
 
@@ -90,6 +91,10 @@ pnpm dev
 # 首次部署
 pnpm prod:build
 pnpm prod:start
+
+# 生产环境推荐（自守护模式）
+pnpm prod:build
+pnpm prod:supervisor    # 前台运行，崩溃自动重启 + 健康检查
 
 # 代码修改后
 pnpm prod:restart
@@ -107,6 +112,29 @@ pnpm prod:stop
 如需热重载开发，请使用 `pnpm dev`。该命令会启动 Vite 开发服务器、nodemon 监听器及所有子包的 watch 进程。
 
 **注意：** 不要同时运行 `pnpm dev` 和 `pnpm prod:start`，端口会冲突。
+
+#### 开发端口管理
+
+| 命令 | 说明 |
+|---|---|
+| `pnpm kill:ports` | 释放 Vite 端口（5173、5174） |
+| `pnpm kill:ports:all` | 释放 Vite + 后端端口（5173、5174、3000） |
+| `pnpm restart` | 释放端口 + 重启开发服务器（一键） |
+| `pnpm dev:safe` | nodemon 包装，崩溃自动重启 |
+| `node scripts/kill-port.mjs 8080` | 指定自定义端口 |
+
+Husky 已配置 `post-commit` 钩子，每次 `git commit` 后自动释放 5173/5174 端口。之后在另一个终端运行 `pnpm dev` 或 `pnpm restart` 即可。
+
+#### 一键部署（Git 同步后）
+
+```bash
+pnpm deploy              # 完整部署：git pull → build → migrate → restart
+pnpm deploy:dry          # 预演模式（不实际执行）
+pnpm deploy -- --skip-pull   # 跳过 git pull
+pnpm deploy -- --skip-build  # 跳过构建
+```
+
+环境变量：`MISSKEY_SERVICE_PORT`（默认 3000）、`MISSKEY_LOG_FILE`、`GIT_BRANCH`、`SKIP_BUILD`
 
 ## 上游
 

@@ -1,26 +1,26 @@
 # Misskey – AI Agent Guide
 
-このファイルは Misskey リポジトリで動く AI コーディングエージェント (Claude Code / OpenAI Codex / GitHub Copilot 等) が共通で参照する **絶対禁止事項と最低限のチェック** を集めた索引。次の 3 経路から参照・読み込みされる:
+This file is the single source of truth for AI coding agents (Claude Code / OpenAI Codex / GitHub Copilot etc.) operating in the Misskey repository. It collects **absolute prohibitions and minimum checks** shared across all three ingestion paths:
 
-- **Claude Code**: ルート `CLAUDE.md` から `@AGENTS.md` で取り込まれる。詳細手順・規約は `.claude/skills/` (description で自動索引)
-- **OpenAI Codex**: ルート `AGENTS.md` を直接読み込む (skill エントリは `.agents/skills/`、実体は `.claude/skills/` を指す)
-- **GitHub Copilot**: `.github/copilot-instructions.md` (本ファイルの規約を Copilot code review 向けに再掲) 経由で参照する
+- **Claude Code**: pulled in via `@AGENTS.md` from the root `CLAUDE.md`. Detailed procedures and conventions live in `.claude/skills/` (auto-indexed by description).
+- **OpenAI Codex**: reads the root `AGENTS.md` directly (skill entries are in `.agents/skills/`, pointing to `.claude/skills/`).
+- **GitHub Copilot**: ingested via `.github/copilot-instructions.md` (a mirror of this file's rules for Copilot code review).
 
-人間 contributor 向けの一般規約 (Issue / PR の出し方、ActivityPub 拡張など) は [CONTRIBUTING.md](CONTRIBUTING.md) を参照。本ファイルは AI が **コードを書く・直す・出す** 際に踏み外してはいけない事項に絞る。
+General contributor conventions (how to file Issues / PRs, ActivityPub extensions, etc.) are in [CONTRIBUTING.md](CONTRIBUTING.md). This file is scoped to what an AI must **not** get wrong when writing, fixing, or shipping code.
 
 ---
 
-## 絶対にやってはいけない事
+## Absolute Prohibitions
 
-違反すると CI 失敗 / 本番事故 / 共有環境破壊 になる。順守すること。
+Violations will cause CI failures / production incidents / shared-environment corruption. Comply strictly.
 
-### コード・データ関連
+### Code & Data
 
-1. **SPDX ヘッダー欠落のまま AGPL 管轄ディレクトリへ新規ファイルを追加しない**
-   - 対象: 新規 `.ts` / `.js` / `.cjs` / `.mjs` / `.vue` / `.scss` / `.html` ファイル
-   - CI の対象判定は [.github/workflows/check-spdx-license-id.yml](.github/workflows/check-spdx-license-id.yml) の `directories` 配列を参照 (`*.config.{ts,js,cjs,mjs}` と `*eslint*` は除外)
-   - 欠落すると CI (`spdx` ジョブ) が失敗する
-   - `packages/misskey-js` は MIT ライセンスのサブパッケージなので、この AGPL ヘッダーを一律に付けない (サブパッケージ固有の `package.json` / `LICENSE` / 既存ファイルのヘッダーに従う)
+1. **Never add a new file to an AGPL-controlled directory without the SPDX header.**
+   - Targets: new `.ts` / `.js` / `.cjs` / `.mjs` / `.vue` / `.scss` / `.html` files.
+   - CI scope is determined by the `directories` array in [.github/workflows/check-spdx-license-id.yml](.github/workflows/check-spdx-license-id.yml) (`*.config.{ts,js,cjs,mjs}` and `*eslint*` are excluded).
+   - Missing headers will fail the CI `spdx` job.
+   - `packages/misskey-js` is an MIT-licensed sub-package; do **not** stamp the AGPL header on it (follow the sub-package's own `package.json` / `LICENSE` / existing file headers).
 
    `.ts` / `.js` / `.cjs` / `.mjs` / `.scss`:
 
@@ -31,7 +31,7 @@
     */
    ```
 
-   `.vue` / `.html` (HTML コメント形式):
+   `.vue` / `.html` (HTML comment form):
 
    ```text
    <!--
@@ -40,97 +40,157 @@
    -->
    ```
 
-2. **`locales/ja-JP.yml` 以外の locale YAML を手動編集しない**
-   - 他言語ファイル (`en-US.yml` など `ja-JP.yml` 以外すべて) は Crowdin の自動配信先。手動編集すると次の同期で上書き喪失する
-   - 根拠: [locales/README.md](locales/README.md) と [crowdin.yml](crowdin.yml) (`ja-JP.yml` → `locales/%locale%.yml` の同期設定)
+2. **Do not manually edit any locale YAML other than `locales/ja-JP.yml`.**
+   - All other language files (`en-US.yml` and everything except `ja-JP.yml`) are Crowdin auto-delivery targets. Manual edits will be overwritten on the next sync.
+   - Basis: [locales/README.md](locales/README.md) and [crowdin.yml](crowdin.yml) (`ja-JP.yml` → `locales/%locale%.yml` sync config).
 
-3. **マージ済 migration ファイルを編集しない**
-   - 対象: `packages/backend/migration/{unixMs}-{name}.js` のうち、既に `develop` / `master` にマージされたもの
-   - 本番環境で履歴改変が起きると深刻なデータ不整合を引き起こす
-   - スキーマ変更が必要な場合は **新しいタイムスタンプで新規ファイル** を作成する (`node -e "console.log(Date.now())"` でタイムスタンプ取得)
-   - 新規 migration は `up()` と `down()` の両方を実装し、`pnpm --filter backend check-migrations` を通すこと (TypeORM schema builder で pending DDL を検出)
+3. **Do not edit merged migration files.**
+   - Target: `packages/backend/migration/{unixMs}-{name}.js` already merged into `develop` / `master`.
+   - Altering history in production causes severe data inconsistency.
+   - If a schema change is needed, create a **new file with a new timestamp** (`node -e "console.log(Date.now())"` to generate one).
+   - New migrations must implement both `up()` and `down()`, and pass `pnpm --filter backend check-migrations` (TypeORM schema builder pending DDL check).
 
-### Git / リポジトリ操作
+### Git / Repository Operations
 
-4. **`git push --force` / `--force-with-lease` を `main` / `develop` / `master` にしない** (他人の作業を消す可能性)
-5. **`git commit --no-verify` で hook をスキップしない** (lint / format / SPDX チェックを潰す)
-6. **マージ済 / プッシュ済コミットを `git commit --amend` で書き換えない** (履歴の整合性が壊れる)
-7. **他人のブランチを `git reset --hard` / `git branch -D` で破壊しない**
-8. **`git config` をユーザーに無断で書き換えない** (特に `user.name` / `user.email` / `commit.gpgsign`)
+4. **Do not `git push --force` / `--force-with-lease` to `main` / `develop` / `master`** (may destroy others' work).
+5. **Do not bypass hooks with `git commit --no-verify`** (defeats lint / format / SPDX checks).
+6. **Do not `git commit --amend` already-merged or already-pushed commits** (breaks history integrity).
+7. **Do not `git reset --hard` / `git branch -D` someone else's branch.**
+8. **Do not change `git config` without the user's explicit consent** (especially `user.name` / `user.email` / `commit.gpgsign`).
 
-### Issue / PR / 外部送信
+### Issues / PRs / External Communication
 
-9. **ユーザーの明示指示なしに PR を merge / close / force-push しない**
-10. **ユーザーの明示指示なしに external service (GitHub comments / Slack / メール 等) へ送信しない**
-11. **secrets / 認証情報をリポジトリにコミットしない** (`.config/*.yml` の本番値、`.env` ファイル、API token、private key 等)
-12. **脆弱性報告を通常の Issue / PR 経由で行わない** (脆弱性報告を行う場合のルールは `creating-issues-and-prs` スキルを参照すること)
+9. **Do not merge / close / force-push a PR without the user's explicit instruction.**
+10. **Do not send to any external service (GitHub comments / Slack / email, etc.) without the user's explicit instruction.**
+11. **Do not commit secrets or credentials** (production values in `.config/*.yml`, `.env` files, API tokens, private keys, etc.).
+12. **Do not file vulnerability reports through normal Issues / PRs** (refer to the `creating-issues-and-prs` skill for the correct process).
 
-### スキル呼び出し
+### Skill Invocation
 
-上流スキルの実行・事前知識・memory の内容に関わらず免除されない。
+These are not waived by upstream skill execution, prior knowledge, or memory contents.
 
-13. **`working-on-backend` スキルを参照せずに `packages/backend/` 配下のファイルを編集・追加しない**
-14. **`working-on-frontend` スキルを参照せずに `packages/frontend/` 配下のファイルを編集・追加しない**
-15. **`shipping-misskey-change` スキルを参照せずに commit / PR 作成 / 作業をユーザーに返さない**
-16. **`creating-issues-and-prs` スキルを参照せずに Issue / PR を起票しない** (脆弱性報告のルールも含む)
+13. **Do not edit or add files under `packages/backend/` without consulting the `working-on-backend` skill.**
+14. **Do not edit or add files under `packages/frontend/` without consulting the `working-on-frontend` skill.**
+15. **Do not commit / create a PR / hand work back to the user without consulting the `shipping-misskey-change` skill.**
+16. **Do not file an Issue / PR without consulting the `creating-issues-and-prs` skill** (includes vulnerability report rules).
 
-### CaptRAW フォーク固有のルール
+### CaptRAW Fork-Specific Rules
 
-15. **Docker / Dev Container / Kubernetes Chart 関連ファイルを追加しない**（本プロジェクトは Docker 非対応）
-16. **`locales/ja-JP.yml` と `locales/zh-CN.yml` 以外の locale YAML を手動編集しない**
-17. **電話番号を必須とする登録フローが有効な場合、それに依存する UI / API の整合性を保つこと**
-18. **OIDC / SMS 関連機能の変更時は CHANGELOG.md に記録すること**
+17. **Do not add Docker / Dev Container / Kubernetes Chart files** (this project does not support Docker).
+18. **Do not manually edit any locale YAML other than `locales/ja-JP.yml` and `locales/zh-CN.yml`.**
+19. **If a phone-number-required registration flow is enabled, maintain consistency of dependent UI / API.**
+20. **Record OIDC / SMS feature changes in CHANGELOG.md.**
 
 ---
 
-## 変更を出す前の最低チェック
+## Minimum Checks Before Shipping
 
-各エージェントは [shipping-misskey-change スキル](.claude/skills/shipping-misskey-change/SKILL.md) を参照すること。スキルが利用できない環境でも、以下のチェックは必ず実施すること:
+Each agent should consult the [shipping-misskey-change skill](.claude/skills/shipping-misskey-change/SKILL.md). Even when the skill is unavailable, the following checks are mandatory:
 
-1. **lint**: `pnpm lint` が通る (typecheck + eslint, 全パッケージ)
-2. **backend API 変更時**: `pnpm build-misskey-js-with-types` を実行し `packages/misskey-js/src/autogen/` の差分も commit に含めた
-3. **entity / migration 変更時**: `pnpm --filter backend check-migrations` が pending DDL 0 件で通る / 新規 migration は `up()` と `down()` 両方実装済
-4. **新規ファイル**: SPDX ヘッダーを付けた (`.vue` / `.html` は HTML コメント形式、それ以外は TS コメント形式)
-5. **ユーザー影響のある変更**: `CHANGELOG.md` の `## Unreleased` 配下の該当サブセクション (`### General` / `### Client` / `### Server`) に `- <Feat|Enhance|Fix>: <概要>` を 1 行追記
-6. **locale safety**: `locales/` を編集した場合、`git diff --name-only develop -- 'locales/*.yml' | grep -v '^locales/ja-JP\.yml$'` が空 (ja-JP.yml 以外に差分が無い) ことを確認
+1. **Lint**: `pnpm lint` passes (typecheck + eslint, all packages).
+2. **Backend API changes**: run `pnpm build-misskey-js-with-types` and include the diff under `packages/misskey-js/src/autogen/` in the commit.
+3. **Entity / migration changes**: `pnpm --filter backend check-migrations` passes with 0 pending DDL; new migrations implement both `up()` and `down()`.
+4. **New files**: SPDX header added (`.vue` / `.html` use HTML comment form; everything else uses TS comment form).
+5. **User-facing changes**: add a line `- <Feat|Enhance|Fix>: <summary>` under the appropriate subsection (`### General` / `### Client` / `### Server`) in `## Unreleased` of `CHANGELOG.md`.
+6. **Locale safety**: after editing `locales/`, verify `git diff --name-only develop -- 'locales/*.yml' | grep -v '^locales/ja-JP\.yml$'` is empty (no diff outside ja-JP.yml).
 
-### Validation commands
+### Validation Commands
 
-各チェックで使う pnpm コマンド一覧。状況に応じて最も近いコマンドから検証する。
+Use the most specific command first; widen to full-build if needed.
 
-| 用途 | コマンド |
+| Purpose | Command |
 | --- | --- |
-| 全体 lint (typecheck + eslint) | `pnpm lint` |
+| Full lint (typecheck + eslint) | `pnpm lint` |
 | Backend unit test | `pnpm --filter backend test` |
 | Backend e2e test | `pnpm --filter backend test:e2e` |
 | Backend federation test | `pnpm --filter backend test:fed` |
 | Frontend unit test | `pnpm --filter frontend test` |
-| Migration 差分検査 (pending DDL) | `pnpm --filter backend check-migrations` |
-| `misskey-js` 再生成 (API 変更後必須) | `pnpm build-misskey-js-with-types` |
-| 全体ビルド | `pnpm build` |
-| 開発サーバー (backend + frontend watch) | `pnpm dev` |
+| Migration diff check (pending DDL) | `pnpm --filter backend check-migrations` |
+| `misskey-js` regeneration (required after API changes) | `pnpm build-misskey-js-with-types` |
+| Full build | `pnpm build` |
+| Dev server (backend + frontend watch) | `pnpm dev` |
 
-**注意:** backend テスト (`test` / `test:e2e` / `test:fed`) 実行前に `.config/test.yml` が必要 (`ncp .github/misskey/test.yml .config/test.yml` または `cp .github/misskey/test.yml .config/test.yml` で作成)。
+**Note:** Backend tests (`test` / `test:e2e` / `test:fed`) require `.config/test.yml`. Create it with `ncp .github/misskey/test.yml .config/test.yml` (or `cp .github/misskey/test.yml .config/test.yml`) before running. Each test script internally calls `cross-env NODE_ENV=test pnpm compile-config`, so no separate compile-config step is needed once the file exists.
 
-### Production deployment commands
+### Production Deployment Commands
 
-CaptRAW は build-once / run-production ワークフローを採用する。`pnpm dev`（開発モード）ではなく `pnpm prod:*` コマンドで管理する。
+CaptRAW uses a build-once / run-production workflow. Use `pnpm prod:*` commands (not `pnpm dev`) for production management.
 
-| 用途 | コマンド |
+| Purpose | Command |
 | --- | --- |
-| 本番ビルド | `pnpm prod:build` |
-| 本番サーバー起動 (デタッチ) | `pnpm prod:start` |
-| 本番サーバー停止 | `pnpm prod:stop` |
-| 停止→ビルド→起動 (ワンコマンドデプロイ) | `pnpm prod:restart` |
-| デプロイ (restart のエイリアス) | `pnpm prod:deploy` |
-| 稼働状態確認 | `pnpm prod:status` |
-| ログ表示 (直近 80 行) | `pnpm prod:logs` |
-| ログを別ウィンドウでリアルタイム表示 | `pnpm prod:logs-window` |
+| Production build | `pnpm prod:build` |
+| Start production server (detached) | `pnpm prod:start` |
+| Stop production server | `pnpm prod:stop` |
+| Stop → Build → Start (single-command deploy) | `pnpm prod:restart` |
+| Deploy (alias for restart) | `pnpm prod:deploy` |
+| Check running status | `pnpm prod:status` |
+| View last 80 lines of logs | `pnpm prod:logs` |
+| Open live log viewer in a separate window | `pnpm prod:logs-window` |
+| Self-daemon (auto-restart on crash + health check) | `pnpm prod:supervisor` |
 
-**運用フロー:**
-1. コード変更後 → `pnpm prod:restart`（停止・ビルド・起動を一括実行）
-2. ログ監視 → `pnpm prod:logs-window`（別ウィンドウでリアルタイム表示）
-3. 確認 → `pnpm prod:status`
-4. 停止 → `pnpm prod:stop`
+**Operational workflow:**
+1. After code changes → `pnpm prod:restart` (stop · build · start in one command).
+2. Recommended for production → `pnpm prod:supervisor` (auto-restart master on death, exponential backoff, health checks).
+3. Log monitoring → `pnpm prod:logs-window` (real-time tail in a separate window).
+4. Status check → `pnpm prod:status`.
+5. Stop → `pnpm prod:stop`.
 
-**注意:** `pnpm dev` と `pnpm prod:start` を同時に実行しない（ポート競合が発生する）。
+**Note:** Do not run `pnpm dev` and `pnpm prod:start` simultaneously (port conflict).
+
+---
+
+## Dev Environment: Port Management & Auto-Restart
+
+Process management scripts live in `scripts/`. `pnpm dev` starts frontend (5173), frontend-embed (5174), and backend (3000).
+
+### Dev Script Reference
+
+| Purpose | Command |
+| --- | --- |
+| Release Vite ports (5173, 5174) | `pnpm kill:ports` |
+| Release Vite + backend ports | `pnpm kill:ports:all` |
+| Release ports + restart dev server | `pnpm restart` |
+| Nodemon auto-restart on crash | `pnpm dev:safe` |
+| Custom port | `node scripts/kill-port.mjs 8080 9090` |
+
+### Git Hook (Husky)
+
+`.husky/post-commit` runs `node scripts/kill-port.mjs` after every `git commit`, cleaning up residual processes on ports 5173/5174. Restart manually with `pnpm dev` or `pnpm restart` afterward.
+
+### Implementation Details
+
+- `scripts/kill-port.mjs`: cross-platform script supporting Windows (PowerShell `Get-NetTCPConnection` + `taskkill`) and Unix (`lsof` + `kill -9`). SPDX header included.
+- Husky 9.1.7 installed as a root devDependency. `core.hooksPath` is `.husky/_`.
+- `packages/frontend/vite.config.ts` has `strictPort: true` and `port: 5173`. Port conflicts are reported immediately as errors.
+
+---
+
+## Production Environment: Auto-Deploy
+
+Scripts for building, migrating, and restarting after code sync are provided.
+
+### Deploy Script Reference
+
+| Purpose | Command |
+| --- | --- |
+| Full deploy (pull + build + migrate + restart) | `pnpm deploy` |
+| Dry run (show steps without executing) | `pnpm deploy:dry` |
+| Skip git pull | `pnpm deploy -- --skip-pull` |
+| Skip build | `pnpm deploy -- --skip-build` |
+| Linux shell version (for cron) | `bash scripts/update-and-restart.sh` |
+
+### Environment Variables
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MISSKEY_SERVICE_PORT` | `3000` | Backend port |
+| `MISSKEY_LOG_FILE` | `./misskey.log` | Service log file path |
+| `GIT_BRANCH` | current branch | Branch to pull |
+| `SKIP_BUILD` | (unset) | Set to `1` to skip build |
+
+### Implementation Details
+
+- `scripts/deploy.mjs`: Node.js cross-platform script. Runs `git fetch` + `git reset --hard origin/<branch>` for code sync, then `pnpm install` → `pnpm build` → `pnpm migrate` → port cleanup → `pnpm start` (detached). SPDX header included.
+- `scripts/update-and-restart.sh`: Linux bash version. Lightweight script suitable for cron or systemd `ExecStartPost`. SPDX header included.
+- Deploy scripts check for `.config/default.yml` before proceeding; abort safely if missing.
+- `--dry-run` mode displays each step (git pull / build / migrate / restart) without executing.

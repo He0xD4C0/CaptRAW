@@ -83,6 +83,7 @@ pnpm dev
 | `pnpm prod:status` | サーバー稼働状態確認 |
 | `pnpm prod:logs` | 直近 80 行のログ表示 |
 | `pnpm prod:logs-window` | 別ウィンドウでリアルタイムログ表示 |
+| `pnpm prod:supervisor` | 自己守護モード: クラッシュ自動再起動 + ヘルスチェック |
 
 ### 一般的なワークフロー
 
@@ -90,6 +91,10 @@ pnpm dev
 # 初回デプロイ
 pnpm prod:build
 pnpm prod:start
+
+# 本番環境推奨（自己守護モード）
+pnpm prod:build
+pnpm prod:supervisor    # フォアグラウンドで自動再起動 + ヘルスチェック
 
 # コード変更後
 pnpm prod:restart
@@ -107,6 +112,29 @@ pnpm prod:stop
 ホットリロード付きの開発には `pnpm dev` を使用。Vite 開発サーバー、nodemon watcher、全サブパッケージの watch プロセスが起動する。
 
 **注意:** `pnpm dev` と `pnpm prod:start` を同時に実行しない（ポート競合）。
+
+#### 開発ポート管理
+
+| コマンド | 説明 |
+|---|---|
+| `pnpm kill:ports` | Vite ポート解放（5173、5174） |
+| `pnpm kill:ports:all` | Vite + バックエンドポート解放（5173、5174、3000） |
+| `pnpm restart` | ポート解放 + dev サーバー再起動（ワンクリック） |
+| `pnpm dev:safe` | nodemon ラッパー — クラッシュ時に自動再起動 |
+| `node scripts/kill-port.mjs 8080` | カスタムポート指定 |
+
+Husky `post-commit` フックが `git commit` 後にポート 5173/5174 を自動解放。別ターミナルで `pnpm dev` または `pnpm restart` を実行。
+
+#### ワンクリックデプロイ（コード同期後）
+
+```bash
+pnpm deploy              # フルデプロイ: git pull → build → migrate → restart
+pnpm deploy:dry          # ドライラン（実行せず表示のみ）
+pnpm deploy -- --skip-pull   # git pull スキップ
+pnpm deploy -- --skip-build  # build スキップ
+```
+
+環境変数: `MISSKEY_SERVICE_PORT`（デフォルト 3000）、`MISSKEY_LOG_FILE`、`GIT_BRANCH`、`SKIP_BUILD`
 
 ## アップストリーム
 
