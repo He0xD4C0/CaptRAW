@@ -1,0 +1,48 @@
+# CaptRAW Infrastructure: PostgreSQL + Redis
+# Usage: docker compose -f docker-compose.infra.yml up -d
+#
+# Data is stored in Docker named volumes for persistence across container recreates.
+# Back up with: pnpm backup
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: captraw-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: misskey
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-misskey}
+      POSTGRES_DB: misskey
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U misskey -d misskey"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: captraw-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+    name: captraw-pgdata
+  redisdata:
+    name: captraw-redisdata

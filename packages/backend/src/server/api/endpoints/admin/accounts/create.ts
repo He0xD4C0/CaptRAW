@@ -59,6 +59,8 @@ export const paramDef = {
 		username: localUsernameSchema,
 		password: passwordSchema,
 		setupPassword: { type: 'string', nullable: true },
+		/** @deprecated TEMPORARY: expires 2026-08-31. */
+		customId: { type: 'string', minLength: 1, maxLength: 32, nullable: true },
 	},
 	required: ['username', 'password'],
 } as const;
@@ -102,6 +104,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				username: ps.username,
 				password: ps.password,
 				ignorePreservedUsernames: true,
+				customId: ps.customId ?? null, // TEMPORARY: expires 2026-08-31
 			});
 
 			const res = await this.userEntityService.pack(account, account, {

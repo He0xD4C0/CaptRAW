@@ -55,6 +55,8 @@ export class SignupService {
 		passwordHash?: MiUserProfile['password'] | null;
 		host?: string | null;
 		ignorePreservedUsernames?: boolean;
+		/** @deprecated TEMPORARY: expires 2026-08-31. Remove after that date. */
+		customId?: string | null;
 	}) {
 		const { username, password, passwordHash, host } = opts;
 		let hash = passwordHash;
@@ -100,6 +102,18 @@ export class SignupService {
 			}
 		}
 
+		// TEMPORARY: customId support — expires 2026-08-31, remove after that date.
+		let userId = this.idService.gen();
+		if (opts.customId) {
+			if (opts.customId.length > 32 || opts.customId.length < 1) {
+				throw new Error('INVALID_CUSTOM_ID');
+			}
+			if (await this.usersRepository.exists({ where: { id: opts.customId } })) {
+				throw new Error('DUPLICATED_ID');
+			}
+			userId = opts.customId;
+		}
+
 		const keyPair = await new Promise<string[]>((res, rej) =>
 			generateKeyPair('rsa', {
 				modulusLength: 2048,
@@ -129,7 +143,7 @@ export class SignupService {
 			if (exist) throw new Error(' the username is already used');
 
 			account = await transactionalEntityManager.save(new MiUser({
-				id: this.idService.gen(),
+				id: userId,
 				username: username,
 				usernameLower: username.toLowerCase(),
 				host: this.utilityService.toPunyNullable(host),

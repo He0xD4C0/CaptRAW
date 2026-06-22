@@ -6,33 +6,27 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PG_DIR="$ROOT_DIR/../PostgreSQL"
-REDIS_DIR="$ROOT_DIR/../Redis"
+COMPOSE_FILE="$ROOT_DIR/docker-compose.infra.yml"
 
 # ---- helpers -------------------------------------------------------
 pg_up() {
-  echo "[infra] Starting PostgreSQL..."
-  (cd "$PG_DIR" && docker compose up -d --wait 2>/dev/null || docker compose up -d)
+  echo "[infra] Starting PostgreSQL + Redis..."
+  docker compose -f "$COMPOSE_FILE" up -d --wait 2>/dev/null || docker compose -f "$COMPOSE_FILE" up -d
 }
 
 redis_up() {
-  echo "[infra] Starting Redis..."
-  (cd "$REDIS_DIR" && docker compose up -d)
+  # Redis is included in the infra compose file
+  pg_up
 }
 
 infra_down() {
-  echo "[infra] Stopping PostgreSQL..."
-  (cd "$PG_DIR" && docker compose down)
-  echo "[infra] Stopping Redis..."
-  (cd "$REDIS_DIR" && docker compose down)
+  echo "[infra] Stopping PostgreSQL + Redis..."
+  docker compose -f "$COMPOSE_FILE" down
 }
 
 infra_status() {
-  echo "=== PostgreSQL ==="
-  (cd "$PG_DIR" && docker compose ps 2>/dev/null || echo "Not running")
-  echo ""
-  echo "=== Redis ==="
-  (cd "$REDIS_DIR" && docker compose ps 2>/dev/null || echo "Not running")
+  echo "=== Infrastructure ==="
+  docker compose -f "$COMPOSE_FILE" ps 2>/dev/null || echo "Not running"
 }
 
 wait_pg() {

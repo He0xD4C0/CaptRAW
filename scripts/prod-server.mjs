@@ -6,11 +6,13 @@
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { execa } from 'execa';
+import { platform } from 'node:os';
 
 const rootDir = fileURLToPath(new URL('../', import.meta.url));
 const pidFilePath = join(rootDir, 'built', 'prod-server.pid');
+const supervisorPidFilePath = join(rootDir, 'built', 'supervisor.pid');
 const logFilePath = join(rootDir, 'built', 'prod-server.log');
 const buildEntryPath = join(rootDir, 'packages', 'backend', 'built', 'entry.js');
 
@@ -93,6 +95,24 @@ async function runStart() {
 }
 
 async function runStop() {
+	const isWindows = platform() === 'win32';
+
+	// Kill supervisor process first
+	const supervisorPid = existsSync(supervisorPidFilePath)
+		? Number(readFileSync(supervisorPidFilePath, 'utf8').trim())
+		: null;
+	if (supervisorPid && !isNaN(supervisorPid) && isRunning(supervisorPid)) {
+		log(`Stopping supervisor PID ${supervisorPid}...`);
+		if (isWindows) {
+			try { execSync(`taskkill /F /T /PID ${supervisorPid}`, { stdio: 'ignore' }); } catch {}
+		} else {
+			try { process.kill(-supervisorPid, 'SIGTERM'); } catch {}
+			try { process.kill(supervisorPid, 'SIGTERM'); } catch {}
+		}
+		if (existsSync(supervisorPidFilePath)) unlinkSync(supervisorPidFilePath);
+	}
+
+	// Kill the server process tree
 	const pid = getPidFile();
 	if (!pid) {
 		log('No production instance PID file found.');
@@ -104,11 +124,12 @@ async function runStop() {
 		return;
 	}
 
-	log(`Stopping production server PID ${pid}...`);
-	try {
-		process.kill(pid, 'SIGTERM');
-	} catch {
-		// Continue to fallback kill
+	log(`Stopping production server PID ${pid} (entire process tree)...`);
+	if (isWindows) {
+		try { execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' }); } catch {}
+	} else {
+		try { process.kill(-pid, 'SIGTERM'); } catch {}
+		try { process.kill(pid, 'SIGTERM'); } catch {}
 	}
 
 	for (let i = 0; i < 20; i += 1) {
@@ -120,12 +141,14 @@ async function runStop() {
 		await new Promise((resolve) => setTimeout(resolve, 200));
 	}
 
-	try {
-		process.kill(pid, 'SIGKILL');
-		log('SIGTERM did not stop the process; SIGKILL sent.');
-	} catch {
-		log('Could not send SIGKILL to the process.');
+	// Force kill if still alive
+	if (isWindows) {
+		try { execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' }); } catch {}
+	} else {
+		try { process.kill(-pid, 'SIGKILL'); } catch {}
+		try { process.kill(pid, 'SIGKILL'); } catch {}
 	}
+	log('SIGTERM did not stop the process; SIGKILL sent.');
 
 	removePidFile();
 }
@@ -170,6 +193,45 @@ function runLogsWindow() {
 	log('Opened log viewer in a new window.');
 }
 
+function runSupervise() {
+	const scriptPath = join(rootDir, 'scripts', 'prod-server.mjs');
+	const isWindows = platform() === 'win32';
+
+	if (isWindows) {
+		// Write a .bat launcher to avoid all quoting/escaping issues with spaces in paths
+		const batPath = join(rootDir, 'built', 'supervisor-launcher.bat');
+		mkdirSync(dirname(batPath), { recursive: true });
+		writeFileSync(batPath, [
+			'@echo off',
+			`cd /d "${rootDir}"`,
+			'title CaptRAW Supervisor',
+			`node "${scriptPath}" supervisor`,
+		].join('\r\n'), 'utf8');
+
+		// Use PowerShell Start-Process — handles paths with spaces natively
+		const child = spawn('powershell.exe', [
+			'-NoProfile', '-Command',
+			`Start-Process -FilePath '${batPath.replace(/'/g, "''")}' -WindowStyle Normal`,
+		], {
+			detached: true,
+			stdio: 'ignore',
+		});
+		child.unref();
+		// Track supervisor process PID
+		writeFileSync(supervisorPidFilePath, String(child.pid), 'utf8');
+	} else {
+		const child = spawn('node', [scriptPath, 'supervisor'], {
+			detached: true,
+			stdio: 'ignore',
+		});
+		child.unref();
+		writeFileSync(supervisorPidFilePath, String(child.pid), 'utf8');
+	}
+
+	log('Supervisor launched in a detached window (PID-independent).');
+	log('It will survive VS Code closure. Check `pnpm prod:status` or the new terminal window.');
+}
+
 // ── Watchdog Supervisor ──────────────────────────────────
 const HEALTHZ_PORT = () => {
 	try {
@@ -209,12 +271,21 @@ async function runSupervisor() {
 	let currentChild = null;
 	let healthTimer = null;
 
+	function killProcessTree(child) {
+		if (!child || child.killed) return;
+		const pid = child.pid;
+		if (platform() === 'win32') {
+			try { execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' }); } catch {}
+		} else {
+			try { process.kill(-pid, 'SIGTERM'); } catch {}
+			try { child.kill('SIGTERM'); } catch {}
+		}
+	}
+
 	function cleanup() {
 		shuttingDown = true;
 		if (healthTimer) clearInterval(healthTimer);
-		if (currentChild && !currentChild.killed) {
-			try { currentChild.kill('SIGTERM'); } catch {}
-		}
+		killProcessTree(currentChild);
 		removePidFile();
 		log('Supervisor shut down.');
 		process.exit(0);
@@ -254,14 +325,20 @@ async function runSupervisor() {
 		}
 
 		log(`Starting server (attempt ${restartCount + 1})...`);
-		const logFd = openSync(logFilePath, 'a');
 
 		try {
 			currentChild = execa('node', ['./built/entry.js'], {
 				cwd: join(rootDir, 'packages', 'backend'),
-				stdio: ['ignore', logFd, logFd],
+				stdio: ['ignore', 'pipe', 'pipe'],
 				env: { ...process.env, NODE_ENV: 'production' },
 			});
+
+			// Tee: pipe child stdout/stderr to both terminal and log file
+			const logStream = (await import('node:fs')).createWriteStream(logFilePath, { flags: 'a' });
+			currentChild.stdout?.pipe(process.stdout);
+			currentChild.stdout?.pipe(logStream);
+			currentChild.stderr?.pipe(process.stderr);
+			currentChild.stderr?.pipe(logStream);
 		} catch (err) {
 			log(`Failed to spawn: ${err.message}`);
 			restartCount++;

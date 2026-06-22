@@ -129,6 +129,10 @@ export const meta = {
 export const paramDef = {
 	type: 'object',
 	properties: {
+		/** @deprecated TEMPORARY: expires 2026-08-31. */
+		customId: { type: 'string', minLength: 1, maxLength: 32, nullable: true },
+		/** @deprecated TEMPORARY: expires 2026-08-31. */
+		createdAt: { type: 'integer', nullable: true },
 		visibility: { type: 'string', enum: ['public', 'home', 'followers', 'specified'], default: 'public' },
 		visibleUserIds: { type: 'array', uniqueItems: true, items: {
 			type: 'string', format: 'misskey:id',
@@ -222,7 +226,8 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 		super(meta, paramDef, async (ps, me) => {
 			try {
 				const note = await this.noteCreateService.fetchAndCreate(me, {
-					createdAt: new Date(),
+					customId: ps.customId ?? null, // TEMPORARY: expires 2026-08-31
+					createdAt: ps.createdAt != null ? new Date(ps.createdAt) : new Date(), // TEMPORARY: expires 2026-08-31 (accepts unix ms)
 					fileIds: ps.fileIds ?? ps.mediaIds ?? [],
 					poll: ps.poll ? {
 						choices: ps.poll.choices,

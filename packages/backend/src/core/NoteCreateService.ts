@@ -168,6 +168,8 @@ type MinimumUser = {
 };
 
 type Option = {
+	/** @deprecated TEMPORARY: expires 2026-08-31. Remove after that date. */
+	customId?: string | null;
 	createdAt?: Date | null;
 	name?: string | null;
 	text?: string | null;
@@ -281,6 +283,8 @@ export class NoteCreateService implements OnApplicationShutdown {
 		isBot: MiUser['isBot'];
 		isCat: MiUser['isCat'];
 	}, data: {
+		/** @deprecated TEMPORARY: expires 2026-08-31. */
+		customId?: string | null;
 		createdAt: Date;
 		replyId: MiNote['id'] | null;
 		renoteId: MiNote['id'] | null;
@@ -420,6 +424,7 @@ export class NoteCreateService implements OnApplicationShutdown {
 		}
 
 		return this.create(user, {
+			customId: data.customId ?? null, // TEMPORARY: expires 2026-08-31
 			createdAt: data.createdAt,
 			files: files,
 			poll: data.poll,
@@ -622,8 +627,20 @@ export class NoteCreateService implements OnApplicationShutdown {
 
 	@bindThis
 	private async insertNote(user: { id: MiUser['id']; host: MiUser['host']; }, data: Option, tags: string[], emojis: string[], mentionedUsers: MinimumUser[]) {
+		// TEMPORARY: customId support — expires 2026-08-31, remove after that date.
+		let noteId = this.idService.gen(data.createdAt?.getTime());
+		if (data.customId) {
+			if (data.customId.length > 32 || data.customId.length < 1) {
+				throw new Error('INVALID_CUSTOM_ID');
+			}
+			if (await this.notesRepository.exists({ where: { id: data.customId } })) {
+				throw new Error('DUPLICATED_ID');
+			}
+			noteId = data.customId;
+		}
+
 		const insert = new MiNote({
-			id: this.idService.gen(data.createdAt?.getTime()),
+			id: noteId,
 			fileIds: data.files ? data.files.map(file => file.id) : [],
 			replyId: data.reply ? data.reply.id : null,
 			renoteId: data.renote ? data.renote.id : null,
