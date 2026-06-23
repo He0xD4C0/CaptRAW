@@ -92,10 +92,14 @@ export class SystemAccountService implements OnApplicationShutdown {
 			relations: { user: true },
 		});
 
-		if (systemAccount) {
+		if (systemAccount && systemAccount.user) {
 			this.cache.set(type, systemAccount.user as MiLocalUser);
 			return systemAccount.user as MiLocalUser;
 		} else {
+			// Clean up orphaned system_account record if user is missing
+			if (systemAccount && !systemAccount.user) {
+				await this.systemAccountsRepository.delete(systemAccount.id);
+			}
 			const created = await this.createCorrespondingUser(type, {
 				username: `system.${type}`, // NOTE: (できれば避けたいが) . が含まれるかどうかでシステムアカウントかどうかを判定している処理もあるので変えないように
 				name: this.meta.name,
