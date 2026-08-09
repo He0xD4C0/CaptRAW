@@ -80,10 +80,7 @@ vite.config.local-dev.ts.timestamp-*
 *.blend5
 
 # WinSW
-/CaptRAW-Production.exe
-/CaptRAW-Production.xml
-/CaptRAW-Production.*.log
-/start.cmd
+/WinSW/
 
 # VSCode addon
 .favorites.json

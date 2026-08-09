@@ -392,13 +392,29 @@ export class ClientServerService {
 				'/admin',
 				'/custom-emojis-manager',
 				'/avatar-decorations',
+				'/chat',
 				'/share',
 				'/my',
+				'/lookup',
+				'/api-console',
+				'/install-extensions',
 				'/api',
+				'/api-doc',
+				'/api.json',
+				'/signup',
+				'/signup-pending',
+				'/signin-flow',
+				'/signin-with-passkey',
+				'/clear-browser-cache',
 				'/inbox',
+				'/streaming',
+				'/miauth',
 				'/oauth',
 				'/proxy',
 				'/url',
+				'/flush',
+				'/cli',
+				'/_info_card_',
 			];
 
 			if (this.meta.ugcVisibilityForVisitor === 'none') {
@@ -411,7 +427,6 @@ export class ClientServerService {
 			let content = `User-agent: *\n`;
 			content += disallowedPaths.map((path) => `Disallow: ${path}`).join('\n') + '\n';
 			content += 'Allow: /\n';
-			content += '\n# todo: sitemap\n';
 
 			reply.header('Content-Type', 'text/plain; charset=utf-8');
 			return await reply.send(content);

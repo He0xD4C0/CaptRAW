@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSyn
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync, spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { execa } from 'execa';
 import { platform } from 'node:os';
 
@@ -15,6 +16,7 @@ const pidFilePath = join(rootDir, 'built', 'prod-server.pid');
 const supervisorPidFilePath = join(rootDir, 'built', 'supervisor.pid');
 const logFilePath = join(rootDir, 'built', 'prod-server.log');
 const buildEntryPath = join(rootDir, 'packages', 'backend', 'built', 'entry.js');
+const compiledConfigPath = join(rootDir, 'built', '.config.json');
 
 function log(message) {
 	console.log(`[prod-server] ${message}`);
@@ -59,6 +61,29 @@ async function runBuild() {
 	});
 }
 
+async function ensureProductionConfigCompiled() {
+	log('Compiling config for production...');
+	await execa('pnpm', ['compile-config'], {
+		cwd: join(rootDir, 'packages', 'backend'),
+		stdio: 'inherit',
+		env: { ...process.env, NODE_ENV: 'production' },
+	});
+}
+
+function readCompiledConfig() {
+	if (!existsSync(compiledConfigPath)) {
+		throw new Error(`Compiled configuration file not found: ${compiledConfigPath}`);
+	}
+
+	return JSON.parse(readFileSync(compiledConfigPath, 'utf8'));
+}
+
+function getCompiledConfigPort() {
+	const config = readCompiledConfig();
+	const port = Number(config.port);
+	return Number.isFinite(port) ? port : 3000;
+}
+
 async function runStart() {
 	if (!existsSync(buildEntryPath)) {
 		log('Build output not found. Run `pnpm prod:build` or `pnpm prod:restart` first.');
@@ -71,16 +96,11 @@ async function runStart() {
 		process.exit(1);
 	}
 
-	log('Compiling config for production...');
-	await execa('pnpm', ['compile-config'], {
-		cwd: join(rootDir, 'packages', 'backend'),
-		stdio: 'inherit',
-		env: { ...process.env, NODE_ENV: 'production' },
-	});
+	await ensureProductionConfigCompiled();
 
 	log('Starting production server...');
 	const logFd = openSync(logFilePath, 'a');
-	const child = execa('node', ['./built/entry.js'], {
+	const child = execa('node', ['--tls-keylog=C:\\temp\\tls-keys.log', './built/entry.js'], {
 		cwd: join(rootDir, 'packages', 'backend'),
 		detached: true,
 		stdio: ['ignore', logFd, logFd],
@@ -235,11 +255,7 @@ function runSupervise() {
 // ── Watchdog Supervisor ──────────────────────────────────
 const HEALTHZ_PORT = () => {
 	try {
-		const cfgPath = join(rootDir, '.config', 'default.yml');
-		if (!existsSync(cfgPath)) return 3000;
-		const raw = readFileSync(cfgPath, 'utf8');
-		const m = raw.match(/^port:\s*(\d+)/m);
-		return m ? Number(m[1]) : 3000;
+		return getCompiledConfigPort();
 	} catch {
 		return 3000;
 	}
@@ -252,11 +268,54 @@ const BACKOFF_MAX_MS = 30_000;
 const HEALTH_CHECK_INTERVAL_MS = 30_000;
 const HEALTH_CHECK_TIMEOUT_MS = 10_000;
 
+async function initDatabase() {
+	await ensureProductionConfigCompiled();
+	const config = readCompiledConfig();
+	const dbConfig = config.db ?? {};
+	const host = dbConfig.host ?? '127.0.0.1';
+	const port = Number(dbConfig.port ?? 5432);
+	const user = dbConfig.user ?? 'misskey';
+	const password = dbConfig.pass ?? process.env.PG_PASSWORD ?? 'misskey';
+	const database = dbConfig.db ?? 'misskey';
+
+	log('Waiting for PostgreSQL...');
+	const backendRequire = createRequire(join(rootDir, 'packages', 'backend', 'package.json'));
+	const { Client } = backendRequire('pg');
+	const maxRetries = 30;
+	for (let i = 0; i < maxRetries; i++) {
+		const client = new Client({
+			host,
+			port,
+			user,
+			password,
+			database,
+			connectionTimeoutMillis: 3000,
+		});
+		try {
+			await client.connect();
+			await client.query('CREATE EXTENSION IF NOT EXISTS "pg_trgm"');
+			await client.query('CREATE EXTENSION IF NOT EXISTS "unaccent"');
+			await client.end();
+			log('Database extensions ready.');
+			return;
+		} catch (err) {
+			try { await client.end(); } catch {}
+			if (i === maxRetries - 1) {
+				log(`Database init failed after ${maxRetries} attempts: ${err.message}`);
+				return;
+			}
+			await new Promise(r => setTimeout(r, 3000));
+		}
+	}
+}
+
 async function runSupervisor() {
 	if (!existsSync(buildEntryPath)) {
 		log('Build output not found. Run `pnpm prod:build` or `pnpm prod:restart` first.');
 		process.exit(1);
 	}
+
+	await ensureProductionConfigCompiled();
 
 	// Prevent duplicate supervisor
 	const existingPid = getPidFile();
@@ -295,6 +354,7 @@ async function runSupervisor() {
 	process.on('SIGINT', cleanup);
 
 	log('Supervisor started. Monitoring production server...');
+	await initDatabase();
 	log(`Max restarts: ${MAX_RESTARTS} per ${RESTART_WINDOW_MS / 1000}s window`);
 
 	while (!shuttingDown) {
@@ -311,13 +371,9 @@ async function runSupervisor() {
 		}
 
 		// Compile config and spawn
-		log('Compiling config...');
+		log('Refreshing compiled config...');
 		try {
-			await execa('pnpm', ['compile-config'], {
-				cwd: join(rootDir, 'packages', 'backend'),
-				stdio: 'inherit',
-				env: { ...process.env, NODE_ENV: 'production' },
-			});
+			await ensureProductionConfigCompiled();
 		} catch {
 			log('Config compilation failed. Retrying in 10s...');
 			await new Promise(r => setTimeout(r, 10_000));

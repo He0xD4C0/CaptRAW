@@ -39,8 +39,10 @@ export class DownloadService {
 	}> {
 		this.logger.info(`Downloading ${chalk.cyan(url)} to ${chalk.cyanBright(path)} ...`);
 
-		const timeout = 30 * 1000;
-		const operationTimeout = 60 * 1000;
+		const connectTimeout = 30 * 1000;
+		const responseTimeout = 60 * 1000;
+		const socketTimeout = 120 * 1000;
+		const operationTimeout = 180 * 1000;
 		const maxSize = this.config.maxFileSize;
 
 		const urlObj = new URL(url);
@@ -51,12 +53,12 @@ export class DownloadService {
 				'User-Agent': this.config.userAgent,
 			},
 			timeout: {
-				lookup: timeout,
-				connect: timeout,
-				secureConnect: timeout,
-				socket: timeout,	// read timeout
-				response: timeout,
-				send: timeout,
+				lookup: connectTimeout,
+				connect: connectTimeout,
+				secureConnect: connectTimeout,
+				socket: socketTimeout,
+				response: responseTimeout,
+				send: connectTimeout,
 				request: operationTimeout,	// whole operation timeout
 			},
 			agent: {
@@ -65,7 +67,7 @@ export class DownloadService {
 			},
 			http2: false,	// default
 			retry: {
-				limit: 0,
+				limit: 2,
 			},
 			enableUnixSockets: false,
 		}).on('response', (res: Got.Response) => {
