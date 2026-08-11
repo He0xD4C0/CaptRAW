@@ -10,10 +10,15 @@ import { execa } from 'execa';
 const _filename = fileURLToPath(import.meta.url);
 const _dirname = dirname(_filename);
 
+const devEnv = { ...process.env, MISSKEY_BUILD_DIR: 'built-dev' };
+
+// pnpm clean is now safe: it only wipes built-dev/ and package-level built/ dirs,
+// never the production built/ directory.
 await execa('pnpm', ['clean'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 // アセットのビルドで依存しているので一番最初に必要
@@ -21,6 +26,7 @@ await execa('pnpm', ['--filter', 'i18n', 'build'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 await Promise.all([
@@ -28,86 +34,102 @@ await Promise.all([
 		cwd: _dirname + '/../',
 		stdout: process.stdout,
 		stderr: process.stderr,
+		env: devEnv,
 	}),
 	execa('pnpm', ['build-assets'], {
 		cwd: _dirname + '/../',
 		stdout: process.stdout,
 		stderr: process.stderr,
+		env: devEnv,
 	}),
 	execa('pnpm', ['--filter', 'backend...', '--filter=!backend', 'build'], {
 		cwd: _dirname + '/../',
 		stdout: process.stdout,
 		stderr: process.stderr,
+		env: devEnv,
 	}),
 	// icons-subsetterは開発段階では使用されないが、型エラーを抑制するためにはじめの一度だけビルドする
 	execa('pnpm', ['--filter', 'icons-subsetter', 'build'], {
 		cwd: _dirname + '/../',
 		stdout: process.stdout,
 		stderr: process.stderr,
+		env: devEnv,
 	}),
 	execa('pnpm', ['--filter', 'misskey-js', 'build'], {
 		cwd: _dirname + '/../',
 		stdout: process.stdout,
 		stderr: process.stderr,
+		env: devEnv,
 	}),
 ]);
 
+// Watch mode processes — all write to built-dev/ via NODE_ENV=development
 execa('pnpm', ['build-pre', '--watch'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 execa('pnpm', ['build-assets', '--watch'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 execa('pnpm', ['--filter', 'backend', 'dev'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 execa('pnpm', ['--filter', 'frontend', 'watch'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 execa('pnpm', ['--filter', 'frontend-embed', 'watch'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 execa('pnpm', ['--filter', 'sw', 'watch'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 execa('pnpm', ['--filter', 'misskey-js', 'watch', '--no-clean'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 execa('pnpm', ['--filter', 'i18n', 'watch', '--no-clean'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 execa('pnpm', ['--filter', 'misskey-reversi', 'watch', '--no-clean'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });
 
 execa('pnpm', ['--filter', 'misskey-bubble-game', 'watch', '--no-clean'], {
 	cwd: _dirname + '/../',
 	stdout: process.stdout,
 	stderr: process.stderr,
+	env: devEnv,
 });

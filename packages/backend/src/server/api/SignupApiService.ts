@@ -14,6 +14,7 @@ import { IdService } from '@/core/IdService.js';
 import { SignupService } from '@/core/SignupService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { EmailService } from '@/core/EmailService.js';
+import { SmsService } from '@/core/SmsService.js';
 import { MiLocalUser } from '@/models/User.js';
 import { FastifyReplyError } from '@/misc/fastify-reply-error.js';
 import { bindThis } from '@/decorators.js';
@@ -51,6 +52,7 @@ export class SignupApiService {
 		private signupService: SignupService,
 		private signinService: SigninService,
 		private emailService: EmailService,
+		private smsService: SmsService,
 	) {
 	}
 
@@ -63,6 +65,8 @@ export class SignupApiService {
 				host?: string;
 				invitationCode?: string;
 				emailAddress?: string;
+				phone?: string;
+				phoneVerifyCode?: string;
 				'hcaptcha-response'?: string;
 				'g-recaptcha-response'?: string;
 				'turnstile-response'?: string;
@@ -124,6 +128,30 @@ export class SignupApiService {
 			if (!res.available) {
 				reply.code(400);
 				return;
+			}
+		}
+
+		// Phone verification (if required)
+		if (this.meta.phoneRequiredForSignup) {
+			const phone = body['phone'];
+			const phoneVerifyCode = body['phoneVerifyCode'];
+
+			if (!phone || typeof phone !== 'string') {
+				reply.code(400);
+				return;
+			}
+
+			if (!this.smsService.validatePhoneFormat(phone)) {
+				throw new FastifyReplyError(400, 'INVALID_PHONE_FORMAT');
+			}
+
+			if (!phoneVerifyCode || typeof phoneVerifyCode !== 'string') {
+				throw new FastifyReplyError(400, 'PHONE_VERIFICATION_REQUIRED');
+			}
+
+			const phoneVerified = await this.smsService.verifyCode(phone, phoneVerifyCode);
+			if (!phoneVerified) {
+				throw new FastifyReplyError(400, 'INVALID_PHONE_VERIFICATION_CODE');
 			}
 		}
 
@@ -196,6 +224,7 @@ export class SignupApiService {
 				email: emailAddress!,
 				username: username,
 				password: hash,
+				phone: this.meta.phoneRequiredForSignup ? body['phone'] : null,
 			});
 
 			const link = `${this.config.url}/signup-complete/${code}`;
@@ -270,6 +299,8 @@ export class SignupApiService {
 				email: pendingUser.email,
 				emailVerified: true,
 				emailVerifyCode: null,
+				phone: pendingUser.phone,
+				phoneVerified: pendingUser.phone ? true : false,
 			});
 
 			const ticket = await this.registrationTicketsRepository.findOneBy({ pendingUserId: pendingUser.id });

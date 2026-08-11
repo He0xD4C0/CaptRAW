@@ -8,7 +8,8 @@ import { createLogger } from '../frontend-builder/logger';
 
 // requires node 21 or later
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
-const outputDir = __dirname + '/../../built/_frontend_embed_vite_';
+const buildDir = process.env.MISSKEY_BUILD_DIR || (process.env.NODE_ENV === 'development' ? 'built-dev' : 'built');
+const outputDir = __dirname + '/../../' + buildDir + '/_frontend_embed_vite_';
 
 /**
  * @return {Promise<void>}

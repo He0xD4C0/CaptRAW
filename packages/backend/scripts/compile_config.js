@@ -16,8 +16,9 @@ import yaml from 'js-yaml';
 const _filename = fileURLToPath(import.meta.url);
 const _dirname = dirname(_filename);
 
+const buildDirName = process.env.MISSKEY_BUILD_DIR || (process.env.NODE_ENV === 'development' ? 'built-dev' : 'built');
 const configDir = resolve(_dirname, '../../../.config');
-const OUTPUT_PATH = resolve(_dirname, '../../../built/.config.json');
+const OUTPUT_PATH = resolve(_dirname, `../../../${buildDirName}/.config.json`);
 
 // TODO: yamlのパースに失敗したときのエラーハンドリング
 
@@ -47,6 +48,8 @@ function yamlToJson(ymlPath) {
 if (process.env.MISSKEY_CONFIG_YML) {
 	const customYmlPath = resolve(configDir, process.env.MISSKEY_CONFIG_YML);
 	yamlToJson(customYmlPath);
+} else if (process.env.NODE_ENV === 'development') {
+	yamlToJson(resolve(configDir, 'dev.yml'));
 } else {
 	yamlToJson(resolve(configDir, process.env.NODE_ENV === 'test' ? 'test.yml' : 'default.yml'));
 }

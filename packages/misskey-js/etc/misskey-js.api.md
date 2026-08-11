@@ -263,6 +263,12 @@ type AdminInviteListResponse = operations['admin___invite___list']['responses'][
 type AdminMetaResponse = operations['admin___meta']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type AdminOidcAppCreateRequest = operations['admin___oidc___app-create']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminOidcAppCreateResponse = operations['admin___oidc___app-create']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type AdminOidcAppDeleteRequest = operations['admin___oidc___app-delete']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -393,6 +399,9 @@ type AdminRolesUsersResponse = operations['admin___roles___users']['responses'][
 
 // @public (undocumented)
 type AdminSendEmailRequest = operations['admin___send-email']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type AdminSendSmsRequest = operations['admin___send-sms']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
 type AdminServerInfoResponse = operations['admin___server-info']['responses']['200']['content']['application/json'];
@@ -1622,6 +1631,8 @@ declare namespace entities {
         AdminInviteListRequest,
         AdminInviteListResponse,
         AdminMetaResponse,
+        AdminOidcAppCreateRequest,
+        AdminOidcAppCreateResponse,
         AdminOidcAppDeleteRequest,
         AdminOidcAppShowRequest,
         AdminOidcAppShowResponse,
@@ -1666,6 +1677,7 @@ declare namespace entities {
         AdminRolesUsersRequest,
         AdminRolesUsersResponse,
         AdminSendEmailRequest,
+        AdminSendSmsRequest,
         AdminServerInfoResponse,
         AdminShowModerationLogsRequest,
         AdminShowModerationLogsResponse,
@@ -2020,6 +2032,9 @@ declare namespace entities {
         IUpdateResponse,
         IUpdateEmailRequest,
         IUpdateEmailResponse,
+        IUpdatePhoneRequest,
+        IUpdatePhoneResponse,
+        IUpdateQqResponse,
         IWebhooksCreateRequest,
         IWebhooksCreateResponse,
         IWebhooksDeleteRequest,
@@ -2115,6 +2130,11 @@ declare namespace entities {
         PagesShowResponse,
         PagesUnlikeRequest,
         PagesUpdateRequest,
+        PhoneAvailableRequest,
+        PhoneAvailableResponse,
+        PhoneSendCodeRequest,
+        PhoneVerifyCodeRequest,
+        PhoneVerifyCodeResponse,
         PingResponse,
         PinnedUsersResponse,
         PromoReadRequest,
@@ -2143,6 +2163,7 @@ declare namespace entities {
         RolesShowResponse,
         RolesUsersRequest,
         RolesUsersResponse,
+        SendPhoneVerificationRequest,
         ServerInfoResponse,
         StatsResponse,
         SwRegisterRequest,
@@ -2841,6 +2862,15 @@ type IUpdateEmailRequest = operations['i___update-email']['requestBody']['conten
 type IUpdateEmailResponse = operations['i___update-email']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
+type IUpdatePhoneRequest = operations['i___update-phone']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type IUpdatePhoneResponse = operations['i___update-phone']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type IUpdateQqResponse = operations['i___update-qq']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type IUpdateRequest = operations['i___update']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
@@ -3372,6 +3402,21 @@ type PartialRolePolicyOverride = Partial<{
 export const permissions: readonly ["read:account", "write:account", "read:blocks", "write:blocks", "read:drive", "write:drive", "read:favorites", "write:favorites", "read:following", "write:following", "read:messaging", "write:messaging", "read:mutes", "write:mutes", "write:notes", "read:notifications", "write:notifications", "read:reactions", "write:reactions", "write:votes", "read:pages", "write:pages", "write:page-likes", "read:page-likes", "read:user-groups", "write:user-groups", "read:channels", "write:channels", "read:gallery", "write:gallery", "read:gallery-likes", "write:gallery-likes", "read:flash", "write:flash", "read:flash-likes", "write:flash-likes", "read:admin:abuse-user-reports", "write:admin:delete-account", "write:admin:delete-all-files-of-a-user", "read:admin:index-stats", "read:admin:table-stats", "read:admin:user-ips", "read:admin:meta", "write:admin:reset-password", "write:admin:resolve-abuse-user-report", "write:admin:send-email", "read:admin:server-info", "read:admin:show-moderation-log", "read:admin:show-user", "write:admin:suspend-user", "write:admin:unset-user-avatar", "write:admin:unset-user-banner", "write:admin:unsuspend-user", "write:admin:meta", "write:admin:user-note", "write:admin:roles", "read:admin:roles", "write:admin:relays", "read:admin:relays", "write:admin:invite-codes", "read:admin:invite-codes", "write:admin:announcements", "read:admin:announcements", "write:admin:avatar-decorations", "read:admin:avatar-decorations", "write:admin:federation", "write:admin:account", "read:admin:account", "write:admin:emoji", "read:admin:emoji", "write:admin:queue", "read:admin:queue", "write:admin:promo", "write:admin:drive", "read:admin:drive", "write:admin:ad", "read:admin:ad", "write:invite-codes", "read:invite-codes", "write:clip-favorite", "read:clip-favorite", "read:federation", "write:report-abuse", "write:chat", "read:chat"];
 
 // @public (undocumented)
+type PhoneAvailableRequest = operations['phone___available']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type PhoneAvailableResponse = operations['phone___available']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type PhoneSendCodeRequest = operations['phone___send-code']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type PhoneVerifyCodeRequest = operations['phone___verify-code']['requestBody']['content']['application/json'];
+
+// @public (undocumented)
+type PhoneVerifyCodeResponse = operations['phone___verify-code']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
 type PingResponse = operations['ping']['responses']['200']['content']['application/json'];
 
 // @public (undocumented)
@@ -3543,6 +3588,9 @@ type RolesUsersRequest = operations['roles___users']['requestBody']['content']['
 
 // @public (undocumented)
 type RolesUsersResponse = operations['roles___users']['responses']['200']['content']['application/json'];
+
+// @public (undocumented)
+type SendPhoneVerificationRequest = operations['send-phone-verification']['requestBody']['content']['application/json'];
 
 // @public (undocumented)
 type ServerInfoResponse = operations['server-info']['responses']['200']['content']['application/json'];

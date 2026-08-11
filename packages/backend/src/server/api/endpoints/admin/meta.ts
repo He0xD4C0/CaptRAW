@@ -38,6 +38,10 @@ export const meta = {
 				type: 'boolean',
 				optional: false, nullable: false,
 			},
+			enablePhoneBinding: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
 			enableSms: {
 				type: 'boolean',
 				optional: false, nullable: false,
@@ -628,6 +632,18 @@ export const meta = {
 				type: 'boolean',
 				optional: false, nullable: false,
 			},
+			enableQqLogin: {
+				type: 'boolean',
+				optional: false, nullable: false,
+			},
+			qqClientId: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
+			qqClientSecret: {
+				type: 'string',
+				optional: false, nullable: true,
+			},
 		},
 	},
 } as const;
@@ -671,6 +687,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				disableRegistration: instance.disableRegistration,
 				emailRequiredForSignup: instance.emailRequiredForSignup,
 			phoneRequiredForSignup: instance.phoneRequiredForSignup,
+			enablePhoneBinding: instance.enablePhoneBinding,
 			enableSms: instance.enableSms,
 			smsProvider: instance.smsProvider,
 			smsAliAccessKeyId: instance.smsAliAccessKeyId,
@@ -792,6 +809,9 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 				remoteNotesCleaningMaxProcessingDurationInMinutes: instance.remoteNotesCleaningMaxProcessingDurationInMinutes,
 				showRoleBadgesOfRemoteUsers: instance.showRoleBadgesOfRemoteUsers,
 				enableOidc: instance.enableOidc,
+				enableQqLogin: instance.enableQqLogin,
+				qqClientId: instance.qqClientId,
+				qqClientSecret: instance.qqClientSecret ? '••••••••' : null,
 			};
 		});
 	}

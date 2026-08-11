@@ -8,7 +8,7 @@ import { resolve } from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
 import ms from 'ms';
 import sharp from 'sharp';
-import { In, IsNull } from 'typeorm';
+import { In, IsNull, MoreThan } from 'typeorm';
 import fastifyStatic from '@fastify/static';
 import fastifyProxy from '@fastify/http-proxy';
 import vary from 'vary';
@@ -41,6 +41,8 @@ import { bindThis } from '@/decorators.js';
 import { FlashEntityService } from '@/core/entities/FlashEntityService.js';
 import { ReversiGameEntityService } from '@/core/entities/ReversiGameEntityService.js';
 import { AnnouncementEntityService } from '@/core/entities/AnnouncementEntityService.js';
+import { IdService } from '@/core/IdService.js';
+import { escapeValue } from '@/misc/prelude/xml.js';
 import { FeedService } from './FeedService.js';
 import { UrlPreviewService } from './UrlPreviewService.js';
 import { ClientLoggerService } from './ClientLoggerService.js';
@@ -76,6 +78,7 @@ export class ClientServerService {
 	private readonly frontendViteOut: string;
 	private readonly frontendEmbedViteOut: string;
 	private readonly tarball: string;
+	private sitemapCache: { body: string; at: number } | null = null;
 
 	constructor(
 		@Inject(DI.config)
@@ -127,19 +130,20 @@ export class ClientServerService {
 		private feedService: FeedService,
 		private htmlTemplateService: HtmlTemplateService,
 		private clientLoggerService: ClientLoggerService,
+		private idService: IdService,
 	) {
 		//this.createServer = this.createServer.bind(this);
 		const backendRootdir = resolve(this.config.rootDir, 'packages/backend');
 		const frontendRootdir = resolve(this.config.rootDir, 'packages/frontend');
 		this.staticAssets = resolve(backendRootdir, 'assets');
 		this.clientAssets = resolve(frontendRootdir, 'assets');
-		this.assets = resolve(this.config.rootDir, 'built/_frontend_dist_');
-		this.swAssets = resolve(this.config.rootDir, 'built/_sw_dist_');
+		this.assets = resolve(this.config.projectBuiltDir, '_frontend_dist_');
+		this.swAssets = resolve(this.config.projectBuiltDir, '_sw_dist_');
 		this.fluentEmojiDir = resolve(backendRootdir, 'node_modules/@misskey-dev/emoji-assets/built/fluent-emoji');
 		this.twemojiDir = resolve(backendRootdir, 'node_modules/@misskey-dev/emoji-assets/built/twemoji');
-		this.frontendViteOut = resolve(this.config.rootDir, 'built/_frontend_vite_');
-		this.frontendEmbedViteOut = resolve(this.config.rootDir, 'built/_frontend_embed_vite_');
-		this.tarball = resolve(this.config.rootDir, 'built/tarball');
+		this.frontendViteOut = resolve(this.config.projectBuiltDir, '_frontend_vite_');
+		this.frontendEmbedViteOut = resolve(this.config.projectBuiltDir, '_frontend_embed_vite_');
+		this.tarball = resolve(this.config.projectBuiltDir, 'tarball');
 	}
 
 	@bindThis
@@ -427,9 +431,105 @@ export class ClientServerService {
 			let content = `User-agent: *\n`;
 			content += disallowedPaths.map((path) => `Disallow: ${path}`).join('\n') + '\n';
 			content += 'Allow: /\n';
+			content += `Sitemap: ${this.config.url}/sitemap.xml\n`;
 
 			reply.header('Content-Type', 'text/plain; charset=utf-8');
 			return await reply.send(content);
+		});
+
+		// Sitemap
+		fastify.get('/sitemap.xml', async (request, reply) => {
+			const ttl = ms('1 hour');
+			if (this.sitemapCache != null && Date.now() - this.sitemapCache.at < ttl) {
+				reply.header('Content-Type', 'application/xml; charset=utf-8');
+				reply.header('Cache-Control', 'public, max-age=3600');
+				return await reply.send(this.sitemapCache.body);
+			}
+
+			const origin = this.config.url;
+			const urls: string[] = [];
+
+			const staticPaths = [
+				'/',
+				'/timeline',
+				'/about',
+				'/contact',
+				'/about-misskey',
+				'/announcements',
+				'/explore',
+				'/tags',
+				'/channels',
+				'/gallery',
+				'/pages',
+			];
+			for (const path of staticPaths) {
+				urls.push(`<url><loc>${escapeValue(origin + path)}</loc></url>`);
+			}
+
+			if (this.meta.ugcVisibilityForVisitor !== 'none') {
+				const users = await this.usersRepository.find({
+					where: {
+						host: IsNull(),
+						isDeleted: false,
+						isSuspended: false,
+						notesCount: MoreThan(0),
+					},
+					order: { lastActiveDate: 'DESC' },
+					take: 5000,
+					select: { id: true, username: true, lastActiveDate: true },
+				});
+
+				const profiles = await this.userProfilesRepository.find({
+					where: { userId: In(users.map(u => u.id)), noCrawle: false },
+					select: { userId: true },
+				});
+				const crawableUserIds = new Set(profiles.map(p => p.userId));
+
+				for (const user of users) {
+					if (!crawableUserIds.has(user.id)) continue;
+					const lastmod = user.lastActiveDate != null
+						? `<lastmod>${escapeValue(user.lastActiveDate.toISOString())}</lastmod>`
+						: '';
+					urls.push(`<url><loc>${escapeValue(origin + '/@' + encodeURIComponent(user.username))}</loc>${lastmod}</url>`);
+				}
+
+				const notes = await this.notesRepository.find({
+					where: {
+						visibility: 'public',
+						userHost: IsNull(),
+						id: MoreThan(this.idService.gen(Date.now() - ms('90 days'))),
+						renoteId: IsNull(),
+					},
+					order: { id: 'DESC' },
+					take: 10000,
+					select: { id: true, userId: true },
+				});
+
+				const unknownAuthorIds = [...new Set(notes.map(n => n.userId).filter(id => !crawableUserIds.has(id)))];
+				if (unknownAuthorIds.length > 0) {
+					const authorProfiles = await this.userProfilesRepository.find({
+						where: { userId: In(unknownAuthorIds), noCrawle: false },
+						select: { userId: true },
+					});
+					for (const profile of authorProfiles) crawableUserIds.add(profile.userId);
+				}
+
+				for (const note of notes) {
+					if (!crawableUserIds.has(note.userId)) continue;
+					urls.push(`<url><loc>${escapeValue(origin + '/notes/' + note.id)}</loc><lastmod>${escapeValue(this.idService.parse(note.id).date.toISOString())}</lastmod></url>`);
+				}
+			}
+
+			const body = '<?xml version="1.0" encoding="UTF-8"?>\n'
+				+ '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+				+ urls.join('\n')
+				+ '\n</urlset>\n';
+
+			this.sitemapCache = { body, at: Date.now() };
+
+			reply.header('Content-Type', 'application/xml; charset=utf-8');
+			reply.header('Cache-Control', 'public, max-age=3600');
+			return await reply.send(body);
 		});
 
 		// OpenSearch XML

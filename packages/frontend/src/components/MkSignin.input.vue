@@ -30,23 +30,35 @@ SPDX-License-Identifier: AGPL-3.0-only
 			</div>
 		</div>
 
-		<!-- username入力 -->
-		<form class="_gaps_s" @submit.prevent="emit('usernameSubmitted', username)">
-			<MkInput v-model="username" :placeholder="i18n.ts.username" type="text" pattern="^[a-zA-Z0-9_]+$" :spellcheck="false" autocomplete="username webauthn" autofocus required data-cy-signin-username>
-				<template #prefix>@</template>
-				<template #suffix>@{{ host }}</template>
-			</MkInput>
-			<MkButton type="submit" large primary rounded style="margin: 0 auto;" data-cy-signin-page-input-continue>{{ i18n.ts.continue }} <i class="ti ti-arrow-right"></i></MkButton>
-		</form>
+		<div :inert="disabled">
+			<!-- username入力 -->
+			<form class="_gaps_s" @submit.prevent="emit('usernameSubmitted', username)">
+				<MkInput v-model="username" :placeholder="i18n.ts.username" type="text" pattern="^[a-zA-Z0-9_]+$" :spellcheck="false" autocomplete="username webauthn" autofocus required data-cy-signin-username>
+					<template #prefix>@</template>
+					<template #suffix>@{{ host }}</template>
+				</MkInput>
+				<MkButton type="submit" large primary rounded style="margin: 0 auto;" data-cy-signin-page-input-continue>{{ i18n.ts.continue }} <i class="ti ti-arrow-right"></i></MkButton>
+			</form>
 
-		<!-- パスワードレスログイン -->
-		<div :class="$style.orHr">
-			<p :class="$style.orMsg">{{ i18n.ts.or }}</p>
-		</div>
-		<div>
-			<MkButton type="submit" style="margin: auto auto;" large rounded primary gradate @click="emit('passkeyClick', $event)">
-				<i class="ti ti-device-usb" style="font-size: medium;"></i>{{ i18n.ts.signinWithPasskey }}
-			</MkButton>
+			<!-- パスワードレスログイン -->
+			<div :class="$style.orHr">
+				<p :class="$style.orMsg">{{ i18n.ts.or }}</p>
+			</div>
+			<div>
+				<MkButton type="submit" style="margin: auto auto;" large rounded primary gradate @click="emit('passkeyClick', $event)">
+					<i class="ti ti-device-usb" style="font-size: medium;"></i>{{ i18n.ts.signinWithPasskey }}
+				</MkButton>
+			</div>
+
+			<!-- QQ Login -->
+			<div v-if="instance.enableQqLogin" :class="$style.orHr">
+				<p :class="$style.orMsg">{{ i18n.ts.or }}</p>
+			</div>
+			<div v-if="instance.enableQqLogin">
+				<MkButton type="button" style="margin: auto auto;" large rounded gradate @click="emit('qqLoginClick', $event)">
+					<i class="ti ti-brand-qq" style="font-size: medium;"></i>{{ i18n.ts.signinOrSignupWithQq }}
+				</MkButton>
+			</div>
 		</div>
 	</div>
 </div>
@@ -60,6 +72,7 @@ import { query, extractDomain } from '@@/js/url.js';
 import { host as configHost } from '@@/js/config.js';
 import type { OpenOnRemoteOptions } from '@/utility/please-login.js';
 import { i18n } from '@/i18n.js';
+import { instance } from '@/instance.js';
 import * as os from '@/os.js';
 
 import MkButton from '@/components/MkButton.vue';
@@ -70,15 +83,18 @@ const props = withDefaults(defineProps<{
 	message?: string,
 	openOnRemote?: OpenOnRemoteOptions,
 	initialUsername?: string;
+	disabled?: boolean;
 }>(), {
 	message: '',
 	openOnRemote: undefined,
 	initialUsername: undefined,
+	disabled: false,
 });
 
 const emit = defineEmits<{
 	(ev: 'usernameSubmitted', v: string): void;
 	(ev: 'passkeyClick', v: PointerEvent): void;
+	(ev: 'qqLoginClick', v: PointerEvent): void;
 }>();
 
 const host = toUnicode(configHost);

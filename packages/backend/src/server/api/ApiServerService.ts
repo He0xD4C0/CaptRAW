@@ -18,6 +18,7 @@ import { ApiCallService } from './ApiCallService.js';
 import { SignupApiService } from './SignupApiService.js';
 import { SigninApiService } from './SigninApiService.js';
 import { SigninWithPasskeyApiService } from './SigninWithPasskeyApiService.js';
+import { QqSigninApiService } from './QqSigninApiService.js';
 import type { FastifyInstance, FastifyPluginOptions } from 'fastify';
 
 @Injectable()
@@ -39,6 +40,7 @@ export class ApiServerService {
 		private signupApiService: SignupApiService,
 		private signinApiService: SigninApiService,
 		private signinWithPasskeyApiService: SigninWithPasskeyApiService,
+		private qqSigninApiService: QqSigninApiService,
 	) {
 		//this.createServer = this.createServer.bind(this);
 	}
@@ -142,6 +144,35 @@ export class ApiServerService {
 		}>('/signin-with-passkey', (request, reply) => this.signinWithPasskeyApiService.signin(request, reply));
 
 		fastify.post<{ Body: { code: string; } }>('/signup-pending', (request, reply) => this.signupApiService.signupPending(request, reply));
+
+		// Parse application/x-www-form-urlencoded for QQ OAuth HTML form submissions
+		if (!fastify.hasContentTypeParser('application/x-www-form-urlencoded')) {
+			fastify.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
+				try {
+					const parsed: Record<string, string | string[]> = {};
+					for (const [key, value] of new URLSearchParams(
+						typeof body === 'string' ? body : body.toString('utf8'),
+					).entries()) {
+						const current = parsed[key];
+						if (current == null) {
+							parsed[key] = value;
+						} else if (Array.isArray(current)) {
+							current.push(value);
+						} else {
+							parsed[key] = [current, value];
+						}
+					}
+					done(null, parsed);
+				} catch (error) {
+					done(error as Error, undefined);
+				}
+			});
+		}
+
+		// QQ OAuth login routes
+		fastify.get('/qq/auth', (request, reply) => this.qqSigninApiService.auth(request as any, reply));
+		fastify.get('/qq/callback', (request, reply) => this.qqSigninApiService.callback(request as any, reply));
+		fastify.post('/qq/callback', (request, reply) => this.qqSigninApiService.callback(request as any, reply));
 
 		fastify.get('/v1/instance/peers', async (request, reply) => {
 			const instances = await this.instancesRepository.find({

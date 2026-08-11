@@ -24,9 +24,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<MkInfo v-else-if="instance.federation === 'none'" warn>{{ i18n.ts.federationDisabled }}</MkInfo>
 			</div>
 			<div class="_gaps_s" :class="$style.mainActions">
-				<MkButton :class="$style.mainAction" full rounded gradate data-cy-signup style="margin-right: 12px;" @click="signup()">{{ i18n.ts.joinThisServer }}</MkButton>
+				<MkButton :class="$style.mainAction" :disabled="qqLoginPending" full rounded gradate data-cy-signup style="margin-right: 12px;" @click="signup()">{{ i18n.ts.joinThisServer }}</MkButton>
+				<MkButton v-if="instance.enableQqLogin" :class="$style.mainAction" :disabled="qqLoginPending" full rounded primary data-cy-qq-login @click="qqLogin()">
+					<i class="ti ti-brand-qq"></i> {{ i18n.ts.signinOrSignupWithQq }}
+				</MkButton>
 				<MkButton :class="$style.mainAction" full rounded type="a" target="_blank" rel="noopener" href="https://misskey-hub.net/servers/">{{ i18n.ts.exploreOtherServers }}</MkButton>
-				<MkButton :class="$style.mainAction" full rounded data-cy-signin @click="signin()">{{ i18n.ts.login }}</MkButton>
+				<MkButton :class="$style.mainAction" :disabled="qqLoginPending" full rounded data-cy-signin @click="signin()">{{ i18n.ts.login }}</MkButton>
 			</div>
 		</div>
 	</div>
@@ -53,16 +56,17 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import * as Misskey from 'misskey-js';
 import { instanceName } from '@@/js/config.js';
-import type { MenuItem } from '@/types/menu.js';
 import XSigninDialog from '@/components/MkSigninDialog.vue';
 import XSignupDialog from '@/components/MkSignupDialog.vue';
 import MkButton from '@/components/MkButton.vue';
 import MkStreamingNotesTimeline from '@/components/MkStreamingNotesTimeline.vue';
 import MkInfo from '@/components/MkInfo.vue';
 import * as os from '@/os.js';
+import { login } from '@/accounts.js';
+import { openQqLogin } from '@/utility/qq-login.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { i18n } from '@/i18n.js';
 import { instance } from '@/instance.js';
@@ -71,12 +75,54 @@ import XActiveUsersChart from '@/components/MkVisitorDashboard.ActiveUsersChart.
 import { openInstanceMenu } from '@/ui/_common_/common.js';
 
 const stats = ref<Misskey.entities.StatsResponse | null>(null);
+const qqLoginPending = ref(false);
 
 if (instance.clientOptions.showActivitiesForVisitor !== false) {
 	misskeyApi('stats', {}).then((res) => {
 		stats.value = res;
 	});
 }
+
+// PWA fallback: QQ callback returns token via Set-Cookie (qq_temp_token).
+// The callback page tries window.close() to return to the PWA; on visibility
+// restore the PWA reads the cookie and completes login.
+function consumeQqTokenCookie(): boolean {
+	const match = document.cookie.match(/(?:^|;\s*)qq_temp_token=([^;]*)/);
+	if (!match) return false;
+	const token = decodeURIComponent(match[1]);
+	// Clear immediately to prevent reuse
+	document.cookie = 'qq_temp_token=; Path=/; Max-Age=0; SameSite=Lax';
+	document.cookie = 'qq_temp_id=; Path=/; Max-Age=0; SameSite=Lax';
+	login(token);
+	return true;
+}
+
+function onVisibilityChange() {
+	if (document.visibilityState === 'visible') {
+		consumeQqTokenCookie();
+	}
+}
+
+onMounted(() => {
+	// Check cookie on initial mount (belt-and-suspenders)
+	if (consumeQqTokenCookie()) return;
+
+	// Legacy URL param fallback
+	const params = new URLSearchParams(window.location.search);
+	const qqToken = params.get('qq_token');
+	if (qqToken) {
+		params.delete('qq_token');
+		const newSearch = params.toString();
+		const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '') + window.location.hash;
+		window.history.replaceState(null, '', newUrl);
+		login(qqToken);
+	}
+});
+
+document.addEventListener('visibilitychange', onVisibilityChange);
+onBeforeUnmount(() => {
+	document.removeEventListener('visibilitychange', onVisibilityChange);
+});
 
 function signin() {
 	const { dispose } = os.popup(XSigninDialog, {
@@ -92,6 +138,19 @@ function signup() {
 	}, {
 		closed: () => dispose(),
 	});
+}
+
+async function qqLogin() {
+	if (qqLoginPending.value) return;
+	qqLoginPending.value = true;
+	try {
+		const result = await openQqLogin();
+		if (result != null) {
+			await login(result.token);
+		}
+	} finally {
+		qqLoginPending.value = false;
+	}
 }
 
 function showMenu(ev: PointerEvent) {

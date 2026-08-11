@@ -193,6 +193,7 @@ export type Config = {
 	frontendManifestExists: boolean;
 	frontendEmbedManifestExists: boolean;
 	rootDir: string;
+	projectBuiltDir: string;
 	mediaProxy: string;
 	externalMediaProxyEnabled: boolean;
 	videoThumbnailGenerator: string | null;
@@ -232,8 +233,11 @@ while (!fs.existsSync(resolve(rootDir, 'packages'))) {
 
 /** Path of configuration directory */
 const configDir = resolve(rootDir, '.config');
-/** Path of built directory */
-const projectBuiltDir = resolve(rootDir, 'built');
+/** Path of built directory.
+ *  Set MISSKEY_BUILD_DIR=built-dev for development builds.
+ *  Falls back to built-dev when NODE_ENV=development for backward compatibility.
+ */
+const projectBuiltDir = resolve(rootDir, process.env.MISSKEY_BUILD_DIR || (process.env.NODE_ENV === 'development' ? 'built-dev' : 'built'));
 
 const compiledConfigFilePathForTest = resolve(projectBuiltDir, '._config_.json');
 
@@ -335,6 +339,7 @@ export function loadConfig(): Config {
 		frontendManifestExists: frontendManifestExists,
 		frontendEmbedManifestExists: frontendEmbedManifestExists,
 		rootDir,
+			projectBuiltDir,
 		perChannelMaxNoteCacheCount: config.perChannelMaxNoteCacheCount ?? 1000,
 		perUserNotificationsMaxCount: config.perUserNotificationsMaxCount ?? 500,
 		deactivateAntennaThreshold: config.deactivateAntennaThreshold ?? (1000 * 60 * 60 * 24 * 7),

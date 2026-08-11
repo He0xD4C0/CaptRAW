@@ -20,7 +20,8 @@ const ignore = [
 ];
 
 export async function buildTarball() {
-	const mkdirPromise = mkdir(resolve(cwd, 'built', 'tarball'), { recursive: true });
+	const buildDir = process.env.MISSKEY_BUILD_DIR || (process.env.NODE_ENV === 'development' ? 'built-dev' : 'built');
+	const mkdirPromise = mkdir(resolve(cwd, buildDir, 'tarball'), { recursive: true });
 	const pack = new Pack({ cwd, gzip: true });
 	const patterns = await walk({ path: cwd, ignoreFiles: ['.gitignore'] });
 
@@ -32,5 +33,5 @@ export async function buildTarball() {
 
 	await mkdirPromise;
 
-	pack.pipe(createWriteStream(resolve(cwd, 'built', 'tarball', `misskey-${meta.version}.tar.gz`)));
+	pack.pipe(createWriteStream(resolve(cwd, buildDir, 'tarball', `misskey-${meta.version}.tar.gz`)));
 }

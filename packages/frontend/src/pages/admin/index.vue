@@ -244,6 +244,11 @@ const menuDef = computed<SuperMenuDef[]>(() => [{
 		text: 'SMS',
 		to: '/admin/sms-settings',
 		active: currentPage.value?.route.name === 'sms-settings',
+		}, {
+			icon: 'ti ti-brand-qq',
+			text: 'QQ Login',
+			to: '/admin/qq-settings',
+			active: currentPage.value?.route.name === 'qq-settings',
 	}],
 }, {
 	title: i18n.ts.info,

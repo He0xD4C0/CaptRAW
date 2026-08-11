@@ -2077,6 +2077,10 @@ export interface Locale extends ILocale {
      */
     "signinWith": ParameterizedString<"x">;
     /**
+     * QQでログイン・新規登録
+     */
+    "signinOrSignupWithQq": string;
+    /**
      * ログインできませんでした。ユーザー名とパスワードを確認してください。
      */
     "signinFailed": string;
@@ -6265,6 +6269,62 @@ export interface Locale extends ILocale {
          * 環境によっては有効化できない場合があります。
          */
         "settingsPersistence_description2": string;
+        /**
+         * 電話番号
+         */
+        "phoneNumber": string;
+        /**
+         * E.164形式（例: +8613800138000）
+         */
+        "phoneNumberFormat": string;
+        /**
+         * 認証コード
+         */
+        "verificationCode": string;
+        /**
+         * 認証コードを送信
+         */
+        "sendCode": string;
+        /**
+         * 再送信
+         */
+        "resendCode": string;
+        /**
+         * 確認
+         */
+        "verifyPhone": string;
+        /**
+         * 電話に届いた6桁のコードを入力してください
+         */
+        "phoneCodeEntryHint": string;
+        /**
+         * 電話番号の確認が完了し、アカウントに紐付けられました
+         */
+        "phoneVerifiedNotice": string;
+        /**
+         * 認証コードを送信しました。電話をご確認ください
+         */
+        "verificationCodeSentNotice": string;
+        /**
+         * QQアカウント
+         */
+        "qqAccount": string;
+        /**
+         * QQアカウントの連携を解除すると、QQでサインインできなくなります
+         */
+        "qqUnlinkDescription": string;
+        /**
+         * QQアカウントの連携を解除
+         */
+        "unlinkQqAccount": string;
+        /**
+         * QQアカウントの連携を解除しました
+         */
+        "qqUnlinkedNotice": string;
+        /**
+         * 連携の解除に失敗しました: {x}
+         */
+        "qqUnlinkFailed": ParameterizedString<"x">;
         "_chat": {
             /**
              * 送信者の名前を表示
@@ -13395,5 +13455,133 @@ export interface Locale extends ILocale {
          * MFM
          */
         "mfm": string;
+    };
+    "_qqSettings": {
+        /**
+         * QQログイン
+         */
+        "qqLogin": string;
+        /**
+         * QQ OAuth 設定
+         */
+        "qqOAuthConfiguration": string;
+        /**
+         * QQログインを有効にする
+         */
+        "enableQqLogin": string;
+        /**
+         * QQ OAuth 2.0 でログイン・登録できるようにする
+         */
+        "enableQqLoginDescription": string;
+        /**
+         * App ID
+         */
+        "appId": string;
+        /**
+         * QQ互联デベロッパーコンソール (connect.qq.com) から取得
+         */
+        "appIdDescription": string;
+        /**
+         * App Key
+         */
+        "appKey": string;
+        /**
+         * シークレットを外部に公開しないでください
+         */
+        "appKeyDescription": string;
+        /**
+         * OAuth コールバック URI
+         */
+        "oauthCallbackUri": string;
+        /**
+         * 認可エンドポイント
+         */
+        "authorizationEndpoint": string;
+        /**
+         * トークンエンドポイント
+         */
+        "tokenEndpoint": string;
+        /**
+         * OpenID エンドポイント
+         */
+        "openidEndpoint": string;
+        /**
+         * QQ互联 設定ガイド
+         */
+        "setupGuide": string;
+        /**
+         * QQログインを有効にするには、QQ互联オープンプラットフォームでアプリケーションを登録する必要があります:
+         */
+        "setupGuideIntro": string;
+        /**
+         * connect.qq.com にアクセスしQQアカウントでログイン
+         */
+        "setupGuideVisit": string;
+        /**
+         * デベロッパー本人確認を完了する
+         */
+        "setupGuideVerify": string;
+        /**
+         * ウェブサイトアプリケーションを新規作成
+         */
+        "setupGuideCreate": string;
+        /**
+         * コールバックドメインをサーバーのドメインに設定
+         */
+        "setupGuideDomain": string;
+        /**
+         * App ID と App Key を上のフィールドにコピー
+         */
+        "setupGuideCopy": string;
+        /**
+         * 上記の OAuth コールバック URI を QQ互联 のコールバック URL 設定に貼り付け
+         */
+        "setupGuidePaste": string;
+    };
+    "_phoneSettings": {
+        /**
+         * 電話番号登録の設定
+         */
+        "phoneBindingConfiguration": string;
+        /**
+         * 電話番号の登録を許可
+         */
+        "enablePhoneBinding": string;
+        /**
+         * ユーザーが設定ページで電話番号をアカウントに登録できるようにする
+         */
+        "enablePhoneBindingDescription": string;
+        /**
+         * 登録時に電話番号を必須にする
+         */
+        "phoneRequiredForSignup": string;
+        /**
+         * ⚠️ 「電話番号の登録を許可」を先に有効にしてください
+         */
+        "phoneRequiredForSignupRequiresPhoneBinding": string;
+        /**
+         * ⚠️ 少なくとも1つの Captcha を有効にしてください
+         */
+        "phoneRequiredForSignupRequiresCaptcha": string;
+        /**
+         * 登録時にメール確認と同様に電話番号の確認が必須になります
+         */
+        "phoneRequiredForSignupDescription": string;
+        /**
+         * セットアップ要件:
+         */
+        "phoneBindingSetupRequirements": string;
+        /**
+         * SMS設定でSMSサービスが構成されていること
+         */
+        "phoneBindingSetupRequirementsSms": string;
+        /**
+         * 電話番号必須には最低1つのCaptchaが有効であること
+         */
+        "phoneBindingSetupRequirementsCaptcha": string;
+        /**
+         * 電話番号は E.164 国際形式に従います
+         */
+        "phoneBindingSetupRequirementsE164": string;
     };
 }

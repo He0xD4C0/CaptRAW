@@ -19,6 +19,7 @@ import { ChannelMutingService } from '@/core/ChannelMutingService.js';
 import { OIDCKeypairService } from '@/core/OIDCKeypairService.js';
 import { OIDCTokenService } from '@/core/OIDCTokenService.js';
 import { SmsService } from '@/core/SmsService.js';
+import { QqOAuthService } from '@/core/QqOAuthService.js';
 import { AccountMoveService } from './AccountMoveService.js';
 import { AccountUpdateService } from './AccountUpdateService.js';
 import { AiService } from './AiService.js';
@@ -384,6 +385,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ChatService,
 		OIDCKeypairService,
 		OIDCTokenService,
+		QqOAuthService,
 		SmsService,
 		RegistryApiService,
 		ReversiService,
@@ -687,6 +689,7 @@ const $ApQuestionService: Provider = { provide: 'ApQuestionService', useExisting
 		ChatService,
 		OIDCKeypairService,
 		OIDCTokenService,
+		QqOAuthService,
 		SmsService,
 		RegistryApiService,
 		ReversiService,

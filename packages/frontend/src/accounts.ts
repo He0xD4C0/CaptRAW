@@ -368,6 +368,15 @@ export function getAccountWithSignupDialog(): Promise<{ id: string, token: strin
 				await addAccount(host, user, res.token);
 				resolve({ id: res.id, token: res.token });
 			},
+			qqLogin: async (res: { id: string; token: string }) => {
+				try {
+					const user = await fetchAccount(res.token, res.id, true);
+					await addAccount(host, user, res.token);
+					resolve(res);
+				} catch {
+					resolve(null);
+				}
+			},
 			cancelled: () => {
 				resolve(null);
 			},

@@ -138,7 +138,7 @@ export function collectModifications(sourceCode: string, fileName: string, fileL
 				if (parent.type === 'ExportSpecifier' && property === 'exported') return; // we don't care 'id' part of { id: expr }
 				if (node.name === localI18nIdentifier) {
 					// the use of identifier is either direct reference to i18n, or unsupported conflict of the identifier, which should report error.
-					fileLogger.error(`${lineCol(sourceCode, node)}: Using i18n identifier "${localI18nIdentifier}" directly. Skipping inlining.`);
+					fileLogger.warn(`${lineCol(sourceCode, node)}: Using i18n identifier "${localI18nIdentifier}" directly. Skipping inlining.`);
 					preserveI18nImport = true;
 				}
 			} else if (node.type === 'MemberExpression') {

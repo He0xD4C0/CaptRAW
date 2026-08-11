@@ -37,6 +37,7 @@ coverage
 !/.config/docker_example.env
 !/.config/cypress-devcontainer.yml
 docker-compose.yml
+docker-compose.dev.yml
 ./compose.yml
 .devcontainer/compose.yml
 !/.devcontainer/compose.yml
@@ -44,6 +45,7 @@ docker-compose.yml
 # misskey
 /build
 built
+built-dev
 built-test
 js-built
 src-js
@@ -60,6 +62,7 @@ api-docs.json
 *.code-workspace
 .DS_Store
 /files
+/logs
 ormconfig.json
 temp
 /packages/frontend/src/**/*.stories.ts

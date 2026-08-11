@@ -25,7 +25,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<XServerRules @done="isAcceptedServerRule = true" @cancel="onClose"/>
 			</template>
 			<template v-else>
-				<XSignup :autoSet="autoSet" @signup="onSignup" @signupEmailPending="onSignupEmailPending"/>
+				<XSignup :autoSet="autoSet" @signup="onSignup" @qqLogin="onQqLogin" @signupEmailPending="onSignupEmailPending"/>
 			</template>
 		</Transition>
 	</div>
@@ -40,7 +40,7 @@ import XServerRules from '@/components/MkSignupDialog.rules.vue';
 import MkModalWindow from '@/components/MkModalWindow.vue';
 import { i18n } from '@/i18n.js';
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
 	autoSet?: boolean;
 }>(), {
 	autoSet: false,
@@ -48,6 +48,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
 	(ev: 'done', res: Misskey.entities.SignupResponse): void;
+	(ev: 'qqLogin', result: { id: string; token: string }): void;
 	(ev: 'cancelled'): void;
 	(ev: 'closed'): void;
 }>();
@@ -63,6 +64,11 @@ function onClose() {
 
 function onSignup(res: Misskey.entities.SignupResponse) {
 	emit('done', res);
+	dialog.value?.close();
+}
+
+function onQqLogin(result: { id: string; token: string }) {
+	emit('qqLogin', result);
 	dialog.value?.close();
 }
 

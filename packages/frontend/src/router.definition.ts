@@ -506,10 +506,14 @@ export const ROUTE_DEF = [{
 		path: '/sms-settings',
 		name: 'sms-settings',
 		component: page(() => import('@/pages/admin/sms-settings.vue')),
-	}, {
-		path: '/invites',
-		name: 'invites',
-		component: page(() => import('@/pages/admin/invites.vue')),
+		}, {
+		path: '/qq-settings',
+		name: 'qq-settings',
+		component: page(() => import('@/pages/admin/qq-settings.vue')),
+		}, {
+			path: '/invites',
+			name: 'invites',
+			component: page(() => import('@/pages/admin/invites.vue')),
 	}, {
 		path: '/abuse-report-notification-recipient',
 		name: 'abuse-report-notification-recipient',

@@ -45,6 +45,7 @@ export function Layout(props: PropsWithChildren<CommonProps<{
 					<meta property="instance_url" content={props.instanceUrl} />
 					<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 					<meta name="format-detection" content="telephone=no,date=no,address=no,email=no,url=no" />
+					<meta name="baidu-site-verification" content="codeva-bBD6wfh0YO" />
 					<link rel="icon" href={props.icon || '/favicon.ico'} />
 					<link rel="apple-touch-icon" href={props.appleTouchIcon || '/apple-touch-icon.png'} />
 					<link rel="manifest" href="/manifest.json" />

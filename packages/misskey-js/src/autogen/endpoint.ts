@@ -74,6 +74,8 @@ import type {
 	AdminInviteListRequest,
 	AdminInviteListResponse,
 	AdminMetaResponse,
+	AdminOidcAppCreateRequest,
+	AdminOidcAppCreateResponse,
 	AdminOidcAppDeleteRequest,
 	AdminOidcAppShowRequest,
 	AdminOidcAppShowResponse,
@@ -118,6 +120,7 @@ import type {
 	AdminRolesUsersRequest,
 	AdminRolesUsersResponse,
 	AdminSendEmailRequest,
+	AdminSendSmsRequest,
 	AdminServerInfoResponse,
 	AdminShowModerationLogsRequest,
 	AdminShowModerationLogsResponse,
@@ -474,6 +477,9 @@ import type {
 	IUpdateResponse,
 	IUpdateEmailRequest,
 	IUpdateEmailResponse,
+	IUpdatePhoneRequest,
+	IUpdatePhoneResponse,
+	IUpdateQqResponse,
 	IWebhooksCreateRequest,
 	IWebhooksCreateResponse,
 	IWebhooksDeleteRequest,
@@ -569,6 +575,11 @@ import type {
 	PagesShowResponse,
 	PagesUnlikeRequest,
 	PagesUpdateRequest,
+	PhoneAvailableRequest,
+	PhoneAvailableResponse,
+	PhoneSendCodeRequest,
+	PhoneVerifyCodeRequest,
+	PhoneVerifyCodeResponse,
 	PingResponse,
 	PinnedUsersResponse,
 	PromoReadRequest,
@@ -597,6 +608,7 @@ import type {
 	RolesShowResponse,
 	RolesUsersRequest,
 	RolesUsersResponse,
+	SendPhoneVerificationRequest,
 	ServerInfoResponse,
 	StatsResponse,
 	SwRegisterRequest,
@@ -725,6 +737,7 @@ export type Endpoints = {
 	'admin/invite/create': { req: AdminInviteCreateRequest; res: AdminInviteCreateResponse };
 	'admin/invite/list': { req: AdminInviteListRequest; res: AdminInviteListResponse };
 	'admin/meta': { req: EmptyRequest; res: AdminMetaResponse };
+	'admin/oidc/app-create': { req: AdminOidcAppCreateRequest; res: AdminOidcAppCreateResponse };
 	'admin/oidc/app-delete': { req: AdminOidcAppDeleteRequest; res: EmptyResponse };
 	'admin/oidc/app-show': { req: AdminOidcAppShowRequest; res: AdminOidcAppShowResponse };
 	'admin/oidc/apps': { req: AdminOidcAppsRequest; res: AdminOidcAppsResponse };
@@ -758,6 +771,7 @@ export type Endpoints = {
 	'admin/roles/update-default-policies': { req: AdminRolesUpdateDefaultPoliciesRequest; res: EmptyResponse };
 	'admin/roles/users': { req: AdminRolesUsersRequest; res: AdminRolesUsersResponse };
 	'admin/send-email': { req: AdminSendEmailRequest; res: EmptyResponse };
+	'admin/send-sms': { req: AdminSendSmsRequest; res: EmptyResponse };
 	'admin/server-info': { req: EmptyRequest; res: AdminServerInfoResponse };
 	'admin/show-moderation-logs': { req: AdminShowModerationLogsRequest; res: AdminShowModerationLogsResponse };
 	'admin/show-user': { req: AdminShowUserRequest; res: AdminShowUserResponse };
@@ -985,6 +999,8 @@ export type Endpoints = {
 	'i/unpin': { req: IUnpinRequest; res: IUnpinResponse };
 	'i/update': { req: IUpdateRequest; res: IUpdateResponse };
 	'i/update-email': { req: IUpdateEmailRequest; res: IUpdateEmailResponse };
+	'i/update-phone': { req: IUpdatePhoneRequest; res: IUpdatePhoneResponse };
+	'i/update-qq': { req: EmptyRequest; res: IUpdateQqResponse };
 	'i/webhooks/create': { req: IWebhooksCreateRequest; res: IWebhooksCreateResponse };
 	'i/webhooks/delete': { req: IWebhooksDeleteRequest; res: EmptyResponse };
 	'i/webhooks/list': { req: EmptyRequest; res: IWebhooksListResponse };
@@ -1049,6 +1065,9 @@ export type Endpoints = {
 	'pages/show': { req: PagesShowRequest; res: PagesShowResponse };
 	'pages/unlike': { req: PagesUnlikeRequest; res: EmptyResponse };
 	'pages/update': { req: PagesUpdateRequest; res: EmptyResponse };
+	'phone/available': { req: PhoneAvailableRequest; res: PhoneAvailableResponse };
+	'phone/send-code': { req: PhoneSendCodeRequest; res: EmptyResponse };
+	'phone/verify-code': { req: PhoneVerifyCodeRequest; res: PhoneVerifyCodeResponse };
 	'ping': { req: EmptyRequest; res: PingResponse };
 	'pinned-users': { req: EmptyRequest; res: PinnedUsersResponse };
 	'promo/read': { req: PromoReadRequest; res: EmptyResponse };
@@ -1070,6 +1089,7 @@ export type Endpoints = {
 	'roles/notes': { req: RolesNotesRequest; res: RolesNotesResponse };
 	'roles/show': { req: RolesShowRequest; res: RolesShowResponse };
 	'roles/users': { req: RolesUsersRequest; res: RolesUsersResponse };
+	'send-phone-verification': { req: SendPhoneVerificationRequest; res: EmptyResponse };
 	'server-info': { req: EmptyRequest; res: ServerInfoResponse };
 	'stats': { req: EmptyRequest; res: StatsResponse };
 	'sw/register': { req: SwRegisterRequest; res: SwRegisterResponse };

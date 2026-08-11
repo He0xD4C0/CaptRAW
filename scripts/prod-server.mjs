@@ -6,15 +6,16 @@
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execSync, spawn } from 'node:child_process';
+import { execFileSync, execSync, spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { execa } from 'execa';
 import { platform } from 'node:os';
 
 const rootDir = fileURLToPath(new URL('../', import.meta.url));
-const pidFilePath = join(rootDir, 'built', 'prod-server.pid');
-const supervisorPidFilePath = join(rootDir, 'built', 'supervisor.pid');
-const logFilePath = join(rootDir, 'built', 'prod-server.log');
+const logsDir = join(rootDir, 'logs', 'production');
+const pidFilePath = join(logsDir, 'server.pid');
+const supervisorPidFilePath = join(logsDir, 'supervisor.pid');
+const logFilePath = join(logsDir, 'server.log');
 const buildEntryPath = join(rootDir, 'packages', 'backend', 'built', 'entry.js');
 const compiledConfigPath = join(rootDir, 'built', '.config.json');
 
@@ -99,6 +100,7 @@ async function runStart() {
 	await ensureProductionConfigCompiled();
 
 	log('Starting production server...');
+	mkdirSync(logsDir, { recursive: true });
 	const logFd = openSync(logFilePath, 'a');
 	const child = execa('node', ['--tls-keylog=C:\\temp\\tls-keys.log', './built/entry.js'], {
 		cwd: join(rootDir, 'packages', 'backend'),
@@ -173,14 +175,105 @@ async function runStop() {
 	removePidFile();
 }
 
+function normalizePathForCommandLine(value) {
+	return value.replace(/\\/g, '\\\\').toLowerCase();
+}
+
+function getProductionEntryProcesses() {
+	const isWindows = platform() === 'win32';
+	const entryPath = join(rootDir, 'packages', 'backend', 'built', 'entry.js');
+	const entryPathNeedle = normalizePathForCommandLine(entryPath);
+	const relativeNeedle = normalizePathForCommandLine('\\packages\\backend\\built\\entry.js');
+	const directNeedle = normalizePathForCommandLine('\\built\\entry.js');
+
+	try {
+		if (isWindows) {
+			const output = execFileSync('powershell.exe', [
+				'-NoProfile',
+				'-Command',
+				'Get-CimInstance Win32_Process -Filter "name = \'node.exe\'" | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress',
+			], { encoding: 'utf8' }).trim();
+
+			if (output === '') return [];
+			const parsed = JSON.parse(output);
+			const processes = Array.isArray(parsed) ? parsed : [parsed];
+
+			return processes
+				.filter((process) => {
+					const commandLine = normalizePathForCommandLine(process.CommandLine ?? '');
+					return commandLine.includes(entryPathNeedle) ||
+						commandLine.includes(relativeNeedle) ||
+						(commandLine.includes(directNeedle) && commandLine.includes('--tls-keylog'));
+				})
+				.map((process) => ({
+					pid: Number(process.ProcessId),
+					parentPid: Number(process.ParentProcessId),
+					commandLine: process.CommandLine ?? '',
+				}));
+		}
+
+		const output = execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' });
+		return output
+			.split('\n')
+			.map((line) => line.trim())
+			.filter(Boolean)
+			.map((line) => {
+				const match = line.match(/^(\d+)\s+(\d+)\s+(.*)$/);
+				if (!match) return null;
+				return { pid: Number(match[1]), parentPid: Number(match[2]), commandLine: match[3] };
+			})
+			.filter((process) => process != null)
+			.filter((process) => {
+				const commandLine = normalizePathForCommandLine(process.commandLine);
+				return commandLine.includes(entryPathNeedle) || commandLine.includes('packages/backend/built/entry.js') || commandLine.includes('./built/entry.js');
+			});
+	} catch (err) {
+		log(`Could not enumerate node processes: ${err.message}`);
+		return [];
+	}
+}
+
+function formatTrackedFlag(process, trackedPid, supervisorPid) {
+	const flags = [];
+	if (process.pid === trackedPid) flags.push('pid-file');
+	if (process.pid === supervisorPid) flags.push('supervisor');
+	if (process.parentPid === trackedPid) flags.push('child-of-pid-file');
+	if (process.parentPid === supervisorPid) flags.push('child-of-supervisor');
+	return flags.length > 0 ? flags.join(', ') : 'extra/untracked';
+}
+
 function runStatus() {
 	const pid = getPidFile();
+	const supervisorPid = existsSync(supervisorPidFilePath)
+		? Number(readFileSync(supervisorPidFilePath, 'utf8').trim())
+		: null;
+
 	if (!pid) {
 		log('No production instance PID file found.');
+	} else {
+		log(`Production server PID file: ${pid} (${isRunning(pid) ? 'running' : 'not running'}).`);
+	}
+
+	if (supervisorPid && !Number.isNaN(supervisorPid)) {
+		log(`Supervisor PID file: ${supervisorPid} (${isRunning(supervisorPid) ? 'running' : 'not running'}).`);
+	}
+
+	const processes = getProductionEntryProcesses();
+	if (processes.length === 0) {
+		log('No running production backend entry.js processes found.');
 		return;
 	}
 
-	log(`Production server PID ${pid} ${isRunning(pid) ? 'is running' : 'is not running'}.`);
+	log(`Detected ${processes.length} production backend entry.js process(es):`);
+	for (const process of processes.sort((a, b) => a.pid - b.pid)) {
+		const flag = formatTrackedFlag(process, pid, supervisorPid);
+		log(`- PID ${process.pid} (PPID ${process.parentPid}) [${flag}] ${process.commandLine}`);
+	}
+
+	const extraProcesses = processes.filter((process) => formatTrackedFlag(process, pid, supervisorPid) === 'extra/untracked');
+	if (extraProcesses.length > 0) {
+		log(`WARNING: ${extraProcesses.length} extra/untracked production backend process(es) detected.`);
+	}
 }
 
 async function runRestart() {
@@ -207,7 +300,7 @@ function runLogsWindow() {
 		return;
 	}
 
-	execSync(`start cmd.exe /k "title Misskey Production Logs && powershell -Command Get-Content -Path '${logFilePath}' -Wait -Tail 80"`, {
+	execSync(`start cmd.exe /k "title CaptRAW Production Logs && powershell -Command Get-Content -Path '${logFilePath}' -Wait -Tail 80"`, {
 		stdio: 'ignore',
 	});
 	log('Opened log viewer in a new window.');
@@ -217,14 +310,15 @@ function runSupervise() {
 	const scriptPath = join(rootDir, 'scripts', 'prod-server.mjs');
 	const isWindows = platform() === 'win32';
 
+	mkdirSync(logsDir, { recursive: true });
+
 	if (isWindows) {
 		// Write a .bat launcher to avoid all quoting/escaping issues with spaces in paths
-		const batPath = join(rootDir, 'built', 'supervisor-launcher.bat');
-		mkdirSync(dirname(batPath), { recursive: true });
+		const batPath = join(logsDir, 'supervisor-launcher.bat');
 		writeFileSync(batPath, [
 			'@echo off',
 			`cd /d "${rootDir}"`,
-			'title CaptRAW Supervisor',
+			'title CaptRAW Production Supervisor',
 			`node "${scriptPath}" supervisor`,
 		].join('\r\n'), 'utf8');
 

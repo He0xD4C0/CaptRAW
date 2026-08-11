@@ -112,6 +112,13 @@ export class MiUserProfile {
 	})
 	public phoneVerified: boolean;
 
+	@Column('varchar', {
+		length: 128, nullable: true,
+		comment: 'QQ互联 OpenID for social login binding.',
+	})
+	@Index({ unique: true, where: '"qqOpenId" IS NOT NULL' })
+	public qqOpenId: string | null;
+
 	@Column('boolean', {
 		default: true,
 	})

@@ -147,7 +147,7 @@ export async function generateLocaleInterface(localesDir: string): Promise<void>
 }
 
 // スクリプトとして直接実行された場合
-const isMain = import.meta.url === `file://${process.argv[1]}`;
+const isMain = import.meta.url === `file://${process.argv[1]}` || import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`;
 if (isMain) {
 	await generateLocaleInterface(resolve(__dirname, '../../../locales'));
 }

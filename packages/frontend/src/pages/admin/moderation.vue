@@ -147,6 +147,48 @@ SPDX-License-Identifier: AGPL-3.0-only
 						</div>
 					</MkFolder>
 				</SearchMarker>
+
+				<SearchMarker :keywords="['phone', 'binding', 'verification', 'sms']">
+					<MkFolder>
+						<template #icon><SearchIcon><i class="ti ti-phone"></i></SearchIcon></template>
+						<template #label><SearchLabel>{{ i18n.ts._phoneSettings.phoneBindingConfiguration }}</SearchLabel></template>
+
+						<div class="_gaps_m">
+							<MkSwitch v-model="enablePhoneBinding" @update:modelValue="save_phoneSettings">
+								<template #label>{{ i18n.ts._phoneSettings.enablePhoneBinding }}</template>
+								<template #caption>{{ i18n.ts._phoneSettings.enablePhoneBindingDescription }}</template>
+							</MkSwitch>
+
+							<MkSwitch
+								v-model="phoneRequiredForSignup"
+								:disabled="!canEnablePhoneRequired"
+								@update:modelValue="save_phoneSettings"
+							>
+								<template #label>{{ i18n.ts._phoneSettings.phoneRequiredForSignup }}</template>
+								<template #caption>
+									<span v-if="!enablePhoneBinding" style="color: var(--MI_THEME-warn)">
+										⚠️ {{ i18n.ts._phoneSettings.phoneRequiredForSignupRequiresPhoneBinding }}
+									</span>
+									<span v-else-if="!anyCaptchaEnabled" style="color: var(--MI_THEME-warn)">
+										⚠️ {{ i18n.ts._phoneSettings.phoneRequiredForSignupRequiresCaptcha }}
+									</span>
+									<span v-else>
+										{{ i18n.ts._phoneSettings.phoneRequiredForSignupDescription }}
+									</span>
+								</template>
+							</MkSwitch>
+
+							<div style="padding: 12px; background: var(--MI_THEME-panelHighlight); border-radius: 6px;">
+								<p style="margin: 0 0 8px 0; font-weight: 600;">{{ i18n.ts._phoneSettings.phoneBindingSetupRequirements }}</p>
+								<ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
+									<li>{{ i18n.ts._phoneSettings.phoneBindingSetupRequirementsSms }}</li>
+									<li>{{ i18n.ts._phoneSettings.phoneBindingSetupRequirementsCaptcha }}</li>
+									<li>{{ i18n.ts._phoneSettings.phoneBindingSetupRequirementsE164 }}</li>
+								</ul>
+							</div>
+						</div>
+					</MkFolder>
+				</SearchMarker>
 			</div>
 		</SearchMarker>
 	</div>
@@ -154,11 +196,9 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script lang="ts" setup>
-import { ref, computed } from 'vue';
-import * as Misskey from 'misskey-js';
+import { ref, computed, watch } from 'vue';
 import XServerRules from './server-rules.vue';
 import MkSwitch from '@/components/MkSwitch.vue';
-import MkInput from '@/components/MkInput.vue';
 import MkTextarea from '@/components/MkTextarea.vue';
 import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
@@ -167,7 +207,6 @@ import { i18n } from '@/i18n.js';
 import { definePage } from '@/page.js';
 import { useMkSelect } from '@/composables/use-mkselect.js';
 import MkButton from '@/components/MkButton.vue';
-import FormLink from '@/components/form/link.vue';
 import MkFolder from '@/components/MkFolder.vue';
 import MkSelect from '@/components/MkSelect.vue';
 
@@ -194,6 +233,29 @@ const preservedUsernames = ref(meta.preservedUsernames.join('\n'));
 const blockedHosts = ref(meta.blockedHosts.join('\n'));
 const silencedHosts = ref(meta.silencedHosts?.join('\n') ?? '');
 const mediaSilencedHosts = ref(meta.mediaSilencedHosts.join('\n'));
+
+const enablePhoneBinding = ref(meta.enablePhoneBinding);
+const phoneRequiredForSignup = ref(meta.phoneRequiredForSignup);
+
+const anyCaptchaEnabled = computed(() => {
+	return meta.enableHcaptcha ||
+		   meta.enableMcaptcha ||
+		   meta.enableRecaptcha ||
+		   meta.enableTurnstile ||
+		   meta.enableTestcaptcha;
+});
+
+const canEnablePhoneRequired = computed(() => {
+	return enablePhoneBinding.value && anyCaptchaEnabled.value;
+});
+
+// Auto-disable phoneRequiredForSignup if dependencies not met
+watch([enablePhoneBinding, anyCaptchaEnabled], () => {
+	if (!canEnablePhoneRequired.value && phoneRequiredForSignup.value) {
+		phoneRequiredForSignup.value = false;
+		save_phoneSettings();
+	}
+});
 
 async function onChange_enableRegistration(value: boolean) {
 	if (value) {
@@ -272,6 +334,15 @@ function save_hiddenTags() {
 function save_blockedHosts() {
 	os.apiWithDialog('admin/update-meta', {
 		blockedHosts: blockedHosts.value.split('\n') || [],
+	}).then(() => {
+		fetchInstance(true);
+	});
+}
+
+function save_phoneSettings() {
+	os.apiWithDialog('admin/update-meta', {
+		enablePhoneBinding: enablePhoneBinding.value,
+		phoneRequiredForSignup: phoneRequiredForSignup.value,
 	}).then(() => {
 		fetchInstance(true);
 	});

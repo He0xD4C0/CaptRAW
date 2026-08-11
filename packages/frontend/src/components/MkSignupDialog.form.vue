@@ -74,6 +74,16 @@ SPDX-License-Identifier: AGPL-3.0-only
 				<template v-else>{{ i18n.ts.start }}</template>
 			</MkButton>
 		</form>
+
+		<!-- QQ Signup -->
+		<div v-if="instance.enableQqLogin" :class="$style.orHr">
+			<p :class="$style.orMsg">{{ i18n.ts.or }}</p>
+		</div>
+		<div v-if="instance.enableQqLogin">
+			<MkButton type="button" :disabled="qqLoginPending || submitting" style="margin: auto auto;" large rounded gradate @click="onQqSignupClick">
+				<i class="ti ti-brand-qq" style="font-size: medium;"></i>{{ i18n.ts.signinOrSignupWithQq }}
+			</MkButton>
+		</div>
 	</div>
 </div>
 </template>
@@ -89,6 +99,7 @@ import type { Captcha } from '@/components/MkCaptcha.vue';
 import MkCaptcha from '@/components/MkCaptcha.vue';
 import * as os from '@/os.js';
 import { misskeyApi } from '@/utility/misskey-api.js';
+import { openQqLogin } from '@/utility/qq-login.js';
 import { instance } from '@/instance.js';
 import { i18n } from '@/i18n.js';
 import { login } from '@/accounts.js';
@@ -101,6 +112,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
 	(ev: 'signup', user: Misskey.entities.SignupResponse): void;
+	(ev: 'qqLogin', result: { id: string; token: string }): void;
 	(ev: 'signupEmailPending'): void;
 }>();
 
@@ -122,6 +134,7 @@ const emailState = ref<null | 'wait' | 'ok' | 'unavailable:used' | 'unavailable:
 const passwordStrength = ref<'' | 'low' | 'medium' | 'high'>('');
 const passwordRetypeState = ref<null | 'match' | 'not-match'>(null);
 const submitting = ref<boolean>(false);
+const qqLoginPending = ref(false);
 const hCaptchaResponse = ref<string | null>(null);
 const mCaptchaResponse = ref<string | null>(null);
 const reCaptchaResponse = ref<string | null>(null);
@@ -132,6 +145,7 @@ const emailAbortController = ref<null | AbortController>(null);
 
 const shouldDisableSubmitting = computed((): boolean => {
 	return submitting.value ||
+		qqLoginPending.value ||
 		instance.enableHcaptcha && !hCaptchaResponse.value ||
 		instance.enableMcaptcha && !mCaptchaResponse.value ||
 		instance.enableRecaptcha && !reCaptchaResponse.value ||
@@ -253,7 +267,7 @@ function onChangePasswordRetype(): void {
 }
 
 async function onSubmit(): Promise<void> {
-	if (submitting.value) return;
+	if (submitting.value || qqLoginPending.value) return;
 	submitting.value = true;
 
 	const signupPayload: Misskey.entities.SignupRequest = {
@@ -304,6 +318,23 @@ async function onSubmit(): Promise<void> {
 	submitting.value = false;
 }
 
+async function onQqSignupClick() {
+	if (qqLoginPending.value || submitting.value) return;
+	qqLoginPending.value = true;
+	try {
+		const result = await openQqLogin();
+		if (result == null) return;
+
+		if (props.autoSet) {
+			await login(result.token);
+		} else {
+			emit('qqLogin', result);
+		}
+	} finally {
+		qqLoginPending.value = false;
+	}
+}
+
 function onSignupApiError() {
 	submitting.value = false;
 	hcaptcha.value?.reset?.();
@@ -330,5 +361,36 @@ function onSignupApiError() {
 
 .captcha {
 	margin: 16px 0;
+}
+
+.orHr {
+	position: relative;
+	margin: 12px 0;
+	text-align: center;
+
+	&::before {
+		content: "";
+		display: block;
+		position: absolute;
+		top: 50%;
+		left: 0;
+		right: 0;
+		margin: auto;
+		width: 100%;
+		height: 1px;
+		background-color: var(--MI_THEME-divider);
+	}
+}
+
+.orMsg {
+	display: inline-block;
+	position: relative;
+	z-index: 1;
+	margin: 0;
+	padding: 0 1em;
+	background-color: var(--MI_THEME-panel);
+	color: var(--MI_THEME-fg);
+	font-size: 0.8em;
+	opacity: 0.7;
 }
 </style>

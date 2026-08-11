@@ -12,16 +12,19 @@ import { buildTarball } from './tarball.mjs';
 const configDir = fileURLToPath(new URL('../.config', import.meta.url));
 const configPath = process.env.MISSKEY_CONFIG_YML
 	? path.resolve(configDir, process.env.MISSKEY_CONFIG_YML)
-	: process.env.NODE_ENV === 'test'
-		? path.resolve(configDir, 'test.yml')
-		: path.resolve(configDir, 'default.yml');
+	: process.env.NODE_ENV === 'development'
+		? path.resolve(configDir, 'dev.yml')
+		: process.env.NODE_ENV === 'test'
+			? path.resolve(configDir, 'test.yml')
+			: path.resolve(configDir, 'default.yml');
 
 async function loadConfig() {
 	return fs.readFile(configPath, 'utf-8').then(data => yaml.load(data)).catch(() => null);
 }
 
 async function copyFrontendFonts() {
-	await fs.cp('./packages/frontend/node_modules/three/examples/fonts', './built/_frontend_dist_/fonts', { dereference: true, recursive: true });
+	const buildDir = process.env.MISSKEY_BUILD_DIR || (process.env.NODE_ENV === 'development' ? 'built-dev' : 'built');
+	await fs.cp('./packages/frontend/node_modules/three/examples/fonts', `./${buildDir}/_frontend_dist_/fonts`, { dereference: true, recursive: true });
 }
 
 async function build() {

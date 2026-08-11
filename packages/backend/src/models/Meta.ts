@@ -228,6 +228,26 @@ export class MiMeta {
 	@Column('boolean', {
 		default: false,
 	})
+	public enablePhoneBinding: boolean;
+
+	@Column('boolean', {
+		default: false,
+	})
+	public enableQqLogin: boolean;
+
+	@Column('varchar', {
+		length: 256, nullable: true,
+	})
+	public qqClientId: string | null;
+
+	@Column('varchar', {
+		length: 256, nullable: true,
+	})
+	public qqClientSecret: string | null;
+
+	@Column('boolean', {
+		default: false,
+	})
 	public enableHcaptcha: boolean;
 
 	@Column('varchar', {

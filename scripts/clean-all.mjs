@@ -39,6 +39,7 @@ const __dirname = import.meta.dirname;
 	fs.rmSync(__dirname + '/../packages/misskey-bubble-game/node_modules', { recursive: true, force: true });
 
 	fs.rmSync(__dirname + '/../built', { recursive: true, force: true });
+	fs.rmSync(__dirname + '/../built-dev', { recursive: true, force: true });
 	fs.rmSync(__dirname + '/../node_modules', { recursive: true, force: true });
 
 	execSync('pnpm store prune', {

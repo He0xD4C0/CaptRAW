@@ -21,9 +21,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 			:message="message"
 			:openOnRemote="openOnRemote"
 			:initialUsername="initialUsername"
+			:disabled="qqLoginPending"
 
 			@usernameSubmitted="onUsernameSubmitted"
 			@passkeyClick="onPasskeyLogin"
+			@qqLoginClick="onQqLoginClick"
 		/>
 
 		<!-- 2. パスワード入力 -->
@@ -73,6 +75,7 @@ import type { OpenOnRemoteOptions } from '@/utility/please-login.js';
 import type { PwResponse } from '@/components/MkSignin.password.vue';
 import { misskeyApi } from '@/utility/misskey-api.js';
 import { showSuspendedDialog } from '@/utility/show-suspended-dialog.js';
+import { openQqLogin } from '@/utility/qq-login.js';
 import { i18n } from '@/i18n.js';
 import * as os from '@/os.js';
 
@@ -100,6 +103,7 @@ const props = withDefaults(defineProps<{
 
 const page = ref<'input' | 'password' | 'totp' | 'passkey'>('input');
 const waiting = ref(false);
+const qqLoginPending = ref(false);
 
 const passwordPageEl = useTemplateRef('passwordPageEl');
 const needCaptcha = ref(false);
@@ -154,6 +158,27 @@ function onPasskeyDone(credential: AuthenticationResponseJSON): void {
 
 function onUseTotp(): void {
 	page.value = 'totp';
+}
+//#endregion
+
+//#region QQ Login
+async function onQqLoginClick() {
+	if (qqLoginPending.value) return;
+	qqLoginPending.value = true;
+	try {
+		const result = await openQqLogin();
+		if (result == null) return;
+
+		const signinResult: Misskey.entities.SigninFlowResponse & { finished: true } = {
+			finished: true,
+			id: result.id,
+			i: result.token,
+		};
+		emit('login', signinResult);
+		await onLoginSucceeded(signinResult);
+	} finally {
+		qqLoginPending.value = false;
+	}
 }
 //#endregion
 

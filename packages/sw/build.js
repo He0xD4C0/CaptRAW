@@ -17,6 +17,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 console.log('Starting SW building...');
 
 /** @type {esbuild.BuildOptions} */
+const buildDir = process.env.MISSKEY_BUILD_DIR || (process.env.NODE_ENV === 'development' ? 'built-dev' : 'built');
 const buildOptions = {
 	absWorkingDir: __dirname,
 	bundle: true,
@@ -32,9 +33,9 @@ const buildOptions = {
 	loader: {
 		'.ts': 'ts',
 	},
-	minify: process.env.NODE_ENV === 'production',
+	minify: true,
 	outbase: `${__dirname}/src`,
-	outdir: `${__dirname}/../../built/_sw_dist_`,
+	outdir: `${__dirname}/../../${buildDir}/_sw_dist_`,
 	treeShaking: true,
 	tsconfig: `${__dirname}/tsconfig.json`,
 };

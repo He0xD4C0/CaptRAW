@@ -26,37 +26,56 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 		<SearchMarker :keywords="['phone', 'sms', 'mobile']">
 			<FormSection>
-				<template #label><SearchLabel>Phone Number</SearchLabel></template>
+				<template #label><SearchLabel>{{ i18n.ts._settings.phoneNumber }}</SearchLabel></template>
 
-				<MkInput v-model="phone" :disabled="!instance.enableSms" type="text">
+				<MkInput v-model="phone" :disabled="!instance.enablePhoneBinding" type="text">
 					<template #prefix><i class="ti ti-phone"></i></template>
-					<template #label>Phone Number</template>
-					<template #caption>E.164 format (e.g. +8613800138000)</template>
+					<template #label>{{ i18n.ts._settings.phoneNumber }}</template>
+					<template #caption>{{ i18n.ts._settings.phoneNumberFormat }}</template>
 				</MkInput>
 
 				<div class="phone-row">
 					<MkInput v-model="verifyCode" type="text" :maxlength="6" class="phone-input">
-						<template #label>Verification Code</template>
+						<template #label>{{ i18n.ts._settings.verificationCode }}</template>
 					</MkInput>
 					<MkButton :disabled="phone === '' || sending" class="send-btn" @click="sendCode">
 						<i v-if="sending" class="ti ti-loader animate-pulse"></i>
-						<span v-else>{{ codeSent ? 'Resend' : 'Send Code' }}</span>
+						<span v-else>{{ codeSent ? i18n.ts._settings.resendCode : i18n.ts._settings.sendCode }}</span>
 					</MkButton>
 				</div>
-				<div class="phone-caption">Enter the 6-digit code sent to your phone</div>
+				<div class="phone-caption">{{ i18n.ts._settings.phoneCodeEntryHint }}</div>
 
 				<MkButton primary :disabled="verifyCode.length !== 6 || verifying" @click="verify">
 					<i v-if="verifying" class="ti ti-loader animate-pulse"></i>
-					<span v-else>Verify</span>
+					<span v-else>{{ i18n.ts._settings.verifyPhone }}</span>
 				</MkButton>
 
 					<div v-if="phoneVerified" style="color: var(--MI_THEME-success);">
-						<i class="ti ti-check"></i> Phone number verified and bound to your account
+						<i class="ti ti-check"></i> {{ i18n.ts._settings.phoneVerifiedNotice }}
 					</div>
 					<div v-else-if="codeSent" style="color: var(--MI_THEME-warn);">
-						<i class="ti ti-clock"></i> Verification code sent. Please check your phone.
+						<i class="ti ti-clock"></i> {{ i18n.ts._settings.verificationCodeSentNotice }}
 					</div>
 				</FormSection>
+		</SearchMarker>
+
+		<SearchMarker :keywords="['qq', 'tencent', 'social', 'oauth']">
+			<FormSection>
+				<template #label><SearchLabel>{{ i18n.ts._settings.qqAccount }}</SearchLabel></template>
+
+				<div class="_gaps_s">
+					<p>{{ i18n.ts._settings.qqUnlinkDescription }}</p>
+					<MkButton @click="unlinkQQ">
+						<i class="ti ti-brand-qq"></i> {{ i18n.ts._settings.unlinkQqAccount }}
+					</MkButton>
+					<div v-if="qqUnlinked" style="color: var(--MI_THEME-success);">
+						<i class="ti ti-check"></i> {{ i18n.ts._settings.qqUnlinkedNotice }}
+					</div>
+					<div v-if="qqError" style="color: var(--MI_THEME-warn);">
+						<i class="ti ti-alert-triangle"></i> {{ qqError }}
+					</div>
+				</div>
+			</FormSection>
 		</SearchMarker>
 
 		<SearchMarker :keywords="['signin', 'login', 'history', 'log']">
@@ -167,6 +186,22 @@ onMounted(async () => {
 	phone.value = me.phone ?? '';
 	phoneVerified.value = me.phoneVerified ?? false;
 });
+
+	// QQ account binding
+	const qqUnlinked = ref(false);
+	const qqError = ref('');
+
+	async function unlinkQQ() {
+		qqError.value = '';
+		qqUnlinked.value = false;
+		try {
+			await os.apiWithDialog('i/update-qq', {});
+			qqUnlinked.value = true;
+		} catch (err) {
+			qqError.value = i18n.tsx._settings.qqUnlinkFailed({ x: err instanceof Error ? err.message : 'Unknown error' });
+		}
+	}
+
 
 async function sendCode() {
 	sending.value = true;

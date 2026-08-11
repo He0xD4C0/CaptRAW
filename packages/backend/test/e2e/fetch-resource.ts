@@ -7,7 +7,7 @@ process.env.NODE_ENV = 'test';
 
 import * as assert from 'assert';
 import { beforeAll, beforeEach, describe, test } from 'vitest';
-import { api, channel, clip, galleryPost, page, play, post, signup, simpleGet, uploadFile } from '../utils.js';
+import { api, channel, clip, galleryPost, origin, page, play, post, signup, simpleGet, uploadFile } from '../utils.js';
 import type { SimpleGetResponse } from '../utils.js';
 import type * as misskey from 'misskey-js';
 
@@ -33,6 +33,7 @@ describe('Webリソース', () => {
 	let aliceChannel: misskey.entities.Channel;
 
 	let bob: misskey.entities.SignupResponse;
+	let bobsPost: misskey.entities.Note;
 
 	type Request = {
 		path: string,
@@ -93,6 +94,8 @@ describe('Webリソース', () => {
 		aliceChannel = await channel(alice, {});
 
 		bob = await signup({ username: 'bob' });
+		bobsPost = await post(bob, { text: 'secret' });
+		await api('i/update', { noCrawle: true }, bob);
 	}, 1000 * 60 * 2);
 
 	describe.each([
@@ -108,6 +111,7 @@ describe('Webリソース', () => {
 		{ path: '/robots.txt', type: 'text/plain; charset=UTF-8' },
 		{ path: '/favicon.ico', type: 'image/vnd.microsoft.icon' },
 		{ path: '/opensearch.xml', type: 'application/opensearchdescription+xml' },
+		{ path: '/sitemap.xml', type: 'application/xml; charset=utf-8' },
 		{ path: '/apple-touch-icon.png', type: 'image/png' },
 		{ path: '/twemoji/2764.svg', type: 'image/svg+xml' },
 		{ path: '/twemoji/2764-fe0f-200d-1f525.svg', type: 'image/svg+xml' },
@@ -132,6 +136,21 @@ describe('Webリソース', () => {
 		{ path: '/fluent-emoji/2764-fe0f-200d-1f525.svg' },
 	])('$path', ({ path }) => {
 		test('はGETできない。', async () => await notFound({ path }));
+	});
+
+	describe('/sitemap.xml', () => {
+		test('は静的ページ・ユーザー・ノートを含み、noCrawleユーザーを含まない。', async () => {
+			const res = await simpleGet('/sitemap.xml', UNSPECIFIED, undefined, res => res.text());
+			assert.strictEqual(res.status, 200);
+			const body = res.body as string;
+			assert.ok(body.startsWith('<?xml version="1.0" encoding="UTF-8"?>'));
+			assert.ok(body.endsWith('</urlset>\n'));
+			assert.ok(body.includes(`<loc>${origin}/</loc>`));
+			assert.ok(body.includes(`<loc>${origin}/@alice</loc>`));
+			assert.ok(body.includes(`<loc>${origin}/notes/${alicesPost.id}</loc>`));
+			assert.ok(!body.includes(`<loc>${origin}/@bob</loc>`));
+			assert.ok(!body.includes(`<loc>${origin}/notes/${bobsPost.id}</loc>`));
+		});
 	});
 
 	describe.each([

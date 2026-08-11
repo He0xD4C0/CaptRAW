@@ -39,6 +39,7 @@ function backendDevServerPlugin(): Plugin {
 				stdout: process.stdout,
 				stderr: process.stderr,
 				env: {
+					...process.env,
 					NODE_ENV: 'development',
 				},
 			});

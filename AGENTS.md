@@ -108,7 +108,9 @@ Use the most specific command first; widen to full-build if needed.
 | Migration diff check (pending DDL) | `pnpm --filter backend check-migrations` |
 | `misskey-js` regeneration (required after API changes) | `pnpm build-misskey-js-with-types` |
 | Full build | `pnpm build` |
-| Dev server (backend + frontend watch) | `pnpm dev` |
+| Dev build (isolated, outputs to `built-dev/`) | `pnpm dev:build` |
+| Dev server (backend + frontend watch, HMR) | `pnpm dev` |
+| Dev server (built mode, like production) | `pnpm dev:start` |
 
 **Note:** Backend tests (`test` / `test:e2e` / `test:fed`) require `.config/test.yml`. Create it with `ncp .github/misskey/test.yml .config/test.yml` (or `cp .github/misskey/test.yml .config/test.yml`) before running. Each test script internally calls `cross-env NODE_ENV=test pnpm compile-config`, so no separate compile-config step is needed once the file exists.
 
@@ -135,21 +137,44 @@ CaptRAW uses a build-once / run-production workflow. Use `pnpm prod:*` commands 
 4. Status check → `pnpm prod:status`.
 5. Stop → `pnpm prod:stop`.
 
-**Note:** Do not run `pnpm dev` and `pnpm prod:start` simultaneously (port conflict).
+**Note:** `pnpm dev` and `pnpm dev:start` now use separate infrastructure (port 3000, DB 5432, Redis 6379, output `built-dev/`) — they **can** run alongside the production server (port 2999, DB 5433, Redis 6380, output `built/`) without conflict.
+
+### Development Build Commands (Isolated)
+
+Dev builds output to `built-dev/` (controlled by `MISSKEY_BUILD_DIR=built-dev`), keeping production `built/` untouched.
+
+| Purpose | Command |
+| --- | --- |
+| Full dev build (one-shot, minified) | `pnpm dev:build` |
+| Start dev server (detached, built mode) | `pnpm dev:start` |
+| Stop dev server | `pnpm dev:stop` |
+| Stop → Build → Start | `pnpm dev:restart` |
+| Check dev server status | `pnpm dev:status` |
+| View last 80 lines of dev logs | `pnpm dev:logs` |
+| Compile dev config only | `cross-env NODE_ENV=development pnpm compile-config` |
+| Run migrations on dev DB | `cross-env NODE_ENV=development pnpm migrate` |
+| Start dev Docker containers | `docker compose -f docker-compose.dev.yml up -d` |
+| Stop dev Docker containers | `docker compose -f docker-compose.dev.yml down` |
+
+**How it works:** The `MISSKEY_BUILD_DIR` env var selects the output directory (`built` vs `built-dev`). The build itself runs in production mode (minified, no debug code). At runtime, `NODE_ENV=development` enables `http://` support and verbose logging. The config file `.config/dev.yml` is auto-selected by `compile-config` when `NODE_ENV=development`.
 
 ---
 
-## Dev Environment: Port Management & Auto-Restart
+## Dev Environment: HMR Mode & Port Management
 
-Process management scripts live in `scripts/`. `pnpm dev` starts frontend (5173), frontend-embed (5174), and backend (3000).
+`pnpm dev` starts the Vite HMR dev servers (frontend 5173, frontend-embed 5174) and backend watch mode (rolldown `--watch`). All output goes to `built-dev/` — production `built/` is never touched.
+
+For a production-like dev experience without HMR, use `pnpm dev:build && pnpm dev:start` instead.
 
 ### Dev Script Reference
 
 | Purpose | Command |
 | --- | --- |
+| HMR dev mode (watch + hot reload) | `pnpm dev` |
+| Production-like dev build + start | `pnpm dev:build && pnpm dev:start` |
 | Release Vite ports (5173, 5174) | `pnpm kill:ports` |
 | Release Vite + backend ports | `pnpm kill:ports:all` |
-| Release ports + restart dev server | `pnpm restart` |
+| Release ports + restart HMR dev | `pnpm restart` |
 | Nodemon auto-restart on crash | `pnpm dev:safe` |
 | Custom port | `node scripts/kill-port.mjs 8080 9090` |
 
@@ -187,6 +212,9 @@ Scripts for building, migrating, and restarting after code sync are provided.
 | `MISSKEY_LOG_FILE` | `./misskey.log` | Service log file path |
 | `GIT_BRANCH` | current branch | Branch to pull |
 | `SKIP_BUILD` | (unset) | Set to `1` to skip build |
+| `MISSKEY_BUILD_DIR` | `built` | Build output directory (`built-dev` for dev, `built` for prod) |
+| `NODE_ENV` | (unset) | `development` → `built-dev/` fallback + dev.yml selection + http:// support |
+| `MISSKEY_CONFIG_YML` | (unset) | Override config YAML filename in `.config/` |
 
 ### Implementation Details
 

@@ -10,12 +10,15 @@
 - Feat: キーの永続化と自動ローテーションに対応
 - Feat: OIDC nonce パラメータ、auth_time クレームをサポート
 - Enhance: 電話番号必須登録オプション（phoneRequiredForSignup）
+- Feat: 電話番号バインド機能（enablePhoneBinding メタ設定）
 
 ### Client
 - Feat: OIDC 設定管理画面（/admin/oidc-settings）
 - Feat: OAuth アプリケーション管理画面（/admin/oauth-apps）
 - Feat: SMS 設定管理画面（/admin/sms-settings）
 - Feat: アプリ作成フォームを管理パネルに統合
+- Feat: 訪客首页、登录与注册界面新增 QQ 注册/登录入口
+- Feat: 設定画面のセキュリティページに電話番号バインド UI を追加
 
 ### Server
 - Feat: OIDC 完全実装 — Authorization Code Flow, ID Token (RS256), UserInfo エンドポイント
@@ -24,6 +27,9 @@
 - Feat: 電話番号検証 SMS サービス（SmsService）、阿里雲 SMS プロバイダ
 - Feat: 電話番号更新・検証 API（phone/available, phone/send-code, phone/verify-code, i/update-phone）
 - Feat: ismsProvider インターフェースによるマルチプロバイダ対応
+- Feat: 公開インスタンス情報に QQ ログイン可否を追加
+- Enhance: QQ ログイン新規登録時にニックネームとアバターを自動取得（ユーザー同意あり）
+- Feat: send-phone-verification エンドポイント（電話番号バインド用認証コード送信）
 
 ## 2026.6.0
 

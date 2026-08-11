@@ -18,5 +18,7 @@ const __dirname = import.meta.dirname;
 	fs.rmSync(__dirname + '/../packages/misskey-js/built', { recursive: true, force: true });
 	fs.rmSync(__dirname + '/../packages/misskey-reversi/built', { recursive: true, force: true });
 	fs.rmSync(__dirname + '/../packages/misskey-bubble-game/built', { recursive: true, force: true });
-	fs.rmSync(__dirname + '/../built', { recursive: true, force: true });
+	// Only clean the dev build directory; production built/ is protected.
+	// Use clean-all.mjs to wipe both built/ and built-dev/.
+	fs.rmSync(__dirname + '/../built-dev', { recursive: true, force: true });
 })();

@@ -80,6 +80,7 @@ export const paramDef = {
 		cacheRemoteSensitiveFiles: { type: 'boolean' },
 		emailRequiredForSignup: { type: 'boolean' },
 		phoneRequiredForSignup: { type: 'boolean' },
+		enablePhoneBinding: { type: 'boolean' },
 		enableSms: { type: 'boolean' },
 		smsProvider: { type: 'string' },
 		smsAliAccessKeyId: { type: 'string', nullable: true },
@@ -226,6 +227,9 @@ export const paramDef = {
 		remoteNotesCleaningMaxProcessingDurationInMinutes: { type: 'number' },
 		showRoleBadgesOfRemoteUsers: { type: 'boolean' },
 		enableOidc: { type: 'boolean' },
+		enableQqLogin: { type: 'boolean' },
+		qqClientId: { type: 'string', nullable: true },
+		qqClientSecret: { type: 'string', nullable: true },
 	},
 	required: [],
 } as const;
@@ -368,6 +372,10 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (ps.phoneRequiredForSignup !== undefined) {
 				set.phoneRequiredForSignup = ps.phoneRequiredForSignup;
+			}
+
+			if (ps.enablePhoneBinding !== undefined) {
+				set.enablePhoneBinding = ps.enablePhoneBinding;
 			}
 
 			if (ps.enableSms !== undefined) {
@@ -800,6 +808,18 @@ export default class extends Endpoint<typeof meta, typeof paramDef> { // eslint-
 
 			if (ps.enableOidc !== undefined) {
 				set.enableOidc = ps.enableOidc;
+			}
+
+			if (ps.enableQqLogin !== undefined) {
+				set.enableQqLogin = ps.enableQqLogin;
+			}
+
+			if (ps.qqClientId !== undefined) {
+				set.qqClientId = ps.qqClientId;
+			}
+
+			if (ps.qqClientSecret !== undefined && ps.qqClientSecret !== '••••••••') {
+				set.qqClientSecret = ps.qqClientSecret;
 			}
 
 			const before = await this.metaService.fetch(true);

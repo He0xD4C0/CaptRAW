@@ -10,6 +10,7 @@ import { DI } from '@/di-symbols.js';
 import { SmsService } from '@/core/SmsService.js';
 import { UserEntityService } from '@/core/entities/UserEntityService.js';
 import { GlobalEventService } from '@/core/GlobalEventService.js';
+import { ApiError } from '@/server/api/error.js';
 
 export const meta = {
 	tags: ['account'],
@@ -20,6 +21,19 @@ export const meta = {
 	limit: {
 		duration: 1000 * 60 * 60, // 1 hour
 		max: 3,
+	},
+
+	errors: {
+		invalidPhoneFormat: {
+			message: 'Invalid phone number format. Use E.164 format (e.g. +8613800138000)',
+			code: 'INVALID_PHONE_FORMAT',
+			id: '3e7b8911-6b60-4406-92e2-91a18cf9b7b5',
+		},
+		phoneAlreadyInUse: {
+			message: 'This phone number is already in use.',
+			code: 'PHONE_ALREADY_IN_USE',
+			id: 'e95bd6fa-22ad-4963-8a32-13de61cb062a',
+		},
 	},
 
 	res: {
@@ -53,7 +67,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> {
 			if (ps.phone != null) {
 				// Validate format
 				if (!this.smsService.validatePhoneFormat(ps.phone)) {
-					throw new Error('Invalid phone number format. Use E.164 format (e.g. +8613800138000)');
+					throw new ApiError(meta.errors.invalidPhoneFormat);
 				}
 
 				// Check uniqueness
@@ -62,7 +76,7 @@ export default class extends Endpoint<typeof meta, typeof paramDef> {
 					phoneVerified: true,
 				});
 				if (existing && existing.userId !== me.id) {
-					throw new Error('This phone number is already in use.');
+					throw new ApiError(meta.errors.phoneAlreadyInUse);
 				}
 
 				// Update phone and send verification code

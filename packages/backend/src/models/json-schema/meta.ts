@@ -82,6 +82,18 @@ export const packedMetaLiteSchema = {
 			type: 'boolean',
 			optional: false, nullable: false,
 		},
+		enableQqLogin: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
+		enablePhoneBinding: {
+			type: 'boolean',
+			optional: false, nullable: false,
+		},
+		qqClientId: {
+			type: 'string',
+			optional: false, nullable: true,
+		},
 		enableHcaptcha: {
 			type: 'boolean',
 			optional: false, nullable: false,

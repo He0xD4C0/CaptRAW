@@ -38,8 +38,8 @@ export class HtmlTemplateService {
 
 		private metaEntityService: MetaEntityService,
 	) {
-		this.frontendViteBuilt = resolve(this.config.rootDir, 'built/_frontend_vite_');
-		this.frontendEmbedViteBuilt = resolve(this.config.rootDir, 'built/_frontend_embed_vite_');
+		this.frontendViteBuilt = resolve(this.config.projectBuiltDir, '_frontend_vite_');
+		this.frontendEmbedViteBuilt = resolve(this.config.projectBuiltDir, '_frontend_embed_vite_');
 	}
 
 	// 初期ロードで読み込むべきファイルのパスを収集する。
