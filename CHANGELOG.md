@@ -12,21 +12,18 @@
 - Enhance: 電話番号必須登録オプション（phoneRequiredForSignup）
 
 ### Client
-- Feat: 访客首页、登录与注册界面新增 QQ 注册/登录入口
 - Feat: OIDC 設定管理画面（/admin/oidc-settings）
 - Feat: OAuth アプリケーション管理画面（/admin/oauth-apps）
 - Feat: SMS 設定管理画面（/admin/sms-settings）
 - Feat: アプリ作成フォームを管理パネルに統合
 
 ### Server
-- Feat: 公開インスタンス情報に QQ ログイン可否を追加
 - Feat: OIDC 完全実装 — Authorization Code Flow, ID Token (RS256), UserInfo エンドポイント
 - Feat: JWKS エンドポイント（マルチキー対応）、OIDC Discovery
 - Feat: OIDC 有効/無効トグル（enableOidc メタ設定）
 - Feat: 電話番号検証 SMS サービス（SmsService）、阿里雲 SMS プロバイダ
 - Feat: 電話番号更新・検証 API（phone/available, phone/send-code, phone/verify-code, i/update-phone）
 - Feat: ismsProvider インターフェースによるマルチプロバイダ対応
-- Enhance: QQ ログイン新規登録時にニックネームとアバターを自動取得（ユーザー同意あり）
 
 ## 2026.6.0
 
