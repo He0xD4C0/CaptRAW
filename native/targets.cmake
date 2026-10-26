@@ -1,0 +1,34 @@
+find_package(nlohmann_json REQUIRED)
+include_directories(${GTKMM_INCLUDE_DIRS} ${GTK_INCLUDE_DIRS} ${CAIROMM_INCLUDE_DIRS}
+  ${GIOMM_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS} ${GLIBMM_INCLUDE_DIRS} ${GLIB2_INCLUDE_DIRS}
+  ${SIGC_INCLUDE_DIRS} ${EXIV2_INCLUDE_DIRS} ${LCMS_INCLUDE_DIRS} ${FFTW3F_INCLUDE_DIRS}
+  ${PNG_INCLUDE_DIRS}
+  "${CMAKE_SOURCE_DIR}/src" "${CMAKE_BINARY_DIR}/src/utils" "${CAPTRAW_SOURCE_DIR}")
+link_directories(${GTKMM_LIBRARY_DIRS} ${GIOMM_LIBRARY_DIRS} ${GIO_LIBRARY_DIRS}
+  ${CAIROMM_LIBRARY_DIRS} ${GLIBMM_LIBRARY_DIRS} ${GLIB2_LIBRARY_DIRS})
+set(CAPTRAW_SUPPORT
+  "${CMAKE_SOURCE_DIR}/src/gui/alignedmalloc.cc"
+  "${CMAKE_SOURCE_DIR}/src/gui/edit.cc"
+  "${CMAKE_SOURCE_DIR}/src/gui/options.cc"
+  "${CMAKE_SOURCE_DIR}/src/gui/paramsedited.cc"
+  "${CMAKE_SOURCE_DIR}/src/gui/exiffiltersettings.cc")
+add_library(captraw-core STATIC ${CAPTRAW_SUPPORT}
+  "${CAPTRAW_SOURCE_DIR}/core.cc" "${CAPTRAW_SOURCE_DIR}/recipe.cc")
+target_compile_features(captraw-core PUBLIC cxx_std_17)
+target_link_libraries(captraw-core PUBLIC art_engine art_utils nlohmann_json::nlohmann_json
+  ${CAIROMM_LIBRARIES} ${GIOMM_LIBRARIES} ${GIO_LIBRARIES} ${GTKMM_LIBRARIES}
+  ${RSVG_LIBRARIES} ${EXIV2_LIBRARIES})
+add_executable(captraw-engine "${CAPTRAW_SOURCE_DIR}/worker.cc")
+target_compile_features(captraw-engine PUBLIC cxx_std_17)
+target_link_libraries(captraw-engine PRIVATE captraw-core)
+add_executable(captraw-art-reference ${CAPTRAW_SUPPORT}
+  "${CMAKE_SOURCE_DIR}/src/gui/main-cli.cc"
+  "${CMAKE_SOURCE_DIR}/src/gui/fastexport.cc"
+  "${CMAKE_SOURCE_DIR}/src/gui/makeicc.cc")
+target_link_libraries(captraw-art-reference PRIVATE art_engine art_utils
+  ${CAIROMM_LIBRARIES} ${GIOMM_LIBRARIES} ${GIO_LIBRARIES} ${GTKMM_LIBRARIES}
+  ${RSVG_LIBRARIES} ${EXIV2_LIBRARIES})
+if(APPLE)
+  target_link_libraries(captraw-engine PRIVATE "-framework Foundation")
+  target_link_libraries(captraw-art-reference PRIVATE "-framework Foundation")
+endif()

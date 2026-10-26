@@ -1,0 +1,8 @@
+node_modules/
+build/
+dist/
+release/
+.DS_Store
+*.log
+test-results/
+artifacts/

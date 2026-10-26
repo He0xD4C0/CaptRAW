@@ -1,0 +1,32 @@
+[
+  {
+    "name": "nikon-d850.NEF",
+    "make": "Nikon",
+    "model": "D850",
+    "mode": "14-bit lossless compressed, 3:2",
+    "remark": "",
+    "license": "CC0-1.0",
+    "url": "https://raw.pixls.us/getfile.php/1840/nice/Nikon - D850 - 14bit 14bit compressed (Lossless) (3:2).NEF",
+    "sha256": "0c9438258ddae5260b9f5a1aace6658a723f1cb1acace3a6cb507116dc6da4f2"
+  },
+  {
+    "name": "canon-r5.CR3",
+    "make": "Canon",
+    "model": "EOS R5",
+    "mode": "RAW, no Dual Pixel, 3:2",
+    "remark": "RAW no dualpixel",
+    "license": "CC0-1.0",
+    "url": "https://raw.pixls.us/getfile.php/4694/nice/Canon - EOS R5 - 3:2.CR3",
+    "sha256": "21430c36387efe65bd09ac0fcd724bfd959d93dd391ec811a1b741c8663becb5"
+  },
+  {
+    "name": "fuji-xt4.RAF",
+    "make": "Fujifilm",
+    "model": "X-T4",
+    "mode": "14-bit lossless compressed, 3:2",
+    "remark": "",
+    "license": "CC0-1.0",
+    "url": "https://raw.pixls.us/getfile.php/3914/nice/Fujifilm - X-T4 - 14bit 14bit lossless compressed (3:2).RAF",
+    "sha256": "07ea642656074834ffe5c661870a612ffa2e80fc1218a05166ee966bbe5f6fae"
+  }
+]

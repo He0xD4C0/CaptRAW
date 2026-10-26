@@ -1,0 +1,70 @@
+{
+  "name": "captraw",
+  "version": "0.5.0",
+  "private": true,
+  "description": "A local, non-destructive RAW development workbench",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "dist/electron/main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build:ui": "vite build && esbuild apps/desktop/electron/main.ts apps/desktop/electron/preload.ts --bundle --platform=node --format=cjs --external:electron --outdir=dist/electron --out-extension:.js=.cjs",
+    "build:native": "node scripts/build-native.mjs",
+    "build": "npm run build:native && npm run build:ui",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "package": "npm run build && node scripts/make-icon.mjs && node scripts/bundle-native.mjs && electron-builder --mac --arm64",
+    "test:e2e": "node tests/e2e.mjs"
+  },
+  "dependencies": {
+    "@radix-ui/react-slider": "^1.3.6",
+    "@radix-ui/react-tabs": "^1.1.13",
+    "lucide-react": "^0.577.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0",
+    "esbuild": "^0.27.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.5"
+  },
+  "build": {
+    "appId": "org.captraw.desktop",
+    "productName": "CaptRAW",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/bundle/native",
+        "to": "native"
+      }
+    ],
+    "electronDist": "node_modules/electron/dist",
+    "mac": {
+      "category": "public.app-category.photography",
+      "target": [
+        "dir",
+        "dmg"
+      ],
+      "identity": null,
+      "icon": "build/icon.icns",
+      "minimumSystemVersion": "26.0.0"
+    },
+    "dmg": {
+      "title": "CaptRAW 0.5.0"
+    }
+  }
+}
