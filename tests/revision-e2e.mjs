@@ -12,7 +12,7 @@ async function frames(){return page.evaluate(()=>window.__frames.length);}
 async function settle(action){const count=await frames();await action();await page.waitForFunction(n=>window.__frames.length>n,count);await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__frames.filter(f=>f.kind!=='detail').at(-1)?.url);}
 async function dialog(response){await app.evaluate(({dialog},response)=>{dialog.showMessageBox=async()=>({response});},response);}
 async function open(path=openFile){await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},path);await settle(()=>page.getByRole('button',{name:'打开',exact:true}).click());}
-async function save(name){const path=resolve(out,name+'.xmp');rmSync(path,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},path);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(path)).toBe(true);return await readDocument(path);}
+async function save(name){const path=resolve(out,name+'.xmp');rmSync(path,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},path);await settle(()=>page.getByRole('button',{name:'保存',exact:true}).click());await expect.poll(()=>existsSync(path)).toBe(true);return await readDocument(path);}
 async function draw(from,to){const b=await page.getByTestId('viewport').boundingBox();await settle(async()=>{await page.mouse.move(b.x+b.width*from[0],b.y+b.height*from[1]);await page.mouse.down();await page.mouse.move(b.x+b.width*to[0],b.y+b.height*to[1],{steps:6});await page.mouse.up();});}
 try{
  await page.evaluate(()=>{window.__frames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__frames.push(e.frame);});});await open();
@@ -83,4 +83,4 @@ try{
  await expect(page.getByRole('button',{name:'关闭文件',exact:true})).toBeVisible();
  expect(errors).toEqual([]);
 }catch(e){await page.screenshot({path:resolve(out,'failure.png')});console.error(await page.locator('body').innerText());throw e;}
-finally{writeFileSync(resolve(out,'report.json'),JSON.stringify({backgroundWindow:true,packaged:!!executablePath,checks,errors},null,2)+'\n');await dialog(1);await app.close();}
+finally{try{writeFileSync(resolve(out,'report.json'),JSON.stringify({backgroundWindow:true,packaged:!!executablePath,checks,errors},null,2)+'\n');}finally{await dialog(1);await app.close();}}

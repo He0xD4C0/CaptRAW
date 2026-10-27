@@ -10,7 +10,7 @@ export const SYNC_GROUPS = [
  {id:'detail',label:'锐化与降噪',fields:['sharpening','sharpenRadius','luminanceNoise','colorNoise']},
  {id:'effects',label:'纹理、清晰度与效果',fields:['texture','clarity','dehaze','vignette','grain']},
  {id:'lens',label:'镜头校正',fields:['lensCorrections','lensProfile']},
- {id:'crop',label:'裁切与旋转',fields:['crop','rotation','cropAspect']},
+ {id:'crop',label:'裁切与旋转',fields:['crop','rotation','fineRotation','cropAspect']},
  {id:'masks',label:'蒙版（替换目标蒙版）',fields:['masks']},
  {id:'spots',label:'修复点（替换目标修复）',fields:['spots']},
 ] as const;

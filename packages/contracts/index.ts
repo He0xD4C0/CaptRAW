@@ -5,6 +5,7 @@ export interface ColorSample {l:number;c:number;h:number;point:Point;end?:Point}
 export interface MaskGeometry {
   id: string; name: string; type: MaskType; enabled: boolean; inverted: boolean;
   feather: number;
+  referenceAngle?:number; // Spatial leaf's fine-rotation canvas; absent inherits its ART profile.
   raster?:{path:string;sha256:string;width:number;height:number}; // Canonical, unrotated full-image bounds; pixel-center sampling.
   colorSamples?:ColorSample[];colorRefine?:number;
   luminanceRange?:[number,number,number,number]; // Outer low, inner low, inner high, outer high (Lab L*).
@@ -47,6 +48,7 @@ export interface Adjustments {
   exposure: number; temperature: number; tint: number; contrast: number;
   saturation: number; vibrance: number; curve: Point[];
   rotation: number; crop: { x: number; y: number; width: number; height: number } | null;
+  fineRotation?:number; // Effective ART rotation in degrees; absent preserves the stored profile.
   cropAspect?:number|null; // Locked width/height in the unrotated image, UI constraint only.
   masks: LocalMask[];
   wbMode?:string;wbMultipliers?:number[]|null;wbApproximate?:boolean;
@@ -81,9 +83,14 @@ export interface ImageSession {
 }
 export interface LuminancePreview {url:string;x:number;y:number;width:number;height:number}
 export interface LuminanceSample {minimum:number;maximum:number;pixels:number;revision:number}
+export type CoordinateSpace='display'|'reference'|'source';
+// Full, coarse-rotated canvas pixel centers: no crop offset or normalized coordinates.
+// Off-image points are preserved; null means that the inverse could not be solved.
+export interface CoordinateMapping {sessionId:string;revision:number;width:number;height:number;referenceAngle:number;points:({x:number;y:number}|null)[]}
+export interface StraightenResult {angle:number;axis:'horizontal'|'vertical';previousAngle:number;residualDegrees:number}
 export interface MaskPreview {id:string;url:string;x:number;y:number;width:number;height:number}
 export type ComparisonLayout = 'off'|'left-right'|'top-bottom'|'split-vertical'|'split-horizontal';
-export type ComparisonGeometry = Pick<Adjustments,'rotation'|'crop'|'lensCorrections'|'lensProfile'>;
+export type ComparisonGeometry = Pick<Adjustments,'rotation'|'fineRotation'|'crop'|'lensCorrections'|'lensProfile'>;
 export interface ComparisonSettings {adjustments:Adjustments;artProfile:string;geometry:ComparisonGeometry}
 export interface PreviewFrame {
   sessionId: string; revision: number; url: string; width: number; height: number;
@@ -104,6 +111,7 @@ export type OutputColorSpace=keyof typeof OUTPUT_COLOR_SPACES;
 export interface ObjectBox {start:Point;end:Point}
 export interface ObjectPrompt {point:Point;exclude:boolean}
 export interface ObjectCandidateResult {id:string;revision:number;selected:number;candidates:{index:number;pixels:number;url:string}[]}
+export interface ObjectMaskResult {raster:NonNullable<MaskGeometry['raster']>;referenceAngle:number}
 export interface CaptRAWAPI {
   importInputProfile(sessionId:string):Promise<InputProfileOption|null>;
   listInputProfiles():Promise<{items:InputProfileOption[];errors:string[]}>;
@@ -118,7 +126,7 @@ export interface CaptRAWAPI {
   applyPreset(id:string,target:import('./synchronize.js').SyncDocument):Promise<import('./synchronize.js').SyncResult[]|null>;
   beginObject(sessionId:string,adjustments:Adjustments,artProfile:string):Promise<{id:string;width:number;height:number}>;
   predictObject(id:string,prompts:ObjectPrompt[],box?:ObjectBox):Promise<ObjectCandidateResult>;
-  commitObject(id:string,revision:number,index:number):Promise<NonNullable<MaskGeometry['raster']>>;
+  commitObject(id:string,revision:number,index:number):Promise<ObjectMaskResult>;
   cancelObject(id?:string):Promise<void>;
   exportBatch(request:BatchExportRequest):Promise<ExportResult[]|null>;
   synchronize(request:import('./synchronize.js').SyncRequest):Promise<import('./synchronize.js').SyncResult[]|null>;
@@ -131,6 +139,8 @@ export interface CaptRAWAPI {
   comparison(sessionId:string,revision:number,settings:ComparisonSettings|null):Promise<void>;
   comparisonViewport(sessionId:string,revision:number,x:number,y:number,width:number,height:number):Promise<void>;
   viewport(sessionId: string, revision: number, x: number, y: number, width: number, height: number): Promise<void>;
+  coordinates(sessionId:string,revision:number,from:CoordinateSpace,to:CoordinateSpace,points:{x:number;y:number}[],referenceAngle?:number):Promise<CoordinateMapping>;
+  straighten(sessionId:string,revision:number,start:Point,end:Point):Promise<StraightenResult>;
   sampleColor(sessionId:string,revision:number,start:Point,end?:Point):Promise<{l:number;c:number;h:number;pixels:number;revision:number}>;
   sampleLuminance(sessionId:string,revision:number,start:Point,end?:Point):Promise<LuminanceSample>;
   whiteBalance(sessionId:string,request:WhiteBalanceRequest):Promise<WhiteBalanceResult>;
@@ -145,4 +155,7 @@ export interface CaptRAWAPI {
   onEvent(listener: (event: EngineEvent) => void): () => void;
 }
 declare global { interface Window { captraw: CaptRAWAPI; } }
-export const ENGINE_VERSION='CaptRAW-20_ART-1.26.10_LibRaw-3b20539';
+export const ENGINE_VERSION='CaptRAW-22_ART-1.26.10_LibRaw-3b20539';
+// Older XMP retains its profile-wide reference. Version 22 protects independent
+// spatial leaf references from renderers that would silently ignore them.
+export const READABLE_ENGINE_VERSIONS:ReadonlySet<string>=new Set([ENGINE_VERSION,'CaptRAW-21_ART-1.26.10_LibRaw-3b20539','CaptRAW-20_ART-1.26.10_LibRaw-3b20539']);

@@ -40,11 +40,18 @@ try{
   await expect.poll(async()=>page.locator('canvas').evaluate(c=>c.toDataURL())).not.toBe(before);
   stage='radial-mask';
   await page.getByRole('button',{name:'蒙版 M',exact:true}).click();
+  const beforeMaskRevision=await page.evaluate(()=>window.__events.filter(e=>e.event==='preview'&&e.frame.kind==='fit').at(-1)?.frame.revision||0);
   await page.getByRole('button',{name:'径向',exact:true}).click();
+  await page.waitForFunction(rev=>{const f=window.__events.filter(e=>e.event==='preview'&&e.frame.kind==='fit').at(-1)?.frame;return f&&f.revision>rev&&document.querySelector('canvas').dataset.frame===f.url;},beforeMaskRevision);
+  await page.locator('.rendering').waitFor({state:'hidden'});
+  const beforeStrokeRevision=await page.evaluate(()=>window.__events.filter(e=>e.event==='preview'&&e.frame.kind==='fit').at(-1).frame.revision);
   const bounds=await page.getByTestId('viewport').boundingBox();
   expect(bounds).not.toBeNull();
   await page.mouse.move(bounds.x+bounds.width*.3,bounds.y+bounds.height*.3);
   await page.mouse.down();await page.mouse.move(bounds.x+bounds.width*.65,bounds.y+bounds.height*.7,{steps:10});await page.mouse.up();
+  await page.locator('.mask-gesture-status').waitFor({state:'hidden'});
+  await page.waitForFunction(rev=>{const f=window.__events.filter(e=>e.event==='preview'&&e.frame.kind==='fit').at(-1)?.frame;return f&&f.revision>rev&&document.querySelector('canvas').dataset.frame===f.url;},beforeStrokeRevision);
+  await expect(page.getByTestId('mask-mapped-guide')).toBeVisible();
   const maskBefore=await page.locator('canvas').evaluate(c=>c.toDataURL());
   await page.getByRole('spinbutton',{name:'局部亮度',exact:true}).fill('1.2');
   await page.getByRole('spinbutton',{name:'局部亮度',exact:true}).press('Tab');
@@ -77,6 +84,7 @@ try{
   await expect(page.getByRole('spinbutton',{name:'局部亮度',exact:true})).toHaveValue('1.2');
   await page.locator('.rendering').waitFor({state:'hidden'});
   await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__events.filter(e=>e.event==='preview'&&e.frame.kind==='fit').at(-1)?.frame.url);
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await page.screenshot({path:join(out,'recipe-restored.png')});
   events=await page.evaluate(()=>window.__events);
   expect(errors).toEqual([]);

@@ -1,4 +1,4 @@
-import {XMP,CRS,CT,lookup,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,lookup,encodeAdjustments,decodeAdjustments,encode,property,readExtension} from '@captraw/desktop-core/xmp';
 import {Documents} from '@captraw/desktop-core/documents';
 import {Presets} from '@captraw/desktop-core/presets';
 import {Synchronizer} from '@captraw/desktop-core/synchronize';
@@ -53,6 +53,23 @@ try{
  pass('real RDF parsing accepts decimal coordinates and rejects empty, non-decimal, non-finite, out-of-range, duplicate and unordered coordinates');
  const adjustments={...image.adjustments,exposure:.75,contrast:17,curve:[{x:0,y:0},{x:.4,y:.6},{x:1,y:1}],crop:{x:.1,y:.1,width:.8,height:.8},rotation:90,spots:[{id:'repair',name:'修复点',enabled:true,method:'clone',source:{x:.3,y:.3},target:{x:.6,y:.6},radius:20,feather:50,opacity:100,detail:0,retainTexture:false}]};
  const document={xmpPacket:fixture,engineVersion:ENGINE_VERSION,source:{path:source,size:readFileSync(source).length,sha256:before},artProfile:profile,adjustments,baselineVersion:4};
+ const versionFile=join(out,'engine-version.xmp'),currentPacket=await documents.serialize(document);
+ for(const version of ['CaptRAW-20_ART-1.26.10_LibRaw-3b20539','CaptRAW-21_ART-1.26.10_LibRaw-3b20539',ENGINE_VERSION]){
+  const packet=(await xmp.call('write',currentPacket,[property(CT,'EngineVersion',encode(version))])).packet;
+  writeFileSync(versionFile,packet);const originalHash=hash(versionFile),loaded=await documents.read(versionFile);
+  assert.equal(loaded.engineVersion,version);assert.equal(loaded.artProfile,profile);assert.deepEqual(loaded.adjustments,adjustments);
+  const resaved=await documents.serialize(loaded);assert.equal(readExtension((await xmp.call('read',resaved)).properties,'EngineVersion'),ENGINE_VERSION);
+  const presetInput=join(out,'engine-version-preset-input.xmp');
+  writeFileSync(presetInput,(await xmp.call('write',fixture,[property(CT,'EngineVersion',encode(version))])).packet);const presetHash=hash(presetInput);
+  const importedVersion=await store.importFile(presetInput),exportedVersion=join(out,'engine-version-preset.xmp');
+  await store.exportFile(importedVersion.id,exportedVersion);assert.equal(readExtension((await xmp.read(exportedVersion)).properties,'EngineVersion'),ENGINE_VERSION);
+  assert.equal(hash(versionFile),originalHash);assert.equal(hash(presetInput),presetHash);
+ }
+ for(const version of ['CaptRAW-19_ART-1.26.10_LibRaw-3b20539','CaptRAW-23_ART-1.26.10_LibRaw-3b20539']){
+  writeFileSync(versionFile,(await xmp.call('write',currentPacket,[property(CT,'EngineVersion',encode(version))])).packet);
+  await assert.rejects(documents.read(versionFile),/不支持的 ART 显影版本/);await assert.rejects(store.importFile(versionFile),/不支持的 ART 显影版本/);
+ }
+ pass('version 20, 21 and 22 XMP documents/presets read without modifying source, save as current version, and reject unsupported older/future renderers');
  const saved=join(out,'中文 空格.xmp');await saveRecipeWithMasks(e,saved,document,v=>documents.serialize(v));const restored=await documents.read(saved);assert.deepEqual({...restored.adjustments},adjustments);assert.equal(restored.artProfile,profile);assert(!readFileSync(saved,'utf8').includes('"adjustments"'));assert(readFileSync(saved,'utf8').includes('crs:Exposure2012'));const props=(await xmp.read(saved)).properties;assert.equal(lookup(props,CRS,'Highlights2012').value,'-35');assert.equal(lookup(props,'https://example.invalid/unknown/','Opaque').value,'保留 & 未知');assert.deepEqual(lookup(props,CRS,'MaskGroupBasedCorrections'),lookup((await xmp.read(external)).properties,CRS,'MaskGroupBasedCorrections'));pass('XMP restores the full ART edit state and preserves untouched Adobe masks and unknown metadata');
  const a=await e.call('compose',{path:source,width:image.width,height:image.height,adjustments,artProfile:profile}),b=await e.call('compose',{path:source,width:image.width,height:image.height,adjustments:restored.adjustments,artProfile:restored.artProfile});
  await e.call('export',{path:source,artProfile:a.artProfile,output:join(out,'before.tiff'),format:'tiff'});await e.call('export',{path:source,artProfile:b.artProfile,output:join(out,'restored.tiff'),format:'tiff'});

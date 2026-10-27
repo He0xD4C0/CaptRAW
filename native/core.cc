@@ -2,6 +2,7 @@
 #include "recipe.h"
 #include "white-balance.h"
 #include "input-profile.h"
+#include "geometry-map.h"
 #include "engine/rtengine.h"
 #include "engine/image8.h"
 #include "engine/imagefloat.h"
@@ -62,6 +63,8 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
     EventSink sink; std::string cache,path,id; ae::InitialImage *initial=nullptr;
     ae::StagedImageProcessor *processor=nullptr;ae::DetailedCrop *detail=nullptr;ae::IImage8 *preview=nullptr;
     pp::ProcParams params,baseline;Json adjustments;long revision=0;int baseWidth=0,baseHeight=0;
+    std::unique_ptr<ae::GeometryMap> displayCoordinates,referenceCoordinates;
+    double coordinateReferenceAngle=0;
     std::vector<std::string> maskIds;std::string selectedMask;Json fitMask,detailMask;
     std::unique_ptr<ae::Image8> fullDetailImage;std::unique_ptr<ae::array2D<float>> fullDetailCoverage;int coverageX=0,coverageY=0;double coverageScale=1;
     int dx=0,dy=0,dw=1024,dh=1024; std::string kind="fit";
@@ -97,6 +100,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
     ~Impl(){close();ae::cleanup();}
     void emit(const Json &j){std::lock_guard<std::mutex> lock(eventMutex);sink(j);}
     void close(){
+        displayCoordinates.reset();referenceCoordinates.reset();
         if(processor){processor->stopProcessing();if(detail){detail->setListener(nullptr);detail=nullptr;}
             processor->setHistogramListener(nullptr);processor->setMaskPreviewListener(nullptr);processor->setPreviewImageListener(nullptr);ae::StagedImageProcessor::destroy(processor);processor=nullptr;preview=nullptr;}
         if(initial){initial->decreaseRef();initial=nullptr;}
@@ -212,6 +216,10 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         maskFailure=true;
         error("蒙版文件在处理期间不可用，已停止发布结果。请恢复文件后重试。");
     }
+    void maskGeometryError(const Glib::ustring &message)override{
+        maskFailure=true;
+        error("蒙版坐标映射失败，已停止发布结果。请调整几何设置后重试。" + message);
+    }
     Json lensCatalog(){
         const auto *db=ae::LFDatabase::getInstance();Json cameras=Json::array(),lenses=Json::array();
         for(const auto &c:db->getCameras())cameras.push_back({{"make",std::string(c.getMake())},{"model",std::string(c.getModel())}});
@@ -286,6 +294,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         adjustments["blackWhite"]=blackWhiteSettings(params);
         adjustments["colorGrading"]=colorGradingSettings(params);
         adjustments["spots"]=Json::array();
+        adjustments["fineRotation"]=params.rotate.enabled?params.rotate.degree:0;
         const auto *md=initial->getMetaData();
         if(const auto *frames=dynamic_cast<const ae::FramesData *>(md)){
             for(const auto &camera:presetDB)if(camera.at("make_model")==frames->getInternalMakeModel()){presets=camera.at("presets");break;}
@@ -321,6 +330,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             maskIds=std::move(nextMaskIds);
             params=candidate;adjustments=next;
         }
+        displayCoordinates.reset();referenceCoordinates.reset();
         pp::ProcParams samplingParams=params;samplingParams.colorcorrection=pp::ColorCorrectionParams();samplingParams.textureBoost=pp::TextureBoostParams();samplingParams.smoothing=pp::SmoothingParams();
         const auto fingerprint=profileText(samplingParams);const bool previousLuminance=luminanceEnabled;luminanceEnabled=!before&&a.value("luminance",false);colorEnabled=!before&&a.value("colorSampling",false);
         if(!colorEnabled||fingerprint!=luminanceFingerprint)sampleColorCache.reset();
@@ -328,7 +338,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         luminanceFingerprint=fingerprint;
         fullDetailImage.reset();fullDetailCoverage.reset();fullDetailLuminance.reset();
         const auto previousMask=selectedMask;selectedMask=before?std::string():a.value("maskId",std::string());
-        if(selectedMask!=previousMask||previous["masks"]!=adjustments["masks"]||previous["rotation"]!=adjustments["rotation"]){fitMask=nullptr;detailMask=nullptr;}
+        if(selectedMask!=previousMask||previous["masks"]!=adjustments["masks"]||previous["rotation"]!=adjustments["rotation"]||previous.value("fineRotation",Json())!=adjustments.value("fineRotation",Json())){fitMask=nullptr;detailMask=nullptr;}
         started=std::chrono::steady_clock::now();
         auto *target=processor->beginUpdateParams();*target=before?baseline:params;
         int flags=ae::FIRST;
@@ -337,7 +347,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             if(previous["temperature"]!=adjustments["temperature"] || previous["tint"]!=adjustments["tint"] || previous.value("wbMultipliers",Json())!=adjustments.value("wbMultipliers",Json()))flags|=ae::WHITEBALANCE;
             if(previous["exposure"]!=adjustments["exposure"])flags|=ae::HDR;
             if(previous["contrast"]!=adjustments["contrast"] || previous["curve"]!=adjustments["curve"] || previous["saturation"]!=adjustments["saturation"] || previous["vibrance"]!=adjustments["vibrance"])flags|=ae::RGBCURVE;
-            if(previous["masks"]!=adjustments["masks"] || previous["rotation"]!=adjustments["rotation"] || previous["crop"]!=adjustments["crop"])flags|=ae::ALLNORAW;
+            if(previous["masks"]!=adjustments["masks"] || previous["rotation"]!=adjustments["rotation"]||previous.value("fineRotation",Json())!=adjustments.value("fineRotation",Json()) || previous["crop"]!=adjustments["crop"])flags|=ae::ALLNORAW;
             if(previous.value("spots",Json())!=adjustments.value("spots",Json()))flags|=ae::SPOTADJUST;
             for(const auto *key:{"highlights","shadows","whites","blacks","sharpening","sharpenRadius","luminanceNoise","colorNoise","dehaze","texture","clarity","vignette","grain","lensCorrections","redCurve","greenCurve","blueCurve","hsl","parametricCurve","wbMultipliers","colorProfile","blackWhite","colorGrading"})if(previous.value(key,Json())!=adjustments.value(key,Json()))flags|=ae::ALLNORAW;
         }
@@ -349,7 +359,124 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         showingBefore=before;initialized=true;
         const auto optics=lensStatus();maskFailure=false;
         processor->endUpdateParams(flags);
-        return {{"artProfile",profileText(params)},{"lensStatus",optics}};
+        return {{"artProfile",profileText(params)},{"lensStatus",optics},
+            {"geometry",{{"rotation",params.coarse.rotate},{"angle",params.rotate.enabled?params.rotate.degree:0}}}};
+    }
+    Json coordinates(const Json &request){
+        if(!processor||!initial)throw std::runtime_error("No image is open");
+        if(request.at("sessionId")!=id||!request.at("revision").is_number_integer()||request.at("revision")!=revision)
+            throw std::runtime_error("Stale coordinate request");
+        const auto from=request.at("from").get<std::string>(),to=request.at("to").get<std::string>();
+        const auto validSpace=[](const std::string &space){return space=="display"||space=="reference"||space=="source";};
+        if(!validSpace(from)||!validSpace(to))throw std::runtime_error("Invalid coordinate space");
+        const auto &points=request.at("points");
+        if(!points.is_array()||points.empty()||points.size()>4096)throw std::runtime_error("Expected 1-4096 coordinate points");
+        for(const auto &point:points)for(const char *key:{"x","y"})
+            if(!point.is_object()||!point.contains(key)||!point.at(key).is_number()||
+               !std::isfinite(point.at(key).get<double>())||std::abs(point.at(key).get<double>())>1e7)
+                throw std::runtime_error("Invalid coordinate point");
+        const auto &geometry=showingBefore?baseline:params;
+        const double angle=geometry.rotate.enabled?geometry.rotate.degree:0;
+        const double reference=request.contains("referenceAngle")?request.at("referenceAngle").get<double>():
+            geometry.rotate.captrawMaskCoordinates?geometry.rotate.captrawMaskReferenceDegree:angle;
+        if(!std::isfinite(reference)||std::abs(reference)>45)throw std::runtime_error("Invalid reference angle");
+        const int width=processor->getFullWidth(),height=processor->getFullHeight();
+        const auto map=[&](const std::string &space)->ae::GeometryMap *{
+            if(space=="source")return nullptr;
+            if(space=="reference"&&reference!=angle){
+                if(!referenceCoordinates||coordinateReferenceAngle!=reference){
+                    auto p=geometry;p.rotate.degree=reference;p.rotate.enabled=reference!=0;
+                    referenceCoordinates=std::make_unique<ae::GeometryMap>(p,width,height,initial->getMetaData(),initial->getImageSource()->getRotateDegree());
+                    coordinateReferenceAngle=reference;
+                }
+                return referenceCoordinates.get();
+            }
+            if(!displayCoordinates)displayCoordinates=std::make_unique<ae::GeometryMap>(geometry,width,height,initial->getMetaData(),initial->getImageSource()->getRotateDegree());
+            return displayCoordinates.get();
+        };
+        auto *input=from==to?nullptr:map(from),*output=from==to?nullptr:map(to);
+        Json result=Json::array();
+        for(const auto &point:points){
+            ae::Coord2D value(point.at("x").get<double>(),point.at("y").get<double>());
+            bool valid=true;
+            if(input!=output){if(input)value=input->toSource(value);if(output){ae::Coord2D converted;valid=output->toDisplay(value,converted);if(valid)value=converted;}}
+            if(valid&&std::isfinite(value.x)&&std::isfinite(value.y))result.push_back({{"x",value.x},{"y",value.y}});
+            else result.push_back(nullptr);
+        }
+        return {{"sessionId",id},{"revision",revision},{"width",width},{"height",height},{"referenceAngle",reference},{"points",result}};
+    }
+    Json straighten(const Json &request){
+        if(!processor||!initial)throw std::runtime_error("请先打开照片，再画线拉直。");
+        if(!request.contains("sessionId")||request.at("sessionId")!=id||!request.contains("revision")||
+           !request.at("revision").is_number_integer()||request.at("revision")!=revision)
+            throw std::runtime_error("照片或调整已变化，请在当前照片上重新画线。");
+        if(showingBefore)throw std::runtime_error("请退出原图对比后再画线拉直。");
+        const int width=processor->getFullWidth(),height=processor->getFullHeight();
+        const auto point=[&](const char *key){
+            if(!request.contains(key)||!request.at(key).is_object())throw std::runtime_error("拉直端点无效，请在照片内重新画线。");
+            const auto &p=request.at(key);
+            for(const char *axis:{"x","y"})if(!p.contains(axis)||!p.at(axis).is_number()||!std::isfinite(p.at(axis).get<double>()))
+                throw std::runtime_error("拉直端点无效，请在照片内重新画线。");
+            ae::Coord2D q(p.at("x").get<double>(),p.at("y").get<double>());
+            if(q.x<-.5||q.y<-.5||q.x>width-.5||q.y>height-.5)throw std::runtime_error("拉直端点超出照片，请在照片内重新画线。");
+            return q;
+        };
+        auto start=point("start"),end=point("end");
+        if(std::hypot(end.x-start.x,end.y-start.y)<=1e-6)throw std::runtime_error("拉直线太短，请画一条更长的参考线。");
+        const bool horizontal=std::abs(end.x-start.x)>=std::abs(end.y-start.y);
+        // Canonical ordering makes both stroke directions follow identical arithmetic.
+        if(start.x>end.x||(start.x==end.x&&start.y>end.y))std::swap(start,end);
+        const auto *metadata=initial->getMetaData();
+        const int rawRotation=initial->getImageSource()->getRotateDegree();
+        ae::GeometryMap current(params,width,height,metadata,rawRotation);
+        const auto first=current.toSource(start),second=current.toSource(end);
+        const double sourceLength=std::hypot(second.x-first.x,second.y-first.y);
+        if(!std::isfinite(sourceLength)||sourceLength<=1e-6)throw std::runtime_error("参考线无法映射到原图，请换一条更长的参考线。");
+        const double previous=params.rotate.enabled?params.rotate.degree:0;
+        const char *failure="当前镜头或透视设置下，所选方向在 ±45° 内无法可靠拉直。请换一条参考线，或先调整透视后重试。";
+        // Each map inversion is itself bounded. Cap map construction as well, including
+        // refinement and validation after rounding; never clamp a missing root.
+        int evaluations=0;
+        const auto evaluate=[&](double angle,double &value){
+            if(++evaluations>192)throw std::runtime_error(failure);
+            auto candidate=params;candidate.rotate.enabled=angle!=0;candidate.rotate.degree=angle;
+            ae::GeometryMap map(candidate,width,height,metadata,rawRotation);
+            ae::Coord2D a,b;
+            if(!map.toDisplay(first,a)||!map.toDisplay(second,b))return false;
+            const double dx=b.x-a.x,dy=b.y-a.y,length=std::hypot(dx,dy);
+            if(!std::isfinite(length)||length<=1e-6)return false;
+            value=(horizontal?dy:dx)/length;
+            return std::isfinite(value);
+        };
+        struct Sample {double angle,value;bool valid;};
+        std::vector<Sample> samples;
+        for(int i=0;i<=36;++i){double angle=-45+i*2.5,value=0;bool valid=evaluate(angle,value);samples.push_back({angle,value,valid});}
+        double value=0;bool valid=evaluate(previous,value);samples.push_back({previous,value,valid});
+        std::sort(samples.begin(),samples.end(),[](const Sample &a,const Sample &b){return a.angle<b.angle;});
+        std::vector<double> roots;
+        for(const auto &s:samples)if(s.valid&&std::abs(s.value)<1e-7)roots.push_back(s.angle);
+        for(size_t i=1;i<samples.size();++i){
+            auto left=samples[i-1],right=samples[i];
+            if(!left.valid||!right.valid||left.value*right.value>=0)continue;
+            bool converged=true;
+            for(int step=0;step<18&&right.angle-left.angle>1e-5;++step){
+                const double middle=(left.angle+right.angle)/2;double residual=0;
+                if(!evaluate(middle,residual)){converged=false;break;}
+                if(std::abs(residual)<1e-7){left.angle=right.angle=middle;break;}
+                if(left.value*residual<=0)right={middle,residual,true};else left={middle,residual,true};
+            }
+            if(converged)roots.push_back((left.angle+right.angle)/2);
+        }
+        std::sort(roots.begin(),roots.end(),[&](double a,double b){
+            const double da=std::abs(a-previous),db=std::abs(b-previous);return da==db?a<b:da<db;
+        });
+        for(const double root:roots){
+            const double angle=std::round(root*100)/100;double residual=0;
+            if(angle< -45||angle>45||!evaluate(angle,residual))continue;
+            const double degrees=std::asin(std::min(1.,std::abs(residual)))*180/std::acos(-1.);
+            if(degrees<=.02)return {{"angle",angle==0?0:angle},{"axis",horizontal?"horizontal":"vertical"},{"previousAngle",previous},{"residualDegrees",degrees}};
+        }
+        throw std::runtime_error(failure);
     }
     Json wbResult(const ae::ColorTemp &wb,const std::string &mode,const Json &exactCamera=Json(),const pp::ColorManagementParams *profile=nullptr){
         Json mult=exactCamera;
@@ -523,7 +650,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         auto *job=loaded?ae::ProcessingJob::create(loaded.get(),p,false):ae::ProcessingJob::create(input,isRaw(input),p);
         auto *image=ae::processImage(job,err,this);
         if(!image)throw std::runtime_error("Export processing failed ("+std::to_string(err)+")");
-        if(maskFailure){delete image;throw std::runtime_error("蒙版文件在处理期间不可用，未写入导出文件。请恢复文件后重试。");}
+        if(maskFailure){delete image;throw std::runtime_error("蒙版处理失败，未写入导出文件。请检查设置或资产后重试。");}
         const int width=image->getWidth(),height=image->getHeight();
         err=format=="tiff"?image->saveAsTIFF(output,16,false,false):image->saveAsJPEG(output,95,3);
         delete image;
@@ -590,7 +717,9 @@ Json Engine::call(const std::string &method,const Json &p){
 #endif
     }
     if(method=="validate"){
-        pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));applyAdjustments(params,p.at("adjustments"),1000,1000);return {{"colorProfile",inputProfileSettings(params.icm)},{"blackWhite",blackWhiteSettings(params)},{"colorGrading",colorGradingSettings(params)}};
+        pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
+        auto a=p.at("adjustments");a["masks"]=referencedMasks(a,params);
+        applyAdjustments(params,a,1000,1000);return {{"colorProfile",inputProfileSettings(params.icm)},{"blackWhite",blackWhiteSettings(params)},{"colorGrading",colorGradingSettings(params)},{"fineRotation",params.rotate.enabled?params.rotate.degree:0},{"masks",a["masks"]}};
     }
     if(method=="parametricCurve"){
         ae::DiagonalCurve curve(parametricCurve(p));std::vector<double> samples;
@@ -605,6 +734,8 @@ Json Engine::call(const std::string &method,const Json &p){
     if(method=="update")return impl->update(p);
     if(method=="before")return impl->update(p,true);
     if(method=="whiteBalance")return impl->whiteBalance(p);
+    if(method=="coordinates")return impl->coordinates(p);
+    if(method=="straighten")return impl->straighten(p);
     if(method=="sampleLuminance")return impl->sampleLuminance(p);
     if(method=="sampleColor")return impl->sampleLuminance(p,true);
     if(method=="viewport")return impl->viewport(p);

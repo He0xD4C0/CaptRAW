@@ -37,7 +37,7 @@ test('export options validate input types and compute output dimensions',()=>{
 });
 
 test('preset and synchronization contracts select fields and isolate snapshots',()=>{
- const source=structuredClone(presetValidationBase);source.exposure=1.25;source.saturation=22;
+ const source=structuredClone(presetValidationBase);source.exposure=1.25;source.saturation=22;source.fineRotation=23;
  const preset=capturePreset({name:' 光线 ',group:' 测试 ',groups:['light'],adjustments:source});
  validatePreset(preset);assert.equal(preset.name,'光线');assert.equal(preset.engineVersion,ENGINE_VERSION);
  assert.equal(preset.adjustments.exposure,1.25);assert(!Object.hasOwn(preset.adjustments,'saturation'));
@@ -50,6 +50,13 @@ test('preset and synchronization contracts select fields and isolate snapshots',
  assert.equal(synced.exposure,4);assert.equal(synced.saturation,-11);assert.deepEqual(target,original);
  synced.curve[0].y=.2;assert.equal(target.adjustments.curve[0].y,0);
  assert(SYNC_GROUPS.some(group=>group.id==='masks'));
+ const cropPreset=capturePreset({name:'角度',group:'测试',groups:['crop'],adjustments:source});
+ validatePreset(cropPreset);assert.equal(cropPreset.adjustments.fineRotation,23);
+ assert.equal(synchronizedAdjustments(from,target,['crop']).fineRotation,23);
+ target.adjustments.fineRotation=-17;
+ assert.equal(synchronizedAdjustments(from,target,['light']).fineRotation,-17);
+ const partial={...from,adjustments:{...target.adjustments,crop:{x:0,y:0,width:.5,height:.5}}};
+ assert.equal(synchronizedAdjustments(partial,target,['crop']).fineRotation,-17);
  assert.throws(()=>synchronizedAdjustments(from,target,['unknown']));
 });
 
@@ -113,4 +120,20 @@ test('NativeEngine public entry performs real JSON-line RPC with a Node fixture'
  try{await engine.ready;assert(engine.alive);assert.deepEqual(await engine.call('echo',{value:42}),{method:'echo',params:{value:42}});}
  finally{engine.terminate();await closed;}
  assert.equal(engine.alive,false);await assert.rejects(engine.call('echo'),/未运行/);
+});
+
+test('synchronization cancellation during source-reference validation returns null',{timeout:10000},async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'captraw-sync-reference-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const marker=join(directory,'validating'),script=join(directory,'protocol.mjs');
+ await writeFile(script,`import {createInterface} from 'node:readline';import {writeFileSync} from 'node:fs';
+console.log(JSON.stringify({event:'ready'}));
+createInterface({input:process.stdin}).on('line',line=>{const {method}=JSON.parse(line);if(method==='validate')writeFileSync(${JSON.stringify(marker)},'started');});
+`);
+ const sync=new Synchronizer(process.execPath,script,join(directory,'cache'),()=>{});t.after(()=>sync.cancel());
+ const adjustments=structuredClone(presetValidationBase),source={image:{path:'/source.nef'},profile:'',adjustments:{...adjustments,masks:[{id:'leaf',type:'radial'}]}},target={image:{path:'/target.nef'},profile:'',adjustments};
+ const pending=sync.run({source,targets:[target],groups:['masks']});pending.catch(()=>{});
+ const deadline=Date.now()+5000;let started=false;
+ while(Date.now()<deadline){if(await readFile(marker,'utf8').catch(()=>null)==='started'){started=true;break;}await new Promise(resolve=>setTimeout(resolve,20));}
+ assert(started,'Worker must have entered source-reference validation before cancellation');
+ sync.cancel();assert.equal(await pending,null);assert.equal(sync.running,false);
 });

@@ -1,18 +1,18 @@
 import {useEffect,useRef,useState} from 'react';
-import type {MaskGeometry,ObjectCandidateResult,ObjectPrompt,Point,ObjectBox} from '@captraw/contracts';
+import type {ObjectMaskResult,ObjectCandidateResult,ObjectPrompt,Point,ObjectBox} from '@captraw/contracts';
 import type {DocumentState} from './useWorkbench';
-export function useObjectSelection(prepare:()=>Promise<{doc:DocumentState;profile:string}|undefined>,commit:(raster:NonNullable<MaskGeometry['raster']>)=>void){
+export function useObjectSelection(prepare:()=>Promise<{doc:DocumentState;profile:string}|undefined>,commit:(mask:ObjectMaskResult)=>void){
  const [active,setActive]=useState(false),[pending,setPending]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
  const [prompts,setPrompts]=useState<ObjectPrompt[]>([]),[result,setResult]=useState<ObjectCandidateResult>(),[selected,setSelected]=useState(0);
  const [mode,setMode]=useState<'point'|'box'>('point'),[box,setBox]=useState<ObjectBox>(),[ready,setReady]=useState(false);
  const history=useRef<{prompts:ObjectPrompt[];box?:ObjectBox}[]>([]),latest=useRef<DocumentState|undefined>(undefined);
- const epoch=useRef(0),request=useRef(0),id=useRef<string|undefined>(undefined),snapshot=useRef<{session:string;adjustments:string}|undefined>(undefined);
+ const epoch=useRef(0),request=useRef(0),id=useRef<string|undefined>(undefined),snapshot=useRef<{session:string;adjustments:string;profileId:number}|undefined>(undefined);
  const cancel=()=>{++epoch.current;++request.current;const current=id.current;id.current=undefined;snapshot.current=undefined;setActive(false);setPending(false);setReady(false);setBox(undefined);history.current=[];setResult(undefined);setPrompts([]);void window.captraw.cancelObject(current).catch(()=>{});};
  useEffect(()=>window.captraw.onEvent(e=>{if(e.event==='object-progress'&&e.id===id.current)setMessage(e.message);}),[]);
  async function start(){
   const token=++epoch.current;setActive(true);setPending(true);setReady(false);setBox(undefined);history.current=[];setMode('point');setResult(undefined);setPrompts([]);setError('');setMessage('正在准备完整照片…');
-  const current=latest.current;snapshot.current=current?{session:current.image.id,adjustments:JSON.stringify(current.adjustments)}:undefined;
-  try{const prepared=await prepare();if(token!==epoch.current)return;if(!prepared||latest.current?.image.id!==prepared.doc.image.id||JSON.stringify(latest.current.adjustments)!==JSON.stringify(prepared.doc.adjustments))throw new Error('照片或编辑已变化，请重新选择对象。');const {doc,profile}=prepared;
+  const current=latest.current;snapshot.current=current?{session:current.image.id,adjustments:JSON.stringify(current.adjustments),profileId:current.profileId}:undefined;
+  try{const prepared=await prepare();if(token!==epoch.current)return;if(!prepared||latest.current?.image.id!==prepared.doc.image.id||latest.current.profileId!==prepared.doc.profileId||JSON.stringify(latest.current.adjustments)!==JSON.stringify(prepared.doc.adjustments))throw new Error('照片或编辑已变化，请重新选择对象。');const {doc,profile}=prepared;
    const input=await window.captraw.beginObject(doc.image.id,doc.adjustments,profile);
    if(token!==epoch.current){await window.captraw.cancelObject(input.id);return;}id.current=input.id;setReady(true);setMessage('点击对象添加选中点，按住 Option 点击排除。');
   }catch(e){if(token===epoch.current)setError(String(e));}finally{if(token===epoch.current)setPending(false);}
@@ -33,7 +33,7 @@ export function useObjectSelection(prepare:()=>Promise<{doc:DocumentState;profil
   try{const raster=await window.captraw.commitObject(result.id,result.revision,selected);if(token!==epoch.current)return;id.current=undefined;snapshot.current=undefined;setActive(false);setResult(undefined);setPrompts([]);commit(raster);}
   catch(e){if(token===epoch.current)setError(String(e));}finally{if(token===epoch.current)setPending(false);}
  }
- return {mode,setMode,box,ready,pickBox,canUndo:history.current.length>0,active,pending,message,error,prompts,result,selected,start,cancel,pick,apply,select:setSelected,undo,url:result?.candidates.find(c=>c.index===selected)?.url,check:(doc?:DocumentState)=>{latest.current=doc;const s=snapshot.current;if(active&&!doc){cancel();return;}if(s&&(!doc||doc.image.id!==s.session||JSON.stringify(doc.adjustments)!==s.adjustments))cancel();}};
+ return {mode,setMode,box,ready,pickBox,canUndo:history.current.length>0,active,pending,message,error,prompts,result,selected,start,cancel,pick,apply,select:setSelected,undo,url:result?.candidates.find(c=>c.index===selected)?.url,check:(doc?:DocumentState)=>{latest.current=doc;const s=snapshot.current;if(active&&!doc){cancel();return;}if(s&&(!doc||doc.image.id!==s.session||doc.profileId!==s.profileId||JSON.stringify(doc.adjustments)!==s.adjustments))cancel();}};
 }
 export function ObjectSelectionPanel({selection:s}:{selection:ReturnType<typeof useObjectSelection>}){
  return <section className="panel-section object-selection" aria-label="对象选择"><div className="section-heading"><span>选择对象</span><button onClick={s.cancel}>取消</button></div>

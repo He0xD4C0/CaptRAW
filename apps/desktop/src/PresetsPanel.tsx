@@ -16,7 +16,7 @@ export function PresetsPanel({workbench:w}:{workbench:Workbench}){
  async function submit(){if(!form)return;await run(async()=>{
   if(form.mode==='delete')await window.captraw.deletePreset(form.item!.id);
   else if(form.mode==='rename')await window.captraw.renamePreset(form.item!.id,name,group);
-  else{const prepared=await w.flush();if(!prepared)throw new Error('请先打开照片。');const input={name,group,groups,adjustments:prepared.doc.adjustments};if(form.mode==='update')await window.captraw.updatePreset(form.item!.id,input);else await window.captraw.createPreset(input);}
+  else{const prepared=await w.flush();if(!prepared)throw new Error('请先打开照片。');const input={name,group,groups,adjustments:prepared.doc.adjustments,artProfile:prepared.profile};if(form.mode==='update')await window.captraw.updatePreset(form.item!.id,input);else await window.captraw.createPreset(input);}
   setForm(undefined);
  });}
  const filtered=items.filter(p=>(p.name+' '+p.group).toLocaleLowerCase().includes(search.toLocaleLowerCase())),disabled=busy||w.presetBusy;

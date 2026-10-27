@@ -1,4 +1,4 @@
-import {ENGINE_VERSION,type EditDocument,type BatchSaveRequest,type BatchSaveResult} from '@captraw/contracts';
+import {ENGINE_VERSION,READABLE_ENGINE_VERSIONS,type EditDocument,type BatchSaveRequest,type BatchSaveResult} from '@captraw/contracts';
 import {createHash,randomUUID} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {stat,lstat,rm} from 'node:fs/promises';
@@ -11,7 +11,7 @@ export class Documents {
  async read(path:string){
   const result=await this.xmp.read(path);
   const engineVersion=readExtension(result.properties,'EngineVersion')||'';
-  if(engineVersion&&engineVersion!==ENGINE_VERSION)throw new Error('XMP 使用了不支持的 ART 显影版本。');
+  if(engineVersion&&!READABLE_ENGINE_VERSIONS.has(engineVersion))throw new Error('XMP 使用了不支持的 ART 显影版本。');
   const {adjustments,warnings}=decodeAdjustments(result.properties);
   const source=readExtension(result.properties,'Source');
   if(source&&(!source.path||!Number.isSafeInteger(source.size)||!/^[a-f0-9]{64}$/.test(source.sha256)))throw new Error('XMP 原片关联无效。');

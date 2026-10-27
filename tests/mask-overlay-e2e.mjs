@@ -2,7 +2,7 @@ import {expect} from '@playwright/test';
 import {electron} from './electron-background.mjs';
 import {resolve} from 'node:path';
 import {mkdirSync,writeFileSync} from 'node:fs';
-const out=resolve('artifacts/mask-overlay-gui');mkdirSync(out,{recursive:true});
+const out=resolve(process.env.CAPTRAW_MASK_OVERLAY_OUT||'artifacts/mask-overlay-gui');mkdirSync(out,{recursive:true});
 const executablePath=process.env.CAPTRAW_APP,app=await electron.launch({executablePath,args:executablePath?[]:[process.cwd()]});
 const page=await app.firstWindow();page.setDefaultTimeout(30000);const errors=[];page.on('pageerror',e=>errors.push(String(e)));
 async function settle(action){const n=await page.evaluate(()=>window.__frames.length);await action();await page.waitForFunction(n=>window.__frames.length>n,n);await page.locator('.rendering').waitFor({state:'hidden'});}

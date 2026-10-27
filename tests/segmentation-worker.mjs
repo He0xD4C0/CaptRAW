@@ -1,6 +1,5 @@
 // Native SAM2 and desktop-side lifecycle tests. No Electron or GUI is launched.
 import assert from 'node:assert/strict';
-import {Segmenter} from '@captraw/desktop-core/segmentation';
 import {resolve,join} from 'node:path';
 import {mkdirSync,readFileSync,writeFileSync,copyFileSync,existsSync,readdirSync,chmodSync,linkSync,rmSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -13,7 +12,8 @@ const binary=join(work,'captraw-segment'),policy=resolve('tests/offline-native.s
 process.env.CAPTRAW_SANDBOX_PROFILE=policy;
 const wrapper=join(out,'offline-worker.sh'),quote=s=>"'"+s.replaceAll("'","'\\''")+"'";
 writeFileSync(wrapper,`#!/bin/sh\nexec /usr/bin/sandbox-exec -f ${quote(policy)} ${quote(binary)} "$@"\n`);chmodSync(wrapper,0o755);
-let revision=0;const cases=[],checks=[],nativeRows=[],hostRows=[];
+let revision=0;const cases=[],checks=[],nativeRows=[],rotationRows=[],hostRows=[];
+const invalidRotations=[-90,360,45,90.5,NaN,Infinity,-Infinity,null,'90',true,[],{}];
 for(const row of json('artifacts/segmentation/tiny-report.json').cases){
  const path=resolve('artifacts/segmentation-input/inputs',row.input.split('/').at(-1).replace('.jpg','-reference.png'));
  cases.push({name:row.case,path,...json('artifacts/segmentation-input/'+row.case+'-prompts.json')});
@@ -30,25 +30,80 @@ for(const model of ['tiny','small']){
   assert.equal((await engine.call('info')).cachedImages,0);let previous='';
   for(const c of cases){
    const p=request(c),result=await engine.call('predict',p);assert.equal(result.cached,p.imageSha256===previous);previous=p.imageSha256;
+   assert.equal(result.maskWidth,p.width);assert.equal(result.maskHeight,p.height);
    nativeRows.push({model,name:c.name,request:p,result:archive(result,model,c.name)});
    const repeated=await engine.call('predict',{...p,revision:++revision});assert(repeated.cached);assert.equal(repeated.encodeMs,0);
    assert.deepEqual(repeated.candidates.map(x=>x.sha256),result.candidates.map(x=>x.sha256));
+   for(const outputRotation of [0,90,180,270]){
+    const rotatedRequest={...p,revision:++revision,outputRotation},rotated=await engine.call('predict',rotatedRequest),swapped=outputRotation===90||outputRotation===270;
+    assert(rotated.cached);assert.equal(rotated.encodeMs,0);
+    for(const key of ['sessionId','imageSha256','width','height'])assert.equal(rotated[key],p[key]);
+    assert.equal(rotated.revision,rotatedRequest.revision);assert.equal(rotated.selected,result.selected);
+    assert.equal(rotated.maskWidth,swapped?p.height:p.width);assert.equal(rotated.maskHeight,swapped?p.width:p.height);
+    assert.deepEqual(rotated.candidates.map(({index,score,pixels})=>({index,score,pixels})),result.candidates.map(({index,score,pixels})=>({index,score,pixels})));
+    if(outputRotation===0)assert.deepEqual(rotated.candidates.map(x=>x.sha256),result.candidates.map(x=>x.sha256));
+    rotationRows.push({model,name:c.name,request:rotatedRequest,result:archive(rotated,model,c.name+'-rotation-'+outputRotation)});
+   }
   }
   check(model+': eight cases, three candidates, repeat cache exact');
   const p=request(),first=await engine.call('predict',p),files=first.candidates.map(c=>[c.file,hash(c.file)]);
   for(const bad of [{imageSha256:'0'.repeat(64)},{width:p.width+1},{points:[[p.width+1,0]]},{labels:[1.5]},{points:[],labels:[]},{points:[[1,1]],labels:[2]},{points:[[2,2],[1,1]],labels:[2,3]},{revision:0}])await assert.rejects(engine.call('predict',{...p,...bad}));
+  for(const outputRotation of invalidRotations)await assert.rejects(engine.call('predict',{...p,outputRotation}),/Invalid segmentation output rotation/);
   for(const [file,sha]of files)assert.equal(hash(file),sha);
   assert((await engine.call('predict',{...p,revision:++revision})).cached);
   await engine.call('close');assert.equal((await engine.call('info')).cachedImages,0);assert(!(await engine.call('predict',{...p,revision:++revision})).cached);
   check(model+': invalid requests preserve cache and output; close invalidates features');
  }finally{await engine.stop();}
 }
+// Independent pixel oracle: NumPy's positive quarter turns undo clockwise input rotation.
+const rotationPixels=JSON.parse(execFileSync(join(work,'venv/bin/python'),['-c',`
+import sys, json, hashlib
+import numpy as np
+from PIL import Image
+data = json.load(sys.stdin)
+originals = {(r['model'], r['name']): r for r in data['nativeRows']}
+rows = []
+assert any(r['request']['width'] != r['request']['height'] for r in data['rotationRows'])
+for row in data['rotationRows']:
+    p, result = row['request'], row['result']
+    original = originals[(row['model'], row['name'])]
+    assert p['points'] == original['request']['points'] and p['labels'] == original['request']['labels']
+    for base, candidate in zip(original['result']['candidates'], result['candidates']):
+        with Image.open(base['file']) as image:
+            expected = np.rot90(np.asarray(image), p['outputRotation'] // 90)
+        with Image.open(candidate['file']) as image:
+            assert image.mode == 'L' and image.size == (result['maskWidth'], result['maskHeight'])
+            actual = np.asarray(image)
+        assert actual.shape == expected.shape
+        changed = int(np.count_nonzero(actual != expected))
+        assert changed == 0, (row['model'], row['name'], p['outputRotation'], candidate['index'], changed)
+        assert int(np.count_nonzero(actual)) == candidate['pixels']
+        with open(candidate['file'], 'rb') as file:
+            assert hashlib.sha256(file.read()).hexdigest() == candidate['sha256']
+        rows.append({'model': row['model'], 'case': row['name'], 'rotation': p['outputRotation'], 'candidate': candidate['index'], 'changedPixels': changed})
+print(json.dumps(rows))
+`],{input:JSON.stringify({nativeRows,rotationRows}),encoding:'utf8'}));
+assert.equal(rotationPixels.length,nativeRows.length*4*3);
+check('both real models: four rotations match np.rot90 exactly; dimensions, counts and hashes verified; default equals explicit zero bytes');
+if(process.argv.includes('--native-only')){
+ writeFileSync(join(out,'native-report.json'),JSON.stringify({offline:true,windowsLaunched:0,binarySHA256:hash(binary),checks,nativeRows,rotationRows,rotationPixels},null,2)+'\n');
+ console.log('PASS',checks.length,'direct native worker groups');process.exit(0);
+}
 let action=()=>{},stages=[];const cache=join(out,'host-cache');
+const {Segmenter}=await import('@captraw/desktop-core/segmentation');
 const service=new Segmenter(wrapper,join(work,'models/tiny'),cache,event=>{stages.push(event);action(event);});
 try{
+ for(const outputRotation of invalidRotations)await assert.rejects(service.request(request(cases[0],{outputRotation})),/旋转角度无效/);
+ assert.equal(service.processId,undefined);check('wrapper rejects invalid rotations before starting a worker');
  const input=request(),snapshot=structuredClone(input),pending=service.request(input);input.path='/missing';input.points[0][0]=0;
  const first=await pending;assert.equal(first.imageSha256,snapshot.imageSha256);assert.deepEqual(first.candidates.map(c=>c.sha256),nativeRows[0].result.candidates.map(c=>c.sha256));
  const pid=service.processId;assert(pid);const timings=[],residentBytes=[];
+ for(const outputRotation of [0,90,180,270]){
+  const r=await service.request(request(cases[0],{outputRotation})),reference=rotationRows.find(row=>row.model==='tiny'&&row.name===cases[0].name&&row.request.outputRotation===outputRotation).result;
+  assert.equal(r.maskWidth,reference.maskWidth);assert.equal(r.maskHeight,reference.maskHeight);
+  assert.deepEqual(r.candidates.map(c=>c.sha256),reference.candidates.map(c=>c.sha256));
+ }
+ check('wrapper accepts canonical dimensions and exact native hashes for all four rotations');
  for(let i=0;i<30;++i){const start=performance.now(),r=await service.request(request());timings.push(performance.now()-start);assert(r.cached);assert.equal(service.processId,pid);assert.equal(readdirSync(join(cache,readdirSync(cache)[0])).filter(p=>p.endsWith('.png')).length,3);if(i%5===0)residentBytes.push(Number(execFileSync('/bin/ps',['-o','rss=','-p',String(pid)],{encoding:'utf8'}).trim())*1024);}
  assert(first.candidates.every(c=>!existsSync(c.file)));hostRows.push({warmPromptCount:timings.length,wallMs:timings,p95Ms:[...timings].sort((a,b)=>a-b)[Math.ceil(.95*timings.length)-1],residentBytes});
  check('immutable request snapshot; resident worker; one retained candidate set; 30 warm prompts');
@@ -91,4 +146,4 @@ for(const [name,exe,models,pattern]of [['corrupt-model',wrapper,broken,/checksum
  assert.equal(readdirSync(join(out,name)).length,0);check(name+': actionable error, no hung shutdown');
 }
 rmSync(broken,{recursive:true});
-writeFileSync(join(out,'report.json'),JSON.stringify({offline:true,windowsLaunched:0,binarySHA256:hash(binary),checks,nativeRows,hostRows,stages},null,2)+'\n');console.log('PASS',checks.length,'worker and lifecycle groups');
+writeFileSync(join(out,'report.json'),JSON.stringify({offline:true,windowsLaunched:0,binarySHA256:hash(binary),checks,nativeRows,rotationRows,rotationPixels,hostRows,stages},null,2)+'\n');console.log('PASS',checks.length,'worker and lifecycle groups');

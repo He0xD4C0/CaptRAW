@@ -58,3 +58,8 @@
 .comparison-labels{position:absolute;inset:0;pointer-events:none;display:grid;grid-template-columns:1fr 1fr}.comparison-labels span{padding:9px 12px;color:#eee;font-size:11px;text-shadow:0 1px 3px #000; border-right:1px solid #ddd8}.comparison-labels span:last-child{border:0}.comparison-labels.horizontal{grid-template-columns:1fr;grid-template-rows:1fr 1fr}.comparison-labels.horizontal span:first-child{border-right:0;border-bottom:1px solid #ddd8}.view-controls select{background:#454545;color:#ddd;border:1px solid #666;border-radius:3px;max-width:120px;font-size:11px;padding:3px}
 
 .before-state-label{position:absolute;top:9px;left:12px;pointer-events:none;color:#eee;font-size:11px;text-shadow:0 1px 3px #000}.view-controls button[aria-label="保存前状态"],.view-controls button[aria-label="交换前后设置"],.view-controls button[aria-label="还原打开时状态"]{flex-shrink:0;padding:5px}
+.mask-gesture-status{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);pointer-events:none;padding:5px 9px;background:#292929dd;border-radius:3px;color:#eee;font-size:11px}
+
+.crop-actions .control{width:180px;margin:0;flex-shrink:0}.crop-actions .control-label{margin-bottom:3px}
+
+.crop-actions button[aria-pressed=true]{background:#ffffff24;outline:1px solid #a2bddf}

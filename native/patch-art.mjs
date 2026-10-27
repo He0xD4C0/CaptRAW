@@ -172,25 +172,6 @@ ${s.slice(begin,end)}    return pLCPMap;
 `;
   return s.slice(0,start)+factory+s.slice(start,begin)+'    auto pLCPMap = getLensCorrection(oW, oH, metadata, rawRotationDeg);\n\n'+s.slice(end);
  });
- patch('improccoordinator.cc','// CaptRAW: invert the same lens stages used by the rendered preview.',s=>s.replace('        ipf.transCoord(fw, fh, points, red, green, blue);',`        // CaptRAW: invert the same lens stages used by the rendered preview.
-        const auto lens = ipf.getLensCorrection(
-            fw, fh, imgsrc->getMetaData(), imgsrc->getRotateDegree());
-        if (lens && params.lensProf.useCA && lens->isCACorrectionAvailable()) {
-            std::vector<Coord2D> channels[3];
-            for (int c = 0; c < 3; ++c) {
-                auto mapped = points;
-                for (auto &point : mapped) {
-                    lens->correctCA(point.x, point.y, 0, 0, c);
-                }
-                ipf.transCoord(fw, fh, mapped, red, green, blue, -1, lens.get());
-                channels[c] = c == 0 ? red : c == 1 ? green : blue;
-            }
-            red = std::move(channels[0]);
-            green = std::move(channels[1]);
-            blue = std::move(channels[2]);
-        } else {
-            ipf.transCoord(fw, fh, points, red, green, blue, -1, lens.get());
-        }`));
 }
 export function patchMaskGroups(upstream){
  const patch=(file,marker,edit)=>{const path=join(upstream,'src/engine',file),source=readFileSync(path,'utf8');if(source.includes(marker))return;const changed=edit(source);if(changed===source||!changed.includes(marker))throw new Error('ART mask patch anchor mismatch: '+file);writeFileSync(path,changed);};

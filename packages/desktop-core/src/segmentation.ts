@@ -3,10 +3,11 @@ import {join,resolve,relative,isAbsolute} from 'node:path';
 import {NativeEngine} from './engine.js';
 export interface SegmentationRequest {
   sessionId:string;revision:number;path:string;imageSha256:string;width:number;height:number;
-  points:[number,number][];labels:number[];
+  points:[number,number][];labels:number[];outputRotation?:number;
 }
 export interface SegmentationResult {
   sessionId:string;revision:number;imageSha256:string;modelId:string;width:number;height:number;
+  maskWidth:number;maskHeight:number;
   selected:number;candidates:{index:number;score:number;pixels:number;file:string;sha256:string}[];
   cached:boolean;inputMs:number;encodeMs:number;decodeMs:number;writeMs:number;elapsedMs:number;
 }
@@ -38,6 +39,7 @@ export class Segmenter {
   }
   request(supplied:SegmentationRequest):Promise<SegmentationResult>{
     if(this.disposed)return Promise.reject(new Error('对象选择服务已关闭。'));
+    if(supplied.outputRotation!==undefined&&(!Number.isInteger(supplied.outputRotation)||![0,90,180,270].includes(supplied.outputRotation)))return Promise.reject(new Error('对象选择输出旋转角度无效。'));
     if(!Number.isSafeInteger(supplied.revision)||supplied.revision<=this.lastRevision)return Promise.reject(new Error('对象选择版本必须递增。'));
     const request=structuredClone(supplied),generation=++this.generation;this.lastRevision=request.revision;
     const task=this.tail.catch(()=>{}).then(async()=>{
@@ -49,6 +51,8 @@ export class Segmenter {
       try{
         const result:SegmentationResult=await worker.rpc.call('predict',request);
         if(result.sessionId!==request.sessionId||result.revision!==request.revision||result.imageSha256!==request.imageSha256||result.width!==request.width||result.height!==request.height||result.candidates?.length!==3)throw new Error('对象选择返回了不匹配的结果。');
+        const swapped=request.outputRotation===90||request.outputRotation===270;
+        if(result.maskWidth!==(swapped?request.height:request.width)||result.maskHeight!==(swapped?request.width:request.height))throw new Error('对象选择返回了不匹配的蒙版尺寸。');
         for(const item of result.candidates){const path=relative(worker.cache,resolve(item.file));if(!path||path.startsWith('..')||isAbsolute(path)||!/^mask-\d+-[012]\.png$/.test(path))throw new Error('对象选择返回了无效的缓存文件。');}
         if(generation!==this.generation||this.disposed){await Promise.all(result.candidates.map(c=>rm(c.file,{force:true})));throw cancelled();}
         // Candidate files are borrowed until the next successful result or cancel.

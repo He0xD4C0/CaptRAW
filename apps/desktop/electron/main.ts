@@ -108,12 +108,14 @@ async function openImage(path: string) {
   let recipe:EditDocument|undefined;
   if(loaded){
     let adjustments={...image.adjustments,...loaded.adjustments};
+    if(loaded.adjustments.fineRotation===undefined)delete adjustments.fineRotation;
     if(!loaded.engineVersion&&(loaded.adjustments.temperature!==undefined||loaded.adjustments.tint!==undefined))adjustments={...adjustments,wbMode:'custom',wbMultipliers:null,wbApproximate:false};
     recipe={...loaded,source:loaded.source||{path,size:(await stat(path)).size,sha256:await hashFile(path)},adjustments};
     recipe=await restoreRecipeMasks(candidate,recipeFile,recipe,cache);
     const checked=await candidate.call('validate',{artProfile:recipe.artProfile,adjustments:recipe.adjustments});
     if(checked.colorProfile?.mode==='inherited'&&checked.colorProfile.reference!=='(none)')inputProfiles.assertCompatible(await candidate.call('inspectInputProfile',{path:checked.colorProfile.reference.replace(/^file:/,'')}),image.profileCamera||image.camera,/\.(nef|cr3|cr2|arw|raf|dng|orf|rw2|pef)$/i.test(path));
     for(const key of ['colorProfile','blackWhite','colorGrading'] as const)if(checked[key])recipe.adjustments[key]=checked[key];
+    recipe.adjustments.masks=checked.masks;recipe.adjustments.fineRotation=checked.fineRotation;
   }
   if(quitting)throw new Error('应用正在退出。');
   stopComparison();const previous=engine;engine=candidate;previous?.terminate();
@@ -139,8 +141,8 @@ function registerIPC() {
     try{
       await worker.call('open',{path:current.path,sessionId:current.id});
       if(worker!==comparisonEngine)return;
-      const {rotation,crop,lensCorrections,lensProfile}=p.settings.geometry;
-      await worker.call('update',{revision:p.revision,artProfile:p.settings.artProfile,adjustments:{...p.settings.adjustments,rotation,crop,lensCorrections,lensProfile}});
+      const {rotation,fineRotation,crop,lensCorrections,lensProfile}=p.settings.geometry;
+      await worker.call('update',{revision:p.revision,artProfile:p.settings.artProfile,adjustments:{...p.settings.adjustments,rotation,fineRotation,crop,lensCorrections,lensProfile}});
     }catch(error){if(worker===comparisonEngine){stopComparison();throw error;}}
   });
   ipcMain.handle('comparison:viewport',async(_,p)=>{requireSession(p.sessionId);const worker=comparisonEngine;if(worker)await worker.call('viewport',p);});
@@ -188,8 +190,10 @@ function registerIPC() {
     openingImage=true;
     try{await objects.cancel();return await openImage(path);}finally{openingImage=false;}
   });
-  ipcMain.handle('image:update', async (_, p) => { requireSession(p.sessionId);objects.invalidate(p.sessionId,p.adjustments); return native().call('update', p); });
+  ipcMain.handle('image:update', async (_, p) => { requireSession(p.sessionId);objects.invalidate(p.sessionId,p.adjustments,p.artProfile||''); return native().call('update', p); });
   ipcMain.handle('image:viewport', async (_, p) => { requireSession(p.sessionId); await native().call('viewport', p); });
+  ipcMain.handle('image:coordinates',async(_,p)=>{requireSession(p.sessionId);return native().call('coordinates',p);});
+  ipcMain.handle('image:straighten',async(_,p)=>{requireSession(p.sessionId);return native().call('straighten',p);});
   ipcMain.handle('image:color-sample',async(_,p)=>{requireSession(p.sessionId);return native().call('sampleColor',p);});
   ipcMain.handle('image:luminance-sample',async(_,p)=>{requireSession(p.sessionId);return native().call('sampleLuminance',p);});
   ipcMain.handle('image:white-balance',async(_,p)=>{requireSession(p.sessionId);return native().call('whiteBalance',p.request);});

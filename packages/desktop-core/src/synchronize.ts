@@ -14,17 +14,26 @@ export class Synchronizer {
  async run(request:SyncRequest):Promise<SyncResult[]|null>{
   if(this.active)throw new Error('已有同步任务正在运行。');
   if(!request?.source?.image?.path||!Array.isArray(request.targets)||!request.targets.length||new Set(request.targets.map(d=>d.image.path)).size!==request.targets.length)throw new Error('请选择要同步的照片。');
-  const targets=request.targets.map(doc=>{
-   if(doc.image.path===request.source.image.path)throw new Error('来源照片不能同时作为同步目标。');
-   return {...doc,adjustments:synchronizedAdjustments(request.source,doc,request.groups)};
-  }).filter((doc,i)=>JSON.stringify(doc.adjustments)!==JSON.stringify(request.targets[i].adjustments));
-  if(!targets.length)return [];
+  if(request.targets.some(doc=>doc.image.path===request.source.image.path))throw new Error('来源照片不能同时作为同步目标。');
+  let targets=request.targets.map(doc=>({...doc,adjustments:synchronizedAdjustments(request.source,doc,request.groups)}))
+   .filter((doc,i)=>JSON.stringify(doc.adjustments)!==JSON.stringify(request.targets[i].adjustments));
+  const bindMasks=request.groups.includes('masks')&&request.source.adjustments.masks.length>0;
+  if(!targets.length&&!bindMasks)return [];
   this.active=true;this.cancelled=false;const results:SyncResult[]=[];
   try{
    this.previews.clear();if(this.directory)await rm(this.directory,{recursive:true,force:true});
    this.directory=join(this.cache,`sync-${randomUUID()}`);await mkdir(this.directory,{recursive:true});
    if(this.cancelled)return null;
    const worker=new NativeEngine(this.binary,this.resources,join(this.directory,'engine'));this.worker=worker;
+   let source=request.source;
+   if(bindMasks){
+    let checked;try{checked=await worker.call('validate',{artProfile:source.profile,adjustments:source.adjustments});}
+    catch(error){if(this.cancelled)return null;throw error;}
+    if(this.cancelled)return null;
+    source={...source,adjustments:{...source.adjustments,masks:checked.masks}};
+   }
+   targets=request.targets.map(doc=>({...doc,adjustments:synchronizedAdjustments(source,doc,request.groups)}))
+    .filter((doc,i)=>JSON.stringify(doc.adjustments)!==JSON.stringify(request.targets[i].adjustments));
    for(const [i,target] of targets.entries()){
     this.progress(`正在同步 ${i+1}/${targets.length} · ${target.image.name}`);
     try{

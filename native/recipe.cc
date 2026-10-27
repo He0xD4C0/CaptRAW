@@ -29,6 +29,25 @@ static double num(const Json &j, const char *key, double def, double low, double
     if(!std::isfinite(v) || v<low || v>high) throw std::runtime_error(std::string("Invalid ")+key);
     return v;
 }
+Json referencedMasks(const Json &adjustments,const pp::ProcParams &params) {
+    auto masks=adjustments.at("masks");
+    const double reference=params.rotate.captrawMaskCoordinates?params.rotate.captrawMaskReferenceDegree:
+        (params.rotate.enabled?params.rotate.degree:0);
+    std::function<void(Json &,int)> bind=[&](Json &mask,int depth){
+        if(depth>8)throw std::runtime_error("Mask group nesting limit exceeded");
+        if(mask.contains("components")){
+            for(auto &child:mask.at("components"))bind(child,depth+1);
+        }else{
+            const auto type=mask.at("type").get<std::string>();
+            if(type=="brush"||type=="linear"||type=="radial"||type=="raster"){
+                if(!mask.contains("referenceAngle"))mask["referenceAngle"]=reference;
+                num(mask,"referenceAngle",0,-45,45);
+            }
+        }
+    };
+    for(auto &mask:masks)bind(mask,0);
+    return masks;
+}
 Json colorGradingSettings(const pp::ProcParams &p) {
     const auto &values=p.captrawGrading;Json result=Json::object();int i=0;
     for(const char *region:{"shadows","midtones","highlights","global"}){
@@ -316,6 +335,10 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
     int rotation=a.value("rotation",0);
     if(rotation!=0 && rotation!=90 && rotation!=180 && rotation!=270)throw std::runtime_error("Invalid rotation");
     p.coarse.rotate=rotation;
+    if(a.contains("fineRotation")){
+        const double angle=num(a,"fineRotation",0,-45,45);
+        if(angle!=(p.rotate.enabled?p.rotate.degree:0)){p.rotate.degree=angle;p.rotate.enabled=angle!=0;}
+    }
     const auto rotate=[&](double x,double y)->std::pair<double,double>{switch(rotation){case 90:return {1-y,x};case 180:return {1-x,1-y};case 270:return {y,1-x};default:return {x,y};}};
     if(rotation==90 || rotation==270)std::swap(width,height);
     if(a.contains("spots")){
@@ -365,6 +388,10 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
                 mask.components.push_back(component);
             }
             mask.enabled=!mask.components.empty();return mask;
+        }
+        if(m.contains("referenceAngle")){
+            mask.captrawReferenceAngle=num(m,"referenceAngle",0,-45,45);
+            mask.captrawReferenceAngleSet=true;
         }
         const double feather=num(m,"feather",30,0,100);
         std::string type=m.value("type",std::string("brush"));
@@ -496,5 +523,10 @@ void loadProfile(pp::ProcParams &p,const std::string &text) {
     if(text.empty())return;
     pp::KeyFile k;
     if(!k.load_from_data(text) || p.load(nullptr,k)!=0)throw std::runtime_error("Invalid ART profile");
+    if(p.rotate.captrawMaskCoordinates){
+        const double current=p.rotate.enabled?p.rotate.degree:0,reference=p.rotate.captrawMaskReferenceDegree;
+        if(!std::isfinite(current)||!std::isfinite(reference)||std::abs(current)>45||std::abs(reference)>45)
+            throw std::runtime_error("Invalid mask reference rotation");
+    }
 }
 }

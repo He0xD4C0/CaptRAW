@@ -1,5 +1,7 @@
 import type {ExportOptions} from '@captraw/contracts/export-options';
 import { useEffect, useRef, useState } from 'react';
+import type {MaskEditTransaction} from './useMaskGesture';
+import type {CanvasEditTransaction} from './geometry';
 import type {SyncGroup} from '@captraw/contracts/synchronize';
 import type { Adjustments, EngineEvent, ImageSession, JobStatus, LocalMask, MaskType, PreviewFrame, WhiteBalanceRequest, OutputColorSpace, Point, BatchSaveResult } from '@captraw/contracts';
 export interface EditingState {adjustments:Adjustments;profile:string;profileId:number}
@@ -27,19 +29,29 @@ export function useWorkbench() {
   const idRef = useRef(activeId); idRef.current = activeId;
   const editEpoch=useRef(0),profileEpoch=useRef(0);
   const revision = useRef(0), lastApplied = useRef(0), gesture = useRef<EditingState | undefined>(undefined);
+  const rendered=useRef<{id:string;revision:number;adjustments:Adjustments;profileId:number;maskId:string;luminance:boolean;colorSampling:boolean}|undefined>(undefined);
   const loading = useRef(false), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const canvasEdit=useRef<{sessionId:string;label:string}|undefined>(undefined),[canvasEditing,setCanvasEditing]=useState('');
   const active = documents.find(d => d.image.id === activeId);
   const updateDocument = (id: string, change: (d: DocumentState) => DocumentState) => setDocuments(old => old.map(d => d.image.id === id ? change(d) : d));
-  useEffect(()=>{void window.captraw.setDirty(documents.filter(d=>d.dirty).map(d=>d.image.path));},[documents]);
+  useEffect(()=>{void window.captraw.setDirty(documents.filter(d=>d.dirty||d.image.id===canvasEditing).map(d=>d.image.path));},[documents,canvasEditing]);
+  function canvasInProgress(){
+    if(!canvasEdit.current)return false;
+    setError(`${canvasEdit.current.label}尚未完成，请松开鼠标并等待处理完成后重试。Esc 可取消当前操作。`);return true;
+  }
   async function renderDocument(doc: DocumentState) {
     const rev = ++revision.current; setBusy(true);setError('');
+    const preview={maskId:maskRef.current,luminance:luminanceRef.current,colorSampling:colorRef.current};
     try {
-      const result = await window.captraw.update(doc.image.id, rev, doc.adjustments, doc.profile,maskRef.current,luminanceRef.current,colorRef.current);
+      const result = await window.captraw.update(doc.image.id, rev, doc.adjustments, doc.profile,preview.maskId,preview.luminance,preview.colorSampling);
       if (idRef.current === doc.image.id && rev >= lastApplied.current) {
+        rendered.current={id:doc.image.id,revision:rev,adjustments:doc.adjustments,profileId:doc.profileId,...preview};
         lastApplied.current = rev; updateDocument(doc.image.id, d => d.adjustments!==doc.adjustments||d.profileId!==doc.profileId?d:({ ...d, profile: result.artProfile,opened:d.opened||snapshot({...d,profile:result.artProfile}),image:{...d.image,lensStatus:result.lensStatus} }));
       }
       return result.artProfile;
-    } catch (e) { setError(String(e)); setBusy(false); throw e; }
+    } catch (e) {
+      if(idRef.current===doc.image.id&&rev===revision.current){setError(String(e));setBusy(false);}throw e;
+    }
   }
   useEffect(() => window.captraw.onEvent((event: EngineEvent) => {
     if (event.event === 'preview' && event.frame.sessionId === idRef.current && event.frame.revision >= revision.current) {
@@ -106,6 +118,38 @@ export function useWorkbench() {
     const previous = gesture.current;gesture.current = undefined;
     updateDocument(idRef.current, d => JSON.stringify(d.adjustments)===JSON.stringify(previous.adjustments)?d:({ ...d, past: [...d.past, previous], future: [], dirty: dirty(d) }));
   }
+  function beginCanvasEdit(sessionId:string,frameRevision:number,label:string):CanvasEditTransaction|null {
+    if(canvasEdit.current)return null;
+    const doc=docs.current.find(d=>d.image.id===sessionId),applied=rendered.current,epoch=editEpoch.current;
+    const valid=()=>!loading.current&&idRef.current===sessionId&&revision.current===frameRevision&&editEpoch.current===epoch&&
+      applied?.maskId===maskRef.current&&applied.luminance===luminanceRef.current&&applied.colorSampling===colorRef.current&&
+      docs.current.some(d=>d.image.id===sessionId&&d.adjustments===doc?.adjustments&&d.profileId===doc?.profileId);
+    if(!doc||!valid()||applied?.id!==sessionId||applied.revision!==frameRevision||applied.adjustments!==doc.adjustments||applied.profileId!==doc.profileId)return null;
+    // The current preview already contains these exact settings. A redundant
+    // pending refresh must not change the revision beneath an accepted gesture.
+    clearTimeout(timer.current);
+    const pending={sessionId,label};canvasEdit.current=pending;setCanvasEditing(sessionId);
+    return {sessionId,revision:frameRevision,valid,release(){if(canvasEdit.current===pending){canvasEdit.current=undefined;setCanvasEditing('');}},apply(change){
+      if(!valid())return false;
+      const next=change(copy(doc.adjustments));
+      if(JSON.stringify(next)!==JSON.stringify(doc.adjustments))edit(()=>next);
+      return true;
+    }};
+  }
+  function beginMaskEdit(sessionId:string,frameRevision:number,maskId:string,componentId?:string):MaskEditTransaction|null {
+    const doc=docs.current.find(d=>d.image.id===sessionId),mask=doc?.adjustments.masks.find(m=>m.id===maskId),leaf=mask?.components?mask.components.find(c=>c.id===componentId):mask;
+    if(!leaf)return null;
+    const transaction=beginCanvasEdit(sessionId,frameRevision,'蒙版笔画');if(!transaction)return null;
+    return {...transaction,apply(next){
+      if(!transaction.valid())return false;
+      const values={points:next.points,start:next.start,end:next.end,referenceAngle:next.referenceAngle,initialized:true};
+      if(JSON.stringify(values)===JSON.stringify({points:leaf.points,start:leaf.start,end:leaf.end,referenceAngle:leaf.referenceAngle,initialized:leaf.initialized!==false}))return true;
+      return transaction.apply(a=>({...a,masks:a.masks.map(m=>{
+        if(m.id!==maskId)return m;
+        return m.components?{...m,components:m.components.map(c=>c.id===componentId?{...c,...values}:c)}:{...m,...values};
+      })}));
+    }};
+  }
   function undo(redo = false) {
     if(loading.current)return;
     ++editEpoch.current;gesture.current = undefined;
@@ -122,8 +166,8 @@ export function useWorkbench() {
       if(action==='capture')return {...d,before:snapshot(d)};
       if(action==='reset')return {...d,before:undefined};
       const before=d.before||d.opened;if(!before)return d;
-      const {rotation,crop,cropAspect,lensCorrections,lensProfile}=d.adjustments;
-      const next={...snapshot(before),adjustments:{...copy(before.adjustments),rotation,crop:copy(crop),cropAspect,lensCorrections:copy(lensCorrections),lensProfile:copy(lensProfile)}};
+      const {rotation,fineRotation,crop,cropAspect,lensCorrections,lensProfile}=d.adjustments;
+      const next={...snapshot(before),adjustments:{...copy(before.adjustments),rotation,fineRotation,crop:copy(crop),cropAspect,lensCorrections:copy(lensCorrections),lensProfile:copy(lensProfile)}};
       if(next.profileId===d.profileId&&JSON.stringify(next.adjustments)===JSON.stringify(d.adjustments))return d;
       return {...d,...next,before:snapshot(d),past:[...d.past,{...snapshot(d),before:d.before?copy(d.before):null}],future:[],dirty:dirty(d,next.adjustments,next.profileId)};
     });
@@ -135,7 +179,7 @@ export function useWorkbench() {
     edit(a => ({ ...a, masks: [...a.masks, mask] })); return mask.id;
   }
   async function flush() {
-    if(loading.current)return;
+    if(loading.current||canvasInProgress())return;
     clearTimeout(timer.current); const d = docs.current.find(d => d.image.id === idRef.current);if (!d) return;
     const profile = await renderDocument(d); return { doc: d, profile };
   }
@@ -143,7 +187,7 @@ export function useWorkbench() {
     try { const f = await flush();if (!f) return false;const path = await window.captraw.save({ ...f.doc.image, adjustments: f.doc.adjustments }, f.profile);if (path) { updateDocument(f.doc.image.id, d => ({ ...d, saved:copy(f.doc.adjustments),savedProfileId:f.doc.profileId, dirty: d.profileId!==f.doc.profileId||JSON.stringify(d.adjustments)!==JSON.stringify(f.doc.adjustments) })); setStatus('编辑配方已保存');return true; } } catch (e) { setError(String(e)); }return false;
   }
   async function saveSelected(paths:string[]){
-    if(loading.current)return;
+    if(loading.current||canvasInProgress())return;
     commit();const selected=docs.current.filter(d=>paths.includes(d.image.path)).map(d=>copy(d));if(!selected.length)return;
     clearTimeout(timer.current);loading.current=true;setOpening(true);setSaveOpen(true);setSaveBusy(true);setSaveResult(null);setSaveError('');setSaveProgress('选择保存文件夹…');
     try{
@@ -161,7 +205,7 @@ export function useWorkbench() {
   }
   async function cancelSave(){setSaveProgress('正在完成当前文件，随后停止…');await window.captraw.cancelSave();}
   async function closeDocument(id:string,saved=false){
-    if(loading.current)return;const target=docs.current.find(d=>d.image.id===id);if(!target)return;
+    if(loading.current||canvasInProgress())return;const target=docs.current.find(d=>d.image.id===id);if(!target)return;
     if(target.dirty&&!saved){
       const decision=await window.captraw.confirmClose(target.image.name);
       if(decision==='cancel')return;
@@ -185,7 +229,7 @@ export function useWorkbench() {
     const current=docs.current.find(d=>d.image.path===doc.image.path);
     if(current&&current.profileId===doc.profileId&&JSON.stringify(current.adjustments)===JSON.stringify(doc.adjustments))await closeDocument(current.image.id,true);
   }
-  function openSynchronize(){if(loading.current||samplingRef.current||busy||wbPending)return;commit();setSyncError('');setSyncOpen(true);}
+  function openSynchronize(){if(loading.current||samplingRef.current||busy||wbPending||canvasInProgress())return;commit();setSyncError('');setSyncOpen(true);}
   async function cancelSynchronize(){if(loading.current){syncCancelled.current=true;setSyncProgress('正在取消同步…');await window.captraw.cancelSynchronize();}else setSyncOpen(false);}
   async function synchronize(paths:string[],groups:SyncGroup[]){
     if(loading.current)return;
@@ -228,7 +272,7 @@ export function useWorkbench() {
   }
   async function cancelPreset(){presetCancelled.current=true;await window.captraw.cancelSynchronize();}
   async function exportImage(format: 'jpeg' | 'tiff',colorSpace:OutputColorSpace='srgb',paths:string[]=[],options?:ExportOptions) {
-    if(loading.current||exporting.current)return;
+    if(loading.current||exporting.current||canvasInProgress())return;
     exporting.current=true;setExportPending(true);commit();
     try {
       const selected=docs.current.filter(d=>paths.includes(d.image.path));
@@ -287,8 +331,10 @@ export function useWorkbench() {
   async function viewport(x: number,y: number,width: number,height: number) {
     if(loading.current)return;
     const d = docs.current.find(d => d.image.id === idRef.current);if (!d) return;
-    try { await window.captraw.viewport(d.image.id, revision.current, x,y,width,height); } catch (e) { setError(String(e)); }
+    const requestedRevision=revision.current;
+    try { await window.captraw.viewport(d.image.id, requestedRevision, x,y,width,height); }
+    catch (e) { if(!loading.current&&idRef.current===d.image.id&&revision.current===requestedRevision)setError(String(e)); }
   }
-  return {saveSelected,cancelSave,saveOpen,saveBusy,saveProgress,saveResult,saveError,closeSave:()=>setSaveOpen(false), applyPreset,cancelPreset,presetBusy,flush,exportPending,dismissJob:()=>setJob(undefined),syncOpen,syncBusy,syncProgress,syncError,openSynchronize,cancelSynchronize,synchronize,documents, active, frame, detailFrame, busy:busy||opening||wbPending||sampling,opening,wbPending,sampling,error,status,job,revision, setError,setMaskPreview,setLuminance,setColorSampling,sampleColor,sampleLuminance,cancelLuminanceSample:()=>{++sampleEpoch.current;},openPaths,switchDocument,closeDocument,finish,whiteBalance,edit,commit,undo,addMask,save,exportImage,comparisonState,viewport,
+  return {beginCanvasEdit,beginMaskEdit,saveSelected,cancelSave,saveOpen,saveBusy,saveProgress,saveResult,saveError,closeSave:()=>setSaveOpen(false), applyPreset,cancelPreset,presetBusy,flush,exportPending,dismissJob:()=>setJob(undefined),syncOpen,syncBusy,syncProgress,syncError,openSynchronize,cancelSynchronize,synchronize,documents, active, frame, detailFrame, busy:busy||opening||wbPending||sampling,opening,wbPending,sampling,error,status,job,revision, setError,setMaskPreview,setLuminance,setColorSampling,sampleColor,sampleLuminance,cancelLuminanceSample:()=>{++sampleEpoch.current;},openPaths,switchDocument,closeDocument,finish,whiteBalance,edit,commit,undo,addMask,save,exportImage,comparisonState,viewport,
     reset: () => { if (active) edit(() => copy(active.initial)); } };
 }

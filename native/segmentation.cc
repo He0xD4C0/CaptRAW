@@ -48,6 +48,14 @@ struct Segmentation::Impl {
         const auto session=p.at("sessionId").get<std::string>();if(session.empty()||session.size()>128)throw std::runtime_error("Invalid segmentation session");
         for(const char *name:{"width","height"})if(!p.at(name).is_number_integer()||p.at(name)<1||p.at(name)>65000)throw std::runtime_error("Invalid segmentation dimensions");
         const int w=p.at("width"),h=p.at("height");if(int64_t(w)*h>64000000)throw std::runtime_error("Segmentation preview exceeds 64 MP");
+        int rotation=0;
+        if(p.contains("outputRotation")){
+            const auto &value=p.at("outputRotation");if(!value.is_number())throw std::runtime_error("Invalid segmentation output rotation");
+            const double angle=value.get<double>();
+            if(!std::isfinite(angle)||(angle!=0&&angle!=90&&angle!=180&&angle!=270))throw std::runtime_error("Invalid segmentation output rotation");
+            rotation=int(angle);
+        }
+        const int maskWidth=rotation==90||rotation==270?h:w,maskHeight=rotation==90||rotation==270?w:h;
         const auto &points=p.at("points"),&labels=p.at("labels");
         if(!points.is_array()||!labels.is_array()||labels.empty()||labels.size()>64||points.size()!=labels.size())throw std::runtime_error("Invalid segmentation prompts");
         std::vector<float> coords;std::vector<int32_t> kinds;
@@ -95,15 +103,22 @@ struct Segmentation::Impl {
         try{
             for(int i=0;i<3;++i){
                 std::vector<uint8_t> coverage(size_t(w)*h);size_t count=0;
-                for(size_t j=0;j<coverage.size();++j){const bool value=masks[size_t(i)*coverage.size()+j];coverage[j]=value?255:0;count+=value;}
+                for(size_t j=0;j<coverage.size();++j){
+                    const bool value=masks[size_t(i)*coverage.size()+j];size_t target=j;
+                    // Undo the input's clockwise coarse rotation without resampling coverage.
+                    if(rotation==90)target=(w-1-j%w)*h+j/w;
+                    else if(rotation==180)target=coverage.size()-1-j;
+                    else if(rotation==270)target=(j%w)*h+h-1-j/w;
+                    coverage[target]=value?255:0;count+=value;
+                }
                 const auto file=cache/("mask-"+std::to_string(job)+"-"+std::to_string(i)+".png"),temporary=fs::path(file.string()+".tmp");cleanup.push_back(temporary);cleanup.push_back(file);
-                png_image png{};png.version=PNG_IMAGE_VERSION;png.width=w;png.height=h;png.format=PNG_FORMAT_GRAY;png.flags=PNG_IMAGE_FLAG_FAST;
+                png_image png{};png.version=PNG_IMAGE_VERSION;png.width=maskWidth;png.height=maskHeight;png.format=PNG_FORMAT_GRAY;png.flags=PNG_IMAGE_FLAG_FAST;
                 const bool written=png_image_write_to_file(&png,temporary.c_str(),0,coverage.data(),0,nullptr);png_image_free(&png);
                 if(!written)throw std::runtime_error("Cannot write segmentation mask");fs::rename(temporary,file);
                 candidates.push_back({{"index",i},{"score",scores[i]},{"pixels",count},{"file",file.string()},{"sha256",sha256(readBytes(file,128*1024*1024))}});
             }
         }catch(...){for(const auto &file:cleanup){std::error_code ignored;fs::remove(file,ignored);}throw;}
-        return {{"sessionId",session},{"revision",p.at("revision")},{"imageSha256",actual},{"modelId",manifest.at("modelId")},{"width",w},{"height",h},{"selected",selected},{"candidates",candidates},{"cached",reused},{"inputMs",inputMs},{"encodeMs",encodeMs},{"decodeMs",decodeMs},{"writeMs",elapsed(t)},{"elapsedMs",elapsed(start)}};
+        return {{"sessionId",session},{"revision",p.at("revision")},{"imageSha256",actual},{"modelId",manifest.at("modelId")},{"width",w},{"height",h},{"maskWidth",maskWidth},{"maskHeight",maskHeight},{"selected",selected},{"candidates",candidates},{"cached",reused},{"inputMs",inputMs},{"encodeMs",encodeMs},{"decodeMs",decodeMs},{"writeMs",elapsed(t)},{"elapsedMs",elapsed(start)}};
     }
 };
 Segmentation::Segmentation(const std::string &models,const std::string &cache,std::function<void(const Json &)> events):impl(std::make_unique<Impl>(models,cache,std::move(events))){}

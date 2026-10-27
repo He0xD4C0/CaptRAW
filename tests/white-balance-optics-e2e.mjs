@@ -2,7 +2,7 @@ import {expect} from '@playwright/test';
 import {electron,closeElectron} from './electron-background.mjs';
 import {readDocument} from './xmp-test.mjs';
 import {resolve,join} from 'node:path';
-import {mkdirSync,writeFileSync,existsSync,rmSync} from 'node:fs';
+import {mkdirSync,readFileSync,writeFileSync,existsSync,rmSync} from 'node:fs';
 
 const out=resolve(process.env.CAPTRAW_WB_OPTICS_GUI_OUT||'artifacts/wb-optics-gui');mkdirSync(out,{recursive:true});
 const app=await electron.launch(),page=await app.firstWindow(),checks=[],errors=[];
@@ -24,17 +24,17 @@ async function open(path){
  await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},resolve(path));
  await settle(()=>page.getByRole('button',{name:'打开',exact:true}).click());
 }
-async function pick(crop=null,actual=false){
+async function pick(crop=null,actual=false,wholeImage=false){
  await page.getByRole('button',{name:'白平衡 I',exact:true}).click();
  await page.getByRole('combobox',{name:'取样大小'}).selectOption('5');
- const target=await page.evaluate(async()=>{
+ const target=await page.evaluate(async wholeImage=>{
   const frame=window.__frames.filter(f=>f.kind==='fit').at(-1),image=new Image();image.crossOrigin='anonymous';image.src=frame.url;await image.decode();
   const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);
   const data=ctx.getImageData(0,0,image.width,image.height).data;let sx=0,sy=0,n=0;
-  for(let y=0;y<150;y++)for(let x=0;x<150;x++){const i=(y*image.width+x)*4;if(data[i+2]>data[i]+30){sx+=x;sy+=y;n++;}}
+  for(let y=0;y<(wholeImage?image.height:150);y++)for(let x=0;x<(wholeImage?image.width:150);x++){const i=(y*image.width+x)*4;if(data[i+2]>data[i]+30){sx+=x;sy+=y;n++;}}
   if(n<4)throw new Error('Rendered blue target is missing');
   return {x:(sx/n+.5)/image.width,y:(sy/n+.5)/image.height,width:frame.fullWidth,height:frame.fullHeight,dpr:devicePixelRatio};
- });
+ },wholeImage);
  const b=await page.getByTestId('viewport').boundingBox(),c=crop||{x:0,y:0,width:1,height:1};
  const scale=actual?1/target.dpr:Math.min((b.width-64)/(target.width*c.width),(b.height-64)/(target.height*c.height));
  const x=b.x+b.width/2+(target.x-c.x-c.width/2)*target.width*scale,y=b.y+b.height/2+(target.y-c.y-c.height/2)*target.height*scale;
@@ -80,6 +80,29 @@ try{
   await open(join(out,file+'-detail-sample.xmp'));expect((await save(file+'-restored')).adjustments).toEqual(saved.adjustments);
   await page.getByRole('button',{name:'适屏',exact:true}).click();
   passed(`${file}: cropped fit and physical 1:1 picker, undo and XMP reopen preserve the same coefficients`);
+ }
+ const geometry=resolve(process.env.CAPTRAW_GEOMETRY_OUT||'artifacts/geometry-mapping');
+ expect(existsSync(join(geometry,'wb.json')),'Run tests/geometry-mapping.mjs before this GUI regression').toBe(true);
+ const source=await readDocument(join(geometry,'transformed.xmp'));
+ const reference=JSON.parse(readFileSync(join(geometry,'wb.json'),'utf8')).reference.wbMultipliers;
+ await open(join(geometry,'transformed.xmp'));
+ for(const actual of [false,true]){
+  if(actual){await page.getByRole('button',{name:'1:1',exact:true}).click();await page.waitForFunction(()=>{
+   const frame=window.__frames.filter(f=>f.kind==='detail').at(-1);return frame&&document.querySelector('canvas').dataset.detail===frame.url;
+  });}
+  await pick(source.adjustments.crop,actual,true);
+  const saved=await save(`transformed-${actual?'detail':'fit'}`);
+  expect(saved.adjustments.wbMultipliers).toEqual(reference);
+  expect(saved.artProfile).toMatch(/\[Rotation\][^[]*Degree=23/);
+  expect(saved.artProfile).toMatch(/\[Perspective\][^[]*Horizontal=25/);
+  await page.screenshot({path:join(out,`transformed-${actual?'detail':'fit'}.png`)});
+  await settle(()=>page.getByRole('button',{name:'撤销',exact:true}).click());
+  await settle(()=>page.getByRole('button',{name:'重做',exact:true}).click());
+  expect((await save('transformed-redo')).adjustments.wbMultipliers).toEqual(reference);
+  await open(join(out,'transformed-redo.xmp'));
+  expect((await save('transformed-restored')).adjustments.wbMultipliers).toEqual(reference);
+  passed(`transformed ART profile: ${actual?'1:1':'fit'} target, undo/redo and XMP reopen match untransformed WB`);
+  await open(join(geometry,'transformed.xmp'));
  }
  expect(errors).toEqual([]);
 }catch(error){await page.screenshot({path:join(out,'failure.png')});throw error;}

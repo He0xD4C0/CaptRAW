@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Aperture, FolderOpen, Maximize, Scan } from 'lucide-react';
 import type { Adjustments, LocalMask, Point, PreviewFrame, ObjectPrompt, ObjectBox, ComparisonLayout } from '@captraw/contracts';
-import { canvasPoint, imagePoint, imageTransform, visibleImageRegion, rotatePoint, rotateCrop, cropHandles, cropHandlePoint, drawCrop,resizeCrop,moveCrop,type CropHandle,type CropRect } from './geometry';
-export type Tool = 'object' | 'hand' | 'brush' | 'eraser' | 'linear' | 'radial' | 'crop' | 'white-balance' | 'repair' | 'luminance' | 'color';
+import { canvasPoint, imagePoint, imageTransform, visibleImageRegion, rotatePoint, rotateCrop, cropHandles, cropHandlePoint, drawCrop,resizeCrop,moveCrop,type CropHandle,type CropRect,type CanvasEditTransaction } from './geometry';
+import {useMaskGesture,type MaskEditTransaction,type MaskHandle} from './useMaskGesture';
+import {mappedMaskGuide} from './maskGeometry';
+import {useRepairGesture,type RepairInteraction} from './useRepairGesture';
+import {mappedRepairGuide,repairSourcePoint,type RepairGuide} from './repairGeometry';
+import {useStraightenGesture} from './useStraightenGesture';
+export type Tool = 'object' | 'hand' | 'brush' | 'eraser' | 'linear' | 'radial' | 'crop' | 'straighten' | 'white-balance' | 'repair' | 'luminance' | 'color';
 interface Props {
   sessionId?:string;beforeLabel?:string;
   comparison?:{label:string;layout:ComparisonLayout;frame?:PreviewFrame;detail?:PreviewFrame;viewport:(x:number,y:number,w:number,h:number)=>void};
@@ -12,8 +17,12 @@ interface Props {
   selectedMask?: LocalMask; brushSize: number; overlay: boolean; busy: boolean;
   luminanceMap?:boolean;sampleRange:(start:Point,end?:Point,append?:boolean)=>void;removeColor:(index:number)=>void;
   sample:(point:Point)=>void;componentId?:string;maskId?:string;
-  repair?:{source?:Point;selectingSource:boolean;selectedId:string;guides:boolean;pick:(point:Point,source:boolean)=>void;select:(id:string)=>void};
+  repair?:RepairInteraction;imageSize?:{width:number;height:number};
   edit: (fn: (a: Adjustments) => Adjustments, transient?: boolean) => void; commit: () => void;
+  beginMaskEdit:(sessionId:string,revision:number,maskId:string,componentId?:string)=>MaskEditTransaction|null;
+  beginCanvasEdit:(sessionId:string,revision:number,label:string)=>CanvasEditTransaction|null;
+  error:(message:string)=>void;
+  straightenDone:()=>void;
   open: () => void; drop: (paths: string[]) => void;
   viewport: (x: number,y: number,w: number,h: number) => void;
 }
@@ -27,10 +36,10 @@ export function Viewport(p: Props) {
   useEffect(()=>{setBeforeDetail(undefined);const frame=p.comparison?.detail;if(!frame)return;let valid=true;const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{if(valid)setBeforeDetail(img);};img.src=frame.url;return()=>{valid=false;};},[p.comparison?.detail?.url]);
   const [sampleBox,setSampleBox]=useState<{start:Point;end:Point}>();
   const [zoom,setZoom] = useState(1), [actual,setActual] = useState(false), [pan,setPan] = useState<Point>({x:0,y:0});
-  const drag = useRef<{ start: Point; previous: Point; pan: Point; hand:boolean; rangePick?:boolean;objectBox?:boolean;appendColor?:boolean; shape?:{start:Point;end:Point}; handle?:'start'|'end'|'move';spot?:{id:string;part:'source'|'target'};crop?:{rect:CropRect;handle:CropHandle|'move'} } | undefined>(undefined);
+  const drag = useRef<{ start: Point; previous: Point; pan: Point; hand:boolean; rangePick?:boolean;objectBox?:boolean;appendColor?:boolean;crop?:{rect:CropRect;handle:CropHandle|'move'} } | undefined>(undefined);
   const spaceHeld=useRef(false);
   useEffect(()=>{if(container.current)container.current.style.cursor='';if(drag.current?.rangePick){drag.current=undefined;setSampleBox(undefined);}},[p.tool,p.componentId,p.selectedMask?.id,p.object?.mode]);
-  useEffect(()=>{const down=(e:KeyboardEvent)=>{if(e.code==='Space'&&!(e.target as HTMLElement)?.matches('input,textarea,select')){e.preventDefault();spaceHeld.current=true;}};const up=(e:KeyboardEvent)=>{if(e.code==='Space')spaceHeld.current=false;};window.addEventListener('keydown',down);window.addEventListener('keyup',up);return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up);};},[]);
+  useEffect(()=>{const down=(e:KeyboardEvent)=>{if(e.code==='Space'&&!e.defaultPrevented&&!(e.target as HTMLElement)?.closest('input,textarea,select,[contenteditable]')){spaceHeld.current=true;if(!(e.target as HTMLElement)?.closest('button,a[href],summary,[role=button],[role=slider],[role=tab]'))e.preventDefault();}};const up=(e:KeyboardEvent)=>{if(e.code==='Space')spaceHeld.current=false;};window.addEventListener('keydown',down);window.addEventListener('keyup',up);return()=>{window.removeEventListener('keydown',down);window.removeEventListener('keyup',up);};},[]);
   const [dragOver,setDragOver] = useState(false);
   useEffect(() => {
     if (!container.current) return;
@@ -58,11 +67,63 @@ export function Viewport(p: Props) {
   useEffect(()=>{setZoom(1);setActual(false);setPan({x:0,y:0});},[p.sessionId]);
   const fw=p.frame?.fullWidth||1,fh=p.frame?.fullHeight||1;
   const rotation=p.adjustments?.rotation||0;
-  const crop=p.tool==='crop'?null:rotateCrop(p.adjustments?.crop||null,rotation);
+  const cropping=p.tool==='crop'||p.tool==='straighten';
+  const crop=cropping?null:rotateCrop(p.adjustments?.crop||null,rotation);
   const displayPoint=(point:Point)=>canvasPoint(rotatePoint(point,rotation),t);
   const mode=p.comparison?.layout||'off',dual=mode!=='off',horizontal=mode==='top-bottom'||mode==='split-horizontal';
   const paneWidth=mode==='left-right'?size.width/2:size.width,paneHeight=mode==='top-bottom'?size.height/2:size.height;
   const t=imageTransform(fw,fh,paneWidth,paneHeight,crop,zoom,pan,actual,devicePixelRatio);
+  const straighten=useStraightenGesture({sessionId:p.sessionId,revision:p.frame?.revision,adjustments:p.adjustments,enabled:p.tool==='straighten',
+    width:fw,height:fh,scale:t.scale,viewKey:JSON.stringify([size.width,size.height,t.x,t.y,t.scale,mode,fw,fh]),begin:p.beginCanvasEdit,error:p.error,done:p.straightenDone});
+  const maskGesture=useMaskGesture({sessionId:p.sessionId,revision:p.frame?.revision,mask:p.selectedMask,componentId:p.componentId,tool:p.tool,
+    adjustments:p.adjustments,width:fw,height:fh,rotation,radius:p.brushSize,begin:p.beginMaskEdit,error:p.error});
+  const rw=(rotation%180?p.imageSize?.height:p.imageSize?.width)||fw,rh=(rotation%180?p.imageSize?.width:p.imageSize?.height)||fh;
+  const repairGesture=useRepairGesture({sessionId:p.sessionId,revision:p.frame?.revision,adjustments:p.adjustments,tool:p.tool,repair:p.repair,
+    width:fw,height:fh,recipeWidth:rw,recipeHeight:rh,rotation,begin:p.beginCanvasEdit,error:p.error});
+  const spots=(p.adjustments?.spots||[]).map(s=>s.id===repairGesture.draft?.id?repairGesture.draft:s);
+  const repairKey=JSON.stringify([p.frame?.sessionId,p.frame?.revision,fw,fh,rw,rh,rotation,t.scale,spots,p.repair?.selectedId,p.repair?.source,p.repair?.guides,p.tool]);
+  const [repairMapping,setRepairMapping]=useState<{key:string;targets:(Point|null)[];active?:RepairGuide;source?:Point|null}>();
+  const [repairFailure,setRepairFailure]=useState(''),[repairAttempt,setRepairAttempt]=useState(0);
+  const repairGuide=repairMapping?.key===repairKey?repairMapping:undefined;
+  useEffect(()=>{
+    if(p.tool!=='repair'||!p.repair?.guides||!p.frame)return;
+    let alive=true;const frame=p.frame;
+    const map=async(points:Point[])=>{
+      const mapped:(Point|null)[]=[];
+      for(let i=0;i<points.length;i+=4096){
+        if(!alive)throw new Error('Repair guide cancelled');
+        const result=await window.captraw.coordinates(frame.sessionId,frame.revision,'source','display',points.slice(i,i+4096));
+        if(result.width!==fw||result.height!==fh)throw new Error('Repair guide dimensions changed');mapped.push(...result.points);
+      }return mapped;
+    };
+    void (async()=>{
+      const points=spots.map(s=>repairSourcePoint(s.target,rw,rh,rotation));
+      if(p.repair?.source)points.push(repairSourcePoint(p.repair.source,rw,rh,rotation));
+      const targets=await map(points),selected=spots.find(s=>s.id===p.repair?.selectedId);
+      const active=selected?await mappedRepairGuide(selected,rw,rh,rotation,t.scale,map,()=>alive):undefined;
+      if(alive){setRepairFailure('');setRepairMapping({key:repairKey,targets:targets.slice(0,spots.length),source:targets[spots.length],active});}
+    })().catch(error=>{if(alive){setRepairMapping(undefined);setRepairFailure(repairKey);p.error(`无法准备修复控制点：${String(error)}。单击画布重试。`);}});
+    return()=>{alive=false;};
+  },[repairKey,repairAttempt]);
+  const repairGuidePoint=(q:Point)=>({x:t.x+(q.x+.5)*t.scale,y:t.y+(q.y+.5)*t.scale});
+  const repairPath=(segments:Point[][])=>segments.map(segment=>segment.map((q,i)=>{const v=repairGuidePoint(q);return `${i?'L':'M'}${v.x},${v.y}`;}).join(' ')).join(' ');
+  const mask=maskGesture.draft||p.selectedMask;
+  const guideKey=JSON.stringify([p.frame?.sessionId,p.frame?.revision,fw,fh,rotation,t.scale,mask?.id,p.componentId,mask?.type,mask?.initialized,mask?.start,mask?.end,mask?.referenceAngle]);
+  const [mappedGuide,setMappedGuide]=useState<{key:string;handles:(Point|null)[];segments:Point[][]}>();
+  const [guideFailure,setGuideFailure]=useState(''),[guideAttempt,setGuideAttempt]=useState(0);
+  const guide=mappedGuide?.key===guideKey?mappedGuide:undefined;
+  useEffect(()=>{
+    if(!mask||mask.initialized===false||!p.frame||!['linear','radial'].includes(mask.type))return;
+    let alive=true;const frame=p.frame;
+    void mappedMaskGuide(mask,fw,fh,rotation,t.scale,async points=>{
+      const result=await window.captraw.coordinates(frame.sessionId,frame.revision,'reference','display',points,mask.referenceAngle);
+      if(result.width!==fw||result.height!==fh)throw new Error('Mask guide dimensions changed');return result.points;
+    },()=>alive).then(result=>{if(alive){setGuideFailure('');setMappedGuide({key:guideKey,...result});}}).catch(error=>{
+      if(alive){setMappedGuide(undefined);setGuideFailure(guideKey);p.error(`无法准备蒙版控制点：${String(error)}。单击画布重试。`);}
+    });
+    return()=>{alive=false;};
+  },[guideKey,guideAttempt]);
+  const guidePoint=(q:Point)=>({x:t.x+q.x*t.scale,y:t.y+q.y*t.scale});
   useEffect(()=>{
     const c=canvas.current;if(!c)return;
     const dpr=devicePixelRatio;c.width=Math.round(size.width*dpr);c.height=Math.round(size.height*dpr);
@@ -98,42 +159,45 @@ export function Viewport(p: Props) {
   function point(event: React.PointerEvent): Point {
     const bounds=container.current!.getBoundingClientRect();return rotatePoint(imagePoint(event.clientX-bounds.left,event.clientY-bounds.top,t),-rotation);
   }
-  function changeMask(fn:(mask: LocalMask)=>LocalMask) {
-    const id=p.selectedMask?.id;if(!id)return;
-    p.edit(a=>({...a,masks:a.masks.map(m=>{
-      if(m.id!==id)return m;
-      if(p.componentId&&m.components)return {...m,components:m.components.map(c=>{if(c.id!==p.componentId)return c;const next=fn({...m,...c,components:undefined});return {...c,points:next.points,start:next.start,end:next.end,initialized:true};})};
-      return fn(m);
-    })}),true);
+  function repairPoint(event:React.PointerEvent):Point {
+    const bounds=container.current!.getBoundingClientRect();return {x:(event.clientX-bounds.left-t.x)/t.scale-.5,y:(event.clientY-bounds.top-t.y)/t.scale-.5};
   }
-  function paint(at:Point,previous?:Point,erase=false) {
-    const radius=p.brushSize;
-    const points:Point[]=[];
-    const distance=previous?Math.hypot((at.x-previous.x)*fw,(at.y-previous.y)*fh):0;
-    const spacing=Math.max(1,radius*.1*Math.min(fw,fh)*.25);
-    const count=Math.min(1000,Math.max(1,Math.ceil(distance/spacing)));
-    for(let i=1;i<=count;i++){const amount=i/count;points.push({x:previous?previous.x+(at.x-previous.x)*amount:at.x,y:previous?previous.y+(at.y-previous.y)*amount:at.y,radius,erase:p.tool==='eraser'||erase});}
-    changeMask(m=>({...m,points:[...m.points,...points]}));
-  }
+  useEffect(()=>{repairGesture.cancel();},[size.width,size.height,mode,rotation]);
   function down(event:React.PointerEvent<HTMLDivElement>) {
     if(!image||event.button>1)return;
     const bounds=container.current!.getBoundingClientRect();
     const x=(event.clientX-bounds.left-t.x)/(fw*t.scale),y=(event.clientY-bounds.top-t.y)/(fh*t.scale);
     const area=crop||{x:0,y:0,width:1,height:1};
     if(p.tool!=='hand'&&!spaceHeld.current&&event.button!==1&&(x<area.x||y<area.y||x>area.x+area.width||y>area.y+area.height))return;
+    if(p.tool==='straighten'&&!spaceHeld.current&&event.button===0){
+      if(image.src===p.frame?.url&&straighten.begin(repairPoint(event)))event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+    if(['brush','eraser','linear','radial'].includes(p.tool)&&!spaceHeld.current&&event.button===0){
+      if(image.src!==p.frame?.url)return;
+      let handle:MaskHandle|undefined;
+      if(mask&&mask.initialized!==false&&(p.tool==='linear'||p.tool==='radial')){
+        if(!guide){if(guideFailure===guideKey){setGuideFailure('');setGuideAttempt(n=>n+1);p.error('正在重试蒙版控制点映射。');}else p.error('正在准备蒙版控制点，请稍后重试。');return;}
+        handle=(['start','end','move'] as const).find((_,i)=>{const q=guide.handles[i];if(!q)return false;const v=guidePoint(q);return Math.hypot(v.x+bounds.left-event.clientX,v.y+bounds.top-event.clientY)<=12;});
+      }
+      if(maskGesture.begin({x,y},handle,p.tool==='eraser'||event.altKey))event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     if(p.tool==='object'&&!spaceHeld.current&&event.button===0){if(!p.object?.ready)return;const at=point(event);if(p.object.mode==='box'){event.currentTarget.setPointerCapture(event.pointerId);drag.current={start:at,previous:at,pan:{x:0,y:0},hand:false,rangePick:true,objectBox:true};setSampleBox({start:at,end:at});}else p.object.pick(at,event.altKey);return;}
     if((p.tool==='luminance'||p.tool==='color')&&!spaceHeld.current&&event.button===0){
       if(p.tool==='color'&&event.altKey){const samples=p.selectedMask?.colorSamples||[];const i=samples.findIndex(s=>{const q=displayPoint(s.end?{x:(s.point.x+s.end.x)/2,y:(s.point.y+s.end.y)/2}:s.point);return Math.hypot(q.x+bounds.left-event.clientX,q.y+bounds.top-event.clientY)<=12;});if(i>=0)p.removeColor(i);return;}
       if(p.busy)return;const at=point(event);event.currentTarget.setPointerCapture(event.pointerId);drag.current={start:at,previous:at,pan:{x:0,y:0},hand:false,rangePick:true,appendColor:event.shiftKey};setSampleBox({start:at,end:at});return;}
     if(p.tool==='white-balance'&&!spaceHeld.current&&event.button===0){if(!p.busy)p.sample(point(event));return;}
     if(p.tool==='repair'&&!spaceHeld.current&&event.button===0&&p.repair){
-      const at=point(event),hit=(q:Point)=>{const v=displayPoint(q);return Math.hypot(v.x-(event.clientX-bounds.left),v.y-(event.clientY-bounds.top))<=12;};
+      if(image.src!==p.frame?.url)return;
+      if(p.repair.guides&&!repairGuide){if(repairFailure===repairKey){setRepairFailure('');setRepairAttempt(n=>n+1);p.error('正在重试修复控制点映射。');}else p.error('正在准备修复控制点，请稍后重试。');return;}
+      const at=repairPoint(event),hit=(q:Point|null|undefined)=>{if(!q)return false;const v=repairGuidePoint(q);return Math.hypot(v.x-(event.clientX-bounds.left),v.y-(event.clientY-bounds.top))<=12;};
       if(!event.altKey&&!p.repair.selectingSource&&p.repair.guides){
-        const selected=p.adjustments?.spots?.find(s=>s.id===p.repair?.selectedId);
-        const source=selected&&hit(selected.source),target=[...(p.adjustments?.spots||[])].reverse().find(s=>hit(s.target));
-        if(source||target){const id=source?selected!.id:target!.id;p.repair.select(id);event.currentTarget.setPointerCapture(event.pointerId);drag.current={start:at,previous:at,pan:{x:event.clientX-pan.x,y:event.clientY-pan.y},hand:false,spot:{id,part:source?'source':'target'}};return;}
+        const selected=spots.find(s=>s.id===p.repair?.selectedId);
+        const source=selected&&hit(repairGuide?.active?.source),target=[...spots].reverse().find((_,i)=>hit(repairGuide?.targets[spots.length-1-i]));
+        if(source||target){if(repairGesture.begin(at,false,{spot:source?selected!:target!,part:source?'source':'target'}))event.currentTarget.setPointerCapture(event.pointerId);return;}
       }
-      p.repair.pick(at,event.altKey);return;
+      if(repairGesture.begin(at,event.altKey))event.currentTarget.setPointerCapture(event.pointerId);return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
     const at=point(event);drag.current={start:at,previous:at,pan:{x:event.clientX-pan.x,y:event.clientY-pan.y},hand:spaceHeld.current||event.button===1};
@@ -144,19 +208,13 @@ export function Viewport(p: Props) {
       if(handle)drag.current.crop={rect,handle};
       else if(display.x>=rect.x&&display.x<=rect.x+rect.width&&display.y>=rect.y&&display.y<=rect.y+rect.height)drag.current.crop={rect,handle:'move'};
     }
-    if(p.tool==='brush'||p.tool==='eraser')paint(at,undefined,event.altKey);
-    else if(p.tool==='linear'||p.tool==='radial'){
-      const m=p.selectedMask;
-      if(m&&m.initialized!==false){
-        const center={x:(m.start.x+m.end.x)/2,y:(m.start.y+m.end.y)/2};
-        const hit=(q:Point)=>{const screen=displayPoint(q);return Math.hypot(screen.x-(event.clientX-bounds.left),screen.y-(event.clientY-bounds.top))<=12;};
-        const handle=hit(m.start)?'start':hit(m.end)?'end':hit(center)?'move':undefined;
-        if(handle){drag.current.handle=handle;drag.current.shape={start:{...m.start},end:{...m.end}};return;}
-      }
-      changeMask(m=>({...m,start:at,end:at}));
-    }
   }
   function move(event:React.PointerEvent<HTMLDivElement>) {
+    if(straighten.active()){straighten.move(repairPoint(event));return;}
+    if(maskGesture.active()){
+      const b=event.currentTarget.getBoundingClientRect();maskGesture.move(imagePoint(event.clientX-b.left,event.clientY-b.top,t),p.tool==='eraser'||event.altKey);return;
+    }
+    if(repairGesture.active()){repairGesture.move(repairPoint(event));return;}
     const d=drag.current;const at=point(event);
     if(!d){
       if(p.tool==='crop'){
@@ -168,17 +226,6 @@ export function Viewport(p: Props) {
     }
     if(d.rangePick){d.previous=at;setSampleBox({start:d.start,end:at});return;}
     if(p.tool==='hand'||d.hand)setPan({x:event.clientX-d.pan.x,y:event.clientY-d.pan.y});
-    else if(p.tool==='repair'&&d.spot){const spot=d.spot;p.edit(a=>({...a,spots:a.spots?.map(s=>s.id===spot.id?{...s,[spot.part]:at}:s)}),true);}
-    else if(p.tool==='brush'||p.tool==='eraser')paint(at,d.previous,event.altKey);
-    else if(p.tool==='linear'||p.tool==='radial'){
-      if(d.handle==='move'&&d.shape){
-        const {start,end}=d.shape;
-        const dx=Math.max(-Math.min(start.x,end.x),Math.min(1-Math.max(start.x,end.x),at.x-d.start.x));
-        const dy=Math.max(-Math.min(start.y,end.y),Math.min(1-Math.max(start.y,end.y),at.y-d.start.y));
-        changeMask(m=>({...m,start:{x:start.x+dx,y:start.y+dy},end:{x:end.x+dx,y:end.y+dy}}));
-      }else if(d.handle==='start')changeMask(m=>({...m,start:at}));
-      else changeMask(m=>({...m,end:at}));
-    }
     else if(p.tool==='crop'){
       const start=rotatePoint(d.start,rotation),end=rotatePoint(at,rotation),locked=p.adjustments?.cropAspect;
       const aspect=locked?(rotation%180?1/locked:locked)*fh/fw:null;
@@ -187,13 +234,12 @@ export function Viewport(p: Props) {
     }
     d.previous=at;
   }
-  function up(){const d=drag.current;if(d){drag.current=undefined;if(d.rangePick){setSampleBox(undefined);const first=displayPoint(d.start),last=displayPoint(d.previous);if(d.objectBox){if(Math.hypot(first.x-last.x,first.y-last.y)>3)p.object?.pickBox(d.start,d.previous);}else p.sampleRange(d.start,Math.hypot(first.x-last.x,first.y-last.y)>3?d.previous:undefined,d.appendColor);}else p.commit();}}
-  function cancel(){const d=drag.current;drag.current=undefined;setSampleBox(undefined);if(d&&!d.rangePick)p.commit();}
-  const mask=p.selectedMask,start=mask?displayPoint(mask.start):{x:0,y:0},end=mask?displayPoint(mask.end):{x:0,y:0};
+  function up(event:React.PointerEvent<HTMLDivElement>){if(straighten.active()){void straighten.end(repairPoint(event));return;}if(maskGesture.active()){const b=event.currentTarget.getBoundingClientRect();maskGesture.end(imagePoint(event.clientX-b.left,event.clientY-b.top,t),p.tool==='eraser'||event.altKey);return;}if(repairGesture.active()){repairGesture.end(repairPoint(event));return;}const d=drag.current;if(d){drag.current=undefined;if(d.rangePick){setSampleBox(undefined);const first=displayPoint(d.start),last=displayPoint(d.previous);if(d.objectBox){if(Math.hypot(first.x-last.x,first.y-last.y)>3)p.object?.pickBox(d.start,d.previous);}else p.sampleRange(d.start,Math.hypot(first.x-last.x,first.y-last.y)>3?d.previous:undefined,d.appendColor);}else p.commit();}}
+  function cancel(){straighten.cancel();maskGesture.cancel();repairGesture.cancel();const d=drag.current;drag.current=undefined;setSampleBox(undefined);if(d&&!d.rangePick)p.commit();}
   return <section className="viewport-shell">
     <div ref={container} className={`viewport tool-${p.tool} ${dragOver?'drop-active':''}`} data-testid="viewport"
       onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={cancel}
-      onWheel={e=>{if(!image)return;setActual(false);setZoom(z=>Math.max(.2,Math.min(12,z*Math.exp(-e.deltaY*.002))));}}
+      onWheel={e=>{if(!image||maskGesture.active()||repairGesture.active()||straighten.active())return;setActual(false);setZoom(z=>Math.max(.2,Math.min(12,z*Math.exp(-e.deltaY*.002))));}}
       onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)}
       onDrop={e=>{e.preventDefault();setDragOver(false);p.drop(window.captraw.droppedFiles(Array.from(e.dataTransfer.files)));}}>
       <canvas ref={canvas} aria-label="显影预览" />
@@ -212,32 +258,42 @@ export function Viewport(p: Props) {
         </g>}
         {sampleBox&&(()=>{const a=displayPoint(sampleBox.start),b=displayPoint(sampleBox.end);return <rect data-testid="luminance-sample-box" x={Math.min(a.x,b.x)} y={Math.min(a.y,b.y)} width={Math.abs(a.x-b.x)} height={Math.abs(a.y-b.y)} fill="#ffffff12" stroke="white" strokeDasharray="4 3" clipPath="url(#mask-image-bounds)"/>;})()}
         {p.tool==='color'&&p.selectedMask?.colorSamples?.map((s,i)=>{const q=displayPoint(s.end?{x:(s.point.x+s.end.x)/2,y:(s.point.y+s.end.y)/2}:s.point);return <g data-testid="color-sample-pin" key={i} clipPath="url(#mask-image-bounds)"><circle cx={q.x} cy={q.y} r="10" fill="#333" stroke="white"/><text x={q.x} y={q.y+4} textAnchor="middle" fill="white" fontSize="11">{i+1}</text></g>;})}
-        {p.tool==='repair'&&p.repair?.guides&&<g data-testid="repair-guides" clipPath="url(#mask-image-bounds)">
-          {p.adjustments?.spots?.map(s=>{const target=displayPoint(s.target),source=displayPoint(s.source),active=s.id===p.repair?.selectedId,r=s.radius*t.scale;return <g key={s.id} opacity={s.enabled?1:.45}>
-            <circle cx={target.x} cy={target.y} r="3" fill={active?'#fff':'#333'} stroke="#fff"/>
-            {active&&<><line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="#ddd" strokeDasharray="4 3"/><circle data-testid="repair-target-handle" cx={target.x} cy={target.y} r={r} fill="none" stroke="#fff"/><circle cx={target.x} cy={target.y} r={r*(1+s.feather/100)} fill="none" stroke="#aaa" strokeDasharray="3 3"/><circle data-testid="repair-source-handle" cx={source.x} cy={source.y} r={r} fill="none" stroke="#abd2ff" strokeDasharray="4 3"/><circle cx={source.x} cy={source.y} r="3" fill="#abd2ff"/></>}
+        {p.tool==='repair'&&p.repair?.guides&&repairGuide&&<g data-testid="repair-guides" clipPath="url(#mask-image-bounds)">
+          {spots.map((s,i)=>{const q=repairGuide.targets[i],target=q?repairGuidePoint(q):undefined,active=s.id===p.repair?.selectedId,g=active?repairGuide.active:undefined,source=g?.source?repairGuidePoint(g.source):undefined;return <g key={s.id} opacity={s.enabled?1:.45}>
+            {target&&<circle data-testid={active?'repair-target-handle':undefined} cx={target.x} cy={target.y} r="3" fill={active?'#fff':'#333'} stroke="#fff"/>}
+            {g&&<>{source&&target&&<line x1={source.x} y1={source.y} x2={target.x} y2={target.y} stroke="#ddd" strokeDasharray="4 3"/>}
+              <path className="repair-area" d={repairPath(g.targetRadius)} fill="none" stroke="#fff"/><path className="repair-area" d={repairPath(g.targetFeather)} fill="none" stroke="#aaa" strokeDasharray="3 3"/>
+              <path className="repair-area" d={repairPath(g.sourceRadius)} fill="none" stroke="#abd2ff" strokeDasharray="4 3"/><path className="repair-area" d={repairPath(g.sourceFeather)} fill="none" stroke="#abd2ff" strokeDasharray="3 3"/>
+              {source&&<circle data-testid="repair-source-handle" cx={source.x} cy={source.y} r="3" fill="#abd2ff"/>}</>}
           </g>;})}
-          {p.repair.source&&(p.repair.selectingSource||!p.repair.selectedId)&&(()=>{const v=displayPoint(p.repair!.source!);return <g data-testid="repair-pending-source"><circle cx={v.x} cy={v.y} r="6" fill="none" stroke="#abd2ff"/><path d={`M${v.x-9},${v.y}h18 M${v.x},${v.y-9}v18`} stroke="#abd2ff"/></g>;})()}
+          {repairGuide.source&&(p.repair.selectingSource||!p.repair.selectedId)&&(()=>{const v=repairGuidePoint(repairGuide.source!);return <g data-testid="repair-pending-source"><circle cx={v.x} cy={v.y} r="6" fill="none" stroke="#abd2ff"/><path d={`M${v.x-9},${v.y}h18 M${v.x},${v.y-9}v18`} stroke="#abd2ff"/></g>;})()}
         </g>}
         {p.overlay&&p.maskId&&p.frame?.mask?.id===p.maskId&&<g clipPath="url(#mask-image-bounds)" opacity=".45">
           <image data-testid="mask-coverage" href={p.frame.mask.url} x={t.x} y={t.y} width={fw*t.scale} height={fh*t.scale} preserveAspectRatio="none" mask="url(#mask-fit-region)"/>
           {actual&&p.detailFrame?.mask&&p.detailFrame.mask.id===p.maskId&&<image data-testid="mask-detail-coverage" href={p.detailFrame.mask.url} x={t.x+p.detailFrame.mask.x*t.scale} y={t.y+p.detailFrame.mask.y*t.scale} width={p.detailFrame.mask.width*t.scale} height={p.detailFrame.mask.height*t.scale} preserveAspectRatio="none"/>}
         </g>}
-        {mask&&mask.initialized!==false&&mask.type==='linear'&&<g><line x1={start.x} y1={start.y} x2={end.x} y2={end.y} stroke="#fff" strokeWidth="1.5"/></g>}
-        {mask&&mask.initialized!==false&&mask.type==='radial'&&<ellipse cx={(start.x+end.x)/2} cy={(start.y+end.y)/2} rx={Math.abs(start.x-end.x)/2} ry={Math.abs(start.y-end.y)/2} fill="none" stroke="#fff" strokeDasharray="5 4"/>}
-        {mask&&mask.initialized!==false&&(mask.type==='linear'||mask.type==='radial')&&<g>
-          <circle data-testid="mask-start-handle" cx={start.x} cy={start.y} r="5" fill="#f7f7f7" stroke="#292b2e"/>
-          <circle data-testid="mask-end-handle" cx={end.x} cy={end.y} r="5" fill="#292b2e" stroke="#fff"/>
-          <circle data-testid="mask-move-handle" cx={(start.x+end.x)/2} cy={(start.y+end.y)/2} r="5" fill="#292b2e" stroke="#fff"/>
+        {mask&&guide&&<g data-testid="mask-mapped-guide">
+          <path data-testid="mask-guide-path" d={guide.segments.map(segment=>segment.map((q,i)=>{const v=guidePoint(q);return `${i?'L':'M'}${v.x},${v.y}`;}).join(' ')).join(' ')} fill="none" stroke="#fff" strokeWidth="1.5" strokeDasharray={mask.type==='radial'?'5 4':undefined}/>
+          {guide.handles.map((q,i)=>{if(!q)return null;const v=guidePoint(q);return <circle key={i} data-testid={`mask-${['start','end','move'][i]}-handle`} cx={v.x} cy={v.y} r="5" fill={i?'#292b2e':'#f7f7f7'} stroke={i?'#fff':'#292b2e'}/>;})}
         </g>}
-        {p.tool==='crop'&&p.adjustments?.crop&&(()=>{const c=rotateCrop(p.adjustments.crop,rotation)!,q=canvasPoint(c,t),width=c.width*fw*t.scale,height=c.height*fh*t.scale;return <g>
+        {maskGesture.screen.length>0&&<g data-testid="mask-stroke-draft" clipPath="url(#mask-image-bounds)" opacity=".6">
+          <polyline points={maskGesture.screen.map(q=>{const v=canvasPoint(q,t);return `${v.x},${v.y}`;}).join(' ')} fill="none" stroke="#ff745b" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+        </g>}
+        {cropping&&p.adjustments?.crop&&(()=>{const c=rotateCrop(p.adjustments.crop,rotation)!,q=canvasPoint(c,t),width=c.width*fw*t.scale,height=c.height*fh*t.scale;return <g>
           <path fill="#0008" fillRule="evenodd" d={`M${t.x},${t.y}h${fw*t.scale}v${fh*t.scale}h${-fw*t.scale}Z M${q.x},${q.y}h${width}v${height}h${-width}Z`}/>
           <rect data-testid="crop-frame" x={q.x} y={q.y} width={width} height={height} fill="none" stroke="#fff"/>
           {[1/3,2/3].map(f=><g key={f}><line x1={q.x+width*f} y1={q.y} x2={q.x+width*f} y2={q.y+height} stroke="#ffffff60"/><line x1={q.x} y1={q.y+height*f} x2={q.x+width} y2={q.y+height*f} stroke="#ffffff60"/></g>)}
-          {cropHandles.map(h=>{const v=canvasPoint(cropHandlePoint(c,h),t);return <rect key={h} data-testid={`crop-handle-${h}`} x={v.x-4} y={v.y-4} width="8" height="8" fill="#fff" stroke="#222"/>;})}
+          {p.tool==='crop'&&cropHandles.map(h=>{const v=canvasPoint(cropHandlePoint(c,h),t);return <rect key={h} data-testid={`crop-handle-${h}`} x={v.x-4} y={v.y-4} width="8" height="8" fill="#fff" stroke="#222"/>;})}
+        </g>;})()}
+        {straighten.line&&(()=>{const a=repairGuidePoint(straighten.line.start),b=repairGuidePoint(straighten.line.end);return <g data-testid="straighten-line">
+          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#111" strokeWidth="4"/><line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="white" strokeWidth="1.5"/>
+          {[a,b].map((q,i)=><circle key={i} cx={q.x} cy={q.y} r="4" fill="white" stroke="#111"/>)}
         </g>;})()}
       </svg>
+      {maskGesture.pending&&<span className="mask-gesture-status" role="status">正在绘制蒙版 · 松开后应用</span>}
+      {repairGesture.pending&&<span className="mask-gesture-status" data-testid="repair-gesture-pending" role="status">正在定位修复区域 · 松开后应用</span>}
+      {straighten.pending&&<span className="mask-gesture-status" data-testid="straighten-pending" role="status">正在拉直 · Esc 取消</span>}
     </div>
-    <div className="view-controls"><button disabled={!p.frame} onClick={()=>{setActual(false);setZoom(1);setPan({x:0,y:0});}} className={!actual&&zoom===1?'active':''} title="适应窗口"><Maximize size={14}/>适屏</button><button disabled={!p.frame} onClick={()=>{setActual(true);setPan({x:0,y:0});}} className={actual?'active':''} title="原始像素预览"><Scan size={14}/>1:1</button><span aria-label="缩放比例">{!p.frame?'—':actual?'100%':`${Math.round(t.scale*devicePixelRatio*100)}%`}</span>{p.comparisonControl}<span className="view-hint">{p.tool==='object'?(p.object?.mode==='box'?'拖动框住对象 · 空格平移':'单击添加 · Option 单击排除 · 空格平移'):p.tool==='white-balance'?'单击照片中的中性灰色 · I 选择吸管 · Esc 退出':p.tool==='repair'?(p.repair?.selectingSource?'单击选择取样来源':'单击目标修复 · ⌥ 单击重新取样 · 空格平移'):p.tool==='crop'?'拖动设置裁切范围':p.tool==='hand'?'滚轮缩放 · 拖动平移':p.tool==='eraser'?'在选中画笔蒙版中擦除':'拖动绘制 · 拖动中心移动 · 拖动端点调整范围'}</span></div>
+    <div className="view-controls"><button disabled={!p.frame||maskGesture.pending||repairGesture.pending||!!straighten.line} onClick={()=>{setActual(false);setZoom(1);setPan({x:0,y:0});}} className={!actual&&zoom===1?'active':''} title="适应窗口"><Maximize size={14}/>适屏</button><button disabled={!p.frame||maskGesture.pending||repairGesture.pending||!!straighten.line} onClick={()=>{setActual(true);setPan({x:0,y:0});}} className={actual?'active':''} title="原始像素预览"><Scan size={14}/>1:1</button><span aria-label="缩放比例">{!p.frame?'—':actual?'100%':`${Math.round(t.scale*devicePixelRatio*100)}%`}</span>{p.comparisonControl}<span className="view-hint">{p.tool==='object'?(p.object?.mode==='box'?'拖动框住对象 · 空格平移':'单击添加 · Option 单击排除 · 空格平移'):p.tool==='white-balance'?'单击照片中的中性灰色 · I 选择吸管 · Esc 退出':p.tool==='repair'?(p.repair?.selectingSource?'单击选择取样来源':'单击目标修复 · ⌥ 单击重新取样 · 空格平移'):p.tool==='straighten'?'沿水平或竖直参照线拖动 · Esc 取消':p.tool==='crop'?'拖动设置裁切范围':p.tool==='hand'?'滚轮缩放 · 拖动平移':p.tool==='eraser'?'在选中画笔蒙版中擦除':'拖动绘制 · 拖动中心移动 · 拖动端点调整范围'}</span></div>
   </section>;
 }
