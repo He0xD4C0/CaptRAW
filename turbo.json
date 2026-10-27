@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalDependencies": ["tsconfig.json"],
+  "remoteCache": { "enabled": false },
+  "tasks": {
+    "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
+    "typecheck": { "dependsOn": ["^build"], "outputs": [] },
+    "//#test:unit": {
+      "dependsOn": ["@captraw/contracts#build", "@captraw/desktop-core#build"],
+      "inputs": ["tests/*.test.mjs", "apps/desktop/src/geometry.ts"],
+      "outputs": []
+    }
+  }
+}

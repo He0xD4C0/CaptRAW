@@ -11,7 +11,7 @@ async function render(name,image,change={}){
 }
 try{
  for(const name of ['nikon-d850.NEF','fuji-xt4.RAF']){
-  const image=await engine.call('open',{path:resolve('build/samples',name),sessionId:name});assert.equal(image.baselineVersion,3);
+  const image=await engine.call('open',{path:resolve('build/samples',name),sessionId:name});assert.equal(image.baselineVersion,4);
   assert.equal(image.adjustments.wbMultipliers.length,3);await render(name+'-initial',image);
   const camera=await engine.call('whiteBalance',{mode:'camera'});assert.equal(camera.wbMode,'camera');assert.deepEqual(camera.wbMultipliers,image.adjustments.wbMultipliers);
   const auto=await engine.call('whiteBalance',{mode:'auto'});assert.equal(auto.wbMode,'auto');await render(name+'-auto',image,auto);

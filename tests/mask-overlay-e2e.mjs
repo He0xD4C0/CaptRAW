@@ -1,4 +1,5 @@
-import {_electron as electron,expect} from '@playwright/test';
+import {expect} from '@playwright/test';
+import {electron} from './electron-background.mjs';
 import {resolve} from 'node:path';
 import {mkdirSync,writeFileSync} from 'node:fs';
 const out=resolve('artifacts/mask-overlay-gui');mkdirSync(out,{recursive:true});
@@ -24,6 +25,6 @@ try{
  const frame=await page.evaluate(()=>window.__frames.filter(f=>f.kind==='detail').at(-1));expect(frame.mask.x).toBe(frame.x);expect(frame.mask.y).toBe(frame.y);expect(frame.mask.width).toBe(frame.width);expect(frame.mask.height).toBe(frame.height);
  await page.screenshot({path:resolve(out,'detail.png')});
  await page.getByRole('button',{name:'编辑',exact:true}).click();await expect(page.getByTestId('mask-coverage')).toHaveCount(0);await expect(page.getByTestId('mask-detail-coverage')).toHaveCount(0);
- expect(errors).toEqual([]);writeFileSync(resolve(out,'report.json'),JSON.stringify({packaged:!!executablePath,nativeOverlayLoaded:true,YTogglesOverlay:true,detailTracksViewport:true,editModeHidesOverlay:true,detailFrame:frame,errors},null,2)+'\n');console.log('Native coverage overlay, visibility, 1:1 and pan verified in actual GUI');
+ expect(errors).toEqual([]);writeFileSync(resolve(out,'report.json'),JSON.stringify({backgroundWindow:true,packaged:!!executablePath,nativeOverlayLoaded:true,YTogglesOverlay:true,detailTracksViewport:true,editModeHidesOverlay:true,detailFrame:frame,errors},null,2)+'\n');console.log('Native coverage overlay, visibility, 1:1 and pan verified in actual GUI');
 }catch(e){await page.screenshot({path:resolve(out,'failure.png')});throw e;}
 finally{await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});});await app.close();}

@@ -1,0 +1,98 @@
+{
+  "sam2Commit": "2b90b9f5ceec907a1c18123530e92e794ad901a4",
+  "onnxRuntimeTag": "v1.30.0",
+  "sources": [
+    {
+      "name": "sam2.tar.gz",
+      "url": "https://codeload.github.com/facebookresearch/sam2/tar.gz/2b90b9f5ceec907a1c18123530e92e794ad901a4",
+      "sha256": "1f2fbfad3ffa38110368abac76c6ef9df9c282a66d5c2807bc94abf4d2fb30f8",
+      "bytes": 55645345
+    },
+    {
+      "name": "sam2.1_hiera_tiny.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_tiny.pt",
+      "sha256": "7402e0d864fa82708a20fbd15bc84245c2f26dff0eb43a4b5b93452deb34be69",
+      "bytes": 156008466
+    },
+    {
+      "name": "sam2.1_hiera_small.pt",
+      "url": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_small.pt",
+      "sha256": "6d1aa6f30de5c92224f8172114de081d104bbd23dd9dc5c58996f0cad5dc4d38",
+      "bytes": 184416285
+    },
+    {
+      "name": "ort-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.30.0/LICENSE",
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+      "bytes": 1073
+    },
+    {
+      "name": "ort-image_decoder.py",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.30.0/onnxruntime/python/tools/transformers/models/sam2/image_decoder.py",
+      "sha256": "f033fc76a3a8d3f16110847c6b9a4c2d0ac23c4171ca2b11dd848880a82dea6e",
+      "bytes": 10821
+    },
+    {
+      "name": "ort-image_encoder.py",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.30.0/onnxruntime/python/tools/transformers/models/sam2/image_encoder.py",
+      "sha256": "b2afe88df30f0d4f956ed8be0dc854f0621e7156fd1ad57653ed54ca6206402d",
+      "bytes": 9552
+    },
+    {
+      "name": "ort-mask_decoder.py",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.30.0/onnxruntime/python/tools/transformers/models/sam2/mask_decoder.py",
+      "sha256": "d380e7195c0991c7fdd43b3daf546bbe79e1d77eeac8feeb62df1ad973f15641",
+      "bytes": 8858
+    },
+    {
+      "name": "ort-prompt_encoder.py",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.30.0/onnxruntime/python/tools/transformers/models/sam2/prompt_encoder.py",
+      "sha256": "faf0fc4baad1f41f997dd32f9cbc8f611444656f2e8a65e9d375173921dd6ad9",
+      "bytes": 8341
+    },
+    {
+      "name": "ort-sam2_utils.py",
+      "url": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.30.0/onnxruntime/python/tools/transformers/models/sam2/sam2_utils.py",
+      "sha256": "0fcd9919c85215e79cdaf848c7cd6e7e19fd326ab594ff63202e8979315ae4d0",
+      "bytes": 5520
+    },
+    {
+      "name": "onnxruntime-osx-arm64-1.30.0.tgz",
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-osx-arm64-1.30.0.tgz",
+      "sha256": "6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012",
+      "bytes": 42373116
+    }
+  ],
+  "convertedModels": {
+    "preprocess": {
+      "bytes": 577,
+      "sha256": "f8e256ddac47dc43ffca34ee3bca58bdbaae7f32ab10369cab119ab4618770b3"
+    },
+    "tiny": {
+      "modelId": "sam2.1-tiny-fp32-r1",
+      "files": {
+        "decoder.onnx": {
+          "bytes": 16595010,
+          "sha256": "cfbb9869db192023121d0c55257fd695d6fdfb16e969eb5873dc6865c57d1e76"
+        },
+        "encoder.onnx": {
+          "bytes": 109471963,
+          "sha256": "6ea0bcc041e9300cb130be8f608272a8584c3fcf1962707766247080716755b4"
+        }
+      }
+    },
+    "small": {
+      "modelId": "sam2.1-small-fp32-r1",
+      "files": {
+        "decoder.onnx": {
+          "bytes": 16595020,
+          "sha256": "1211a5d6f5782969d5659605cbec2e7f58d2a371d26f09341ffcac7ce63a42fa"
+        },
+        "encoder.onnx": {
+          "bytes": 138018811,
+          "sha256": "cdf3645422777c6c257d52d69f93951b6f360481570cdcdba5220050609d5c4a"
+        }
+      }
+    }
+  }
+}

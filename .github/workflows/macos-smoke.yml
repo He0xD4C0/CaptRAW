@@ -1,0 +1,73 @@
+name: macOS smoke
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22.23.1'
+  PNPM_VERSION: '11.25.0'
+  TURBO_CACHE: 'local:rw'
+  TURBO_TELEMETRY_DISABLED: '1'
+  HOMEBREW_NO_AUTO_UPDATE: '1'
+  CAPTRAW_BUILD_JOBS: '2'
+
+jobs:
+  smoke:
+    runs-on: macos-26
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare diagnostics and verify architecture
+        run: |
+          mkdir -p artifacts/monorepo/e2e
+          test "$(uname -m)" = arm64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Prepare pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
+      - name: Locate pnpm store
+        id: store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache dependencies and JavaScript tasks
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.store.outputs.path }}
+            .turbo
+          key: js-v1-${{ runner.os }}-${{ runner.arch }}-node-${{ env.NODE_VERSION }}-pnpm-${{ env.PNPM_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            js-v1-${{ runner.os }}-${{ runner.arch }}-node-${{ env.NODE_VERSION }}-pnpm-${{ env.PNPM_VERSION }}-${{ hashFiles('pnpm-lock.yaml') }}-
+      - name: Install dependencies
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: pnpm install --frozen-lockfile 2>&1 | tee artifacts/monorepo/e2e/install.log
+      - name: Install native build dependencies
+        run: |
+          brew install cmake ninja pkgconf autoconf automake libtool gtkmm3 exiv2 lensfun libomp nlohmann-json librsvg jpeg-turbo fftw little-cms2 2>&1 | tee artifacts/monorepo/e2e/brew.log
+      - name: Build native engine, XMP and UI
+        run: pnpm build 2>&1 | tee artifacts/monorepo/e2e/build.log
+      - name: Fetch D850 fixture
+        run: node scripts/fetch-samples.mjs --only nikon-d850.NEF 2>&1 | tee artifacts/monorepo/e2e/fixtures.log
+      - name: Run background Electron smoke
+        env:
+          CAPTRAW_E2E_BACKGROUND: '1'
+        run: pnpm test:e2e 2>&1 | tee artifacts/monorepo/e2e/smoke.log
+      - name: Upload smoke diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-smoke-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/monorepo/e2e/**
+          if-no-files-found: warn
+          retention-days: 14

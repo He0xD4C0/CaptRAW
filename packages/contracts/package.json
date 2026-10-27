@@ -1,0 +1,12 @@
+{
+  "name": "@captraw/contracts", "version": "0.0.0", "private": true,
+  "type": "module", "license": "GPL-3.0-or-later",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
+    "./export-options": { "types": "./dist/export-options.d.ts", "import": "./dist/export-options.js" },
+    "./presets": { "types": "./dist/presets.d.ts", "import": "./dist/presets.js" },
+    "./synchronize": { "types": "./dist/synchronize.d.ts", "import": "./dist/synchronize.js" }
+  },
+  "scripts": { "build": "tsc", "typecheck": "tsc --noEmit", "dev": "tsc --watch --preserveWatchOutput" },
+  "devDependencies": { "typescript": "7.0.2" }
+}

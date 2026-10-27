@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import './build-libraw.mjs';
-import {patchMaskGroups,patchMaskPreview,patchQualityFixes} from '../native/patch-art.mjs';
+import {patchRasterMasks} from '../native/patch-raster.mjs';
+import {patchMaskGroups,patchMaskPreview,patchQualityFixes,patchBlackWhiteMixer,patchCameraCrop,patchLocalWhiteBalance,patchLocalTone,patchParametricCurve,patchColorGrading,patchLensStatus,patchExternalMaskErrors} from '../native/patch-art.mjs';
 const root = resolve(import.meta.dirname, '..');
 const commit = '1e0e12c62e4f329d30bb5624d62a23a663ffbe6b';
 const upstream = resolve(root, 'build/upstream', `ART-${commit}`);
@@ -20,8 +21,17 @@ if (!existsSync(upstream)) {
 }
 const cmakePath = resolve(upstream, 'CMakeLists.txt');
 patchMaskGroups(upstream);
+patchExternalMaskErrors(upstream);
+patchRasterMasks(upstream);
 patchMaskPreview(upstream);
 patchQualityFixes(upstream);
+patchBlackWhiteMixer(upstream);
+patchCameraCrop(upstream);
+patchLocalWhiteBalance(upstream);
+patchLocalTone(upstream);
+patchParametricCurve(upstream);
+patchColorGrading(upstream);
+patchLensStatus(upstream);
 writeFileSync(resolve(upstream,'ReleaseInfo.cmake'),`set(GIT_DESCRIBE "1.26.10")\nset(GIT_BRANCH "1.26.10")\nset(GIT_COMMIT "${commit}")\nset(GIT_COMMIT_DATE "")\n`);
 let cmake = readFileSync(cmakePath, 'utf8');
 cmake = cmake.replace('add_subdirectory(src/gui)', 'include("${CAPTRAW_SOURCE_DIR}/targets.cmake")');
@@ -49,7 +59,7 @@ run('cmake', ['-S', upstream, '-B', 'build/native', '-G', 'Ninja',
   `-DOpenMP_CXX_INCLUDE_DIR=${prefix}/opt/libomp/include`,
   `-DCMAKE_CXX_FLAGS=-I${prefix}/opt/libomp/include`,
   '-DPROC_TARGET_NUMBER=0', '-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0'], env);
-run('cmake', ['--build', 'build/native', '--target', 'captraw-engine', 'captraw-art-reference', '-j', '8'], env);
+run('cmake', ['--build', 'build/native', '--target', 'captraw-engine', 'captraw-art-reference', '-j', process.env.CAPTRAW_BUILD_JOBS||'8'], env);
 const resources = resolve(root, 'build/native/resources');
 mkdirSync(resources, { recursive: true });
 for (const name of ['iccprofiles', 'dcpprofiles', 'profiles']) {

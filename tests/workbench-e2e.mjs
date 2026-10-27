@@ -1,4 +1,6 @@
-import {_electron as electron,expect} from '@playwright/test';
+import {readDocument} from './xmp-test.mjs';
+import {expect} from '@playwright/test';
+import {electron} from './electron-background.mjs';
 import {resolve} from 'node:path';
 import {readFileSync,writeFileSync,mkdirSync,existsSync,rmSync,cpSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
@@ -6,13 +8,13 @@ const root=process.cwd(),out=resolve('artifacts/workbench');mkdirSync(out,{recur
 const executablePath=process.env.CAPTRAW_APP;
 const app=await electron.launch({executablePath,args:executablePath?[]:[root]});
 const page=await app.firstWindow(),errors=[];page.setDefaultTimeout(20000);page.on('pageerror',e=>errors.push(String(e)));
-const report={packaged:!!executablePath,checks:[],inputFeedbackMs:[],globalControlUpdateMs:[]};
+const report={backgroundWindow:true,packaged:!!executablePath,checks:[],inputFeedbackMs:[],globalControlUpdateMs:[]};
 const check=name=>{report.checks.push(name);console.log('PASS',name);};
 async function frameCount(){return page.evaluate(()=>window.__frames.length);}
 async function settle(action){const count=await frameCount();await action();await page.waitForFunction(n=>window.__frames.length>n,count);await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__frames.filter(f=>f.kind!=='detail').at(-1)?.url);}
 async function open(paths){await app.evaluate(({dialog},files)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:files});},paths.map(p=>resolve(p)));await settle(()=>page.getByRole('button',{name:'打开',exact:true}).click());}
 async function output(path){await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},path);}
-async function save(name='state'){const file=resolve(out,`${name}.captraw.json`);rmSync(file,{force:true});await output(file);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(file)).toBe(true);return JSON.parse(readFileSync(file,'utf8'));}
+async function save(name='state'){const file=resolve(out,`${name}.xmp`);rmSync(file,{force:true});await output(file);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(file)).toBe(true);return await readDocument(file);}
 async function value(label,n){await settle(async()=>{await page.getByRole('spinbutton',{name:label,exact:true}).fill(String(n));await page.getByRole('spinbutton',{name:label,exact:true}).press('Tab');});}
 async function hash(){return page.locator('canvas').evaluate(c=>{const data=c.toDataURL();let h=0;for(let i=0;i<data.length;i+=127)h=(h*31+data.charCodeAt(i))|0;return h;});}
 async function stroke(from=[.35,.4],to=[.55,.55]){const b=await page.getByTestId('viewport').boundingBox();await settle(async()=>{await page.mouse.move(b.x+b.width*from[0],b.y+b.height*from[1]);await page.mouse.down();await page.mouse.move(b.x+b.width*to[0],b.y+b.height*to[1],{steps:8});await page.mouse.up();});}
@@ -60,7 +62,7 @@ try{
  await settle(()=>page.getByTitle('停用蒙版').last().click());await settle(()=>page.getByTitle('启用蒙版').click());
  await settle(()=>page.getByTitle('删除蒙版').click());expect((await save('deleted')).adjustments.masks.length).toBe(2);
  await settle(()=>page.getByRole('button',{name:'撤销',exact:true}).click());check('mask enable, delete and undo work');
- await page.getByRole('button',{name:'裁切 C',exact:true}).click();await stroke([.25,.25],[.7,.7]);await page.locator('.crop-actions').getByRole('button',{name:'完成',exact:true}).click();
+ await page.getByRole('button',{name:'裁切 C',exact:true}).click();await settle(()=>page.getByRole('button',{name:'清除裁切',exact:true}).click());await stroke([.25,.25],[.7,.7]);await page.locator('.crop-actions').getByRole('button',{name:'完成',exact:true}).click();
  const crop=await save('crop');expect(crop.adjustments.crop.width).toBeLessThan(1);
  await settle(()=>page.getByRole('button',{name:'顺时针旋转 90 度',exact:true}).click());expect((await save('rotated')).adjustments.rotation).toBe(90);
  check('crop and rotation preserve the canonical image coordinates');
@@ -89,7 +91,7 @@ try{
  await expect(page.locator('.job-toast.cancelled')).toBeVisible();expect(existsSync(cancelled)).toBe(false);check('cancelled export leaves no final output');
  const jpeg=resolve(out,'中文 空格.jpg');rmSync(jpeg,{force:true});await output(jpeg);await page.getByRole('button',{name:'导出',exact:true}).click();await page.getByRole('button',{name:/^JPEG/}).click();
  await expect(page.locator('.job-toast.done')).toBeVisible({timeout:60000});expect(existsSync(jpeg)).toBe(true);check('JPEG export accepts Chinese and spaces');
- await open([resolve(out,'durable.captraw.json')]);expect((await save('reopened')).adjustments).toEqual(durable.adjustments);check('saved document restores crop, masks and adjustments');
+ await open([resolve(out,'durable.xmp')]);expect((await save('reopened')).adjustments).toEqual(durable.adjustments);check('saved document restores crop, masks and adjustments');
  const beforeFailure=await hash();
  await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},resolve('artifacts/native-acceptance/broken.NEF'));
  await page.getByRole('button',{name:'打开',exact:true}).click();await expect(page.getByRole('alert')).toBeVisible();expect(await hash()).toBe(beforeFailure);await settle(()=>page.getByRole('button',{name:'重新载入当前编辑'}).click());check('corrupt RAW reports an actionable error and current edits can be restored');

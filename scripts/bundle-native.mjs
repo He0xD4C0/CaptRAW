@@ -2,6 +2,7 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSy
 import { basename, dirname, resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 
 const root=resolve(import.meta.dirname,'..'),output=join(root,'build/bundle/native');
 const upstream=join(root,'build/upstream/ART-1e0e12c62e4f329d30bb5624d62a23a663ffbe6b');
@@ -45,12 +46,18 @@ function collect(source,destination,isExecutable=false){
   return destination;
 }
 collect(join(root,'build/native/captraw-engine'),join(output,'captraw-engine'),true);
+collect(join(root,'build/xmp/captraw-xmp'),join(output,'captraw-xmp'),true);
 cpSync(join(root,'build/native/resources'),join(output,'resources'),{recursive:true});
 const licenses=join(output,'licenses');mkdirSync(licenses,{recursive:true});
 cpSync(join(upstream,'LICENSE.txt'),join(licenses,'ART-GPL-3.0.txt'));
 cpSync(join(upstream,'AUTHORS.txt'),join(licenses,'ART-AUTHORS.txt'));
 cpSync(join(upstream,'licenses'),join(licenses,'ART-components'),{recursive:true});
 const manifest=[];
+const xmpSource=join(root,'build/upstream/xmp-sdk');mkdirSync(join(licenses,'xmp'),{recursive:true});
+cpSync(join(xmpSource,'LICENSE'),join(licenses,'xmp/LICENSE'));
+for(const name of ['MD5.cpp','MD5.h'])cpSync(join(xmpSource,'third-party/zuid/interfaces',name),join(licenses,'xmp',name));
+cpSync(join(root,'build/xmp/build.json'),join(licenses,'xmp/build.json'));
+manifest.push({name:'Adobe XMP Toolkit SDK',version:'v2025.03',license:'BSD-3-Clause; RSA MD5 notice retained',commit:'581c41213ddcee1fbc72cbb532531102a6617a25',source:'https://github.com/adobe/XMP-Toolkit-SDK',sha256:'7e9f4b0d62979e1a7d44e16febfe2c6ab337ceccdaf1dad092666ac14b2fdcd5'});
 const libraw=join(root,'build/upstream/redlamp-libraw-3b20539d3faa766a370e93a529a3b87edffbf0f6');
 mkdirSync(join(licenses,'libraw'),{recursive:true});
 for(const file of ['COPYRIGHT','LICENSE.LGPL','LICENSE.CDDL','REDLAMP.md'])cpSync(join(libraw,file),join(licenses,'libraw',file));
@@ -76,14 +83,28 @@ for(const [name,info] of [...formulas].sort(([a],[b])=>a.localeCompare(b))){
   manifest.push({name,version:info.version,license:metadata?.license||text.match(/^\s*license\s+(.+)$/m)?.[1],source:metadata?.urls?.stable?.url||text.match(/^\s*url\s+"([^"]+)"/m)?.[1],sha256:metadata?.urls?.stable?.checksum||text.match(/^\s*sha256\s+"([^"]+)"/m)?.[1]});
 }
 const web=[];
-for(const dir of run('npm',['ls','--all','--omit=dev','--parseable']).trim().split('\n').slice(1)){
+const dependencyGraph=JSON.parse(run('pnpm',['--filter','@captraw/desktop','list','--prod','--depth','Infinity','--json']));
+const directories=new Map();
+function visitDependencies(dependencies={}){
+  for(const dependency of Object.values(dependencies)){
+    const dir=dependency.path;
+    if(dir){
+      const p=JSON.parse(readFileSync(join(dir,'package.json'),'utf8'));
+      if(!p.name.startsWith('@captraw/'))directories.set(`${p.name}@${p.version}`,dir);
+    }
+    visitDependencies(dependency.dependencies);visitDependencies(dependency.optionalDependencies);
+  }
+}
+for(const project of dependencyGraph){visitDependencies(project.dependencies);visitDependencies(project.optionalDependencies);}
+for(const [,dir] of [...directories].sort(([a],[b])=>a.localeCompare(b))){
   const p=JSON.parse(readFileSync(join(dir,'package.json'),'utf8'));
   const dest=join(licenses,'web',`${p.name.replaceAll('/','__')}@${p.version}`);mkdirSync(dest,{recursive:true});
   for(const file of readdirSync(dir))if(/^(licen[sc]e|notice|copying)/i.test(file))cpSync(join(dir,file),join(dest,file));
   web.push({name:p.name,version:p.version,license:p.license,repository:p.repository});
 }
-cpSync(join(root,'node_modules/electron/dist/LICENSE'),join(licenses,'Electron-LICENSE'));
-cpSync(join(root,'node_modules/electron/dist/LICENSES.chromium.html'),join(licenses,'Chromium-LICENSES.html'));
+const require=createRequire(join(root,'package.json')),electronDist=join(dirname(require.resolve('electron/package.json')),'dist');
+cpSync(join(electronDist,'LICENSE'),join(licenses,'Electron-LICENSE'));
+cpSync(join(electronDist,'LICENSES.chromium.html'),join(licenses,'Chromium-LICENSES.html'));
 writeFileSync(join(licenses,'web-dependencies.json'),JSON.stringify(web,null,2)+'\n');
 if(existsSync(join(root,'THIRD_PARTY.md')))cpSync(join(root,'THIRD_PARTY.md'),join(licenses,'README.md'));
 const audit=[];

@@ -1,4 +1,5 @@
-import {_electron as electron,expect} from '@playwright/test';
+import {expect} from '@playwright/test';
+import {electron} from './electron-background.mjs';
 import {resolve,join} from 'node:path';
 import {mkdirSync,readFileSync,writeFileSync,rmSync,statSync,existsSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -12,7 +13,7 @@ async function save(name){const path=join(out,name+'.captraw.json');rmSync(path,
 try{
  await page.evaluate(()=>{window.__frames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__frames.push(e.frame);});});
  await open('build/samples/nikon-d850.NEF');const selector=page.getByRole('combobox',{name:'白平衡',exact:true});
- await expect(selector).toBeVisible();const original=await save('original');expect(original.baselineVersion).toBe(3);expect(original.adjustments.wbMultipliers).toHaveLength(3);
+ await expect(selector).toBeVisible();const original=await save('original');expect(original.baselineVersion).toBe(4);expect(original.adjustments.wbMultipliers).toHaveLength(3);
  const exposure=page.getByRole('spinbutton',{name:'曝光',exact:true});await settle(async()=>{await exposure.fill('0.5');await exposure.press('Tab');});
  await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},join(out,'original.captraw.json'));
  await page.getByRole('button',{name:'打开',exact:true}).click();await expect(page.getByRole('alert')).toContainText('未保存');await expect(exposure).toHaveValue('0.5');await expect(page.locator('.film-item')).toHaveCount(1);
@@ -39,9 +40,9 @@ try{
  // Obtain the legacy projection from the native profile's WB fields, preserving all other neutral defaults.
  const wbSection=profile.split('[White Balance]')[1].split(/\n\[/)[0];
  const temperature=Number(wbSection.match(/Temperature=(.+)/)?.[1]),green=Number(wbSection.match(/Green=(.+)/)?.[1]);
- Object.assign(adjustments,{temperature,tint:Math.log(green)*100});delete adjustments.wbMode;delete adjustments.wbMultipliers;delete adjustments.wbApproximate;delete adjustments.colorProfile;
+ Object.assign(adjustments,{temperature,tint:Math.log(green)*100,crop:null,rotation:0});delete adjustments.wbMode;delete adjustments.wbMultipliers;delete adjustments.wbApproximate;delete adjustments.colorProfile;delete adjustments.blackWhite;delete adjustments.spots;
  const legacy={schemaVersion:1,engineVersion:'CaptRAW-2_ART-1.26.10_LibRaw-3b20539',source:{path:source,size:statSync(source).size,sha256:createHash('sha256').update(readFileSync(source)).digest('hex')},artProfile:profile,adjustments};
- writeFileSync(join(out,'legacy.captraw.json'),JSON.stringify(legacy));await open(join(out,'legacy.captraw.json'));const migrated=await save('migrated');expect(migrated.baselineVersion).toBe(2);expect(migrated.engineVersion).toContain('CaptRAW-4');expect(migrated.adjustments.wbMultipliers).toBeNull();
+ writeFileSync(join(out,'legacy.captraw.json'),JSON.stringify(legacy));await open(join(out,'legacy.captraw.json'));const migrated=await save('migrated');expect(migrated.baselineVersion).toBe(2);expect(migrated.engineVersion).toContain('CaptRAW-13');expect(migrated.adjustments.wbMultipliers).toBeNull();
  await open(join(out,'migrated.captraw.json'));expect((await save('migrated-restored')).baselineVersion).toBe(2);passed('0.3 recipe migration preserves legacy baseline through another save and reopen');
  await settle(()=>page.locator('.film-item').filter({hasText:'nikon-d850.NEF'}).locator('.film-open').click());
  await settle(()=>page.locator('.film-item').filter({hasText:'synthetic.dng'}).locator('.film-open').click());expect((await save('legacy-switched')).baselineVersion).toBe(2);
@@ -50,4 +51,4 @@ try{
  await page.getByRole('button',{name:'导出',exact:true}).click();await page.getByRole('button',{name:'TIFF · 16 位'}).click();await expect(page.locator('.job-toast.done')).toBeVisible();expect(existsSync(output)).toBe(true);
  expect(errors).toEqual([]);
 }catch(e){await page.screenshot({path:join(out,'failure.png')});console.error(await page.locator('body').innerText());throw e;}
-finally{writeFileSync(join(out,'report.json'),JSON.stringify({packaged:!!executablePath,checks,errors},null,2)+'\n');await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});});await app.close();}
+finally{writeFileSync(join(out,'report.json'),JSON.stringify({backgroundWindow:true,packaged:!!executablePath,checks,errors},null,2)+'\n');await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});});await app.close();}

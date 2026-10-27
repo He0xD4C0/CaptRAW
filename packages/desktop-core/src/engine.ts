@@ -15,7 +15,7 @@ export class NativeEngine extends EventEmitter {
     this.child = spawn(binary, [resources, cache], { stdio: 'pipe' });
     this.child.stderr.pipe(log);
     this.ready = new Promise((resolve, reject) => {
-      this.once('ready', resolve); this.child.once('error', error=>{this.exited=true;reject(error);});
+      this.once('ready', resolve); this.child.once('error', error=>{this.exited=true;log.end();reject(error);});
       this.child.once('exit', (code, signal) => {
         this.exited=true;
         const error = new Error(`显影核心已退出（${code ?? signal}），请重新打开图片重试。`);

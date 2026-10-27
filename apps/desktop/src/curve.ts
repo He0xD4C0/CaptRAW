@@ -1,4 +1,4 @@
-import type {Point} from '../../../packages/contracts';
+import type {Point} from '@captraw/contracts';
 // ART DiagonalCurve::spline_cubic_set / getVal, natural boundary conditions.
 export function sampleCurve(points:Point[],count=513):number[]{
   const n=points.length;if(n<2)return Array.from({length:count},(_,i)=>i/(count-1));

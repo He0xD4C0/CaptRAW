@@ -1,5 +1,12 @@
 #include "recipe.h"
 #include "engine/curves.h"
+#include "engine/rtlensfun.h"
+#include "engine/dcp.h"
+#include "engine/iccstore.h"
+#include "engine/color.h"
+#include "engine/colortemp.h"
+#include "engine/iccmatrices.h"
+#include "engine/masks.h"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -21,6 +28,22 @@ static double num(const Json &j, const char *key, double def, double low, double
     if(!std::isfinite(v) || v<low || v>high) throw std::runtime_error(std::string("Invalid ")+key);
     return v;
 }
+Json colorGradingSettings(const pp::ProcParams &p) {
+    const auto &values=p.captrawGrading;Json result=Json::object();int i=0;
+    for(const char *region:{"shadows","midtones","highlights","global"}){
+        result[region]={{"hue",values.empty()?0:values[i]},{"saturation",values.empty()?0:values[i+1]},{"luminance",values.empty()?0:values[i+2]}};i+=3;
+    }
+    result["blending"]=values.empty()?50:values[12];result["balance"]=values.empty()?0:values[13];return result;
+}
+std::vector<double> parametricCurve(const Json &settings) {
+    if(!settings.is_object())throw std::runtime_error("Invalid parametric curve");
+    const auto &splits=settings.at("splits");
+    if(!splits.is_array()||splits.size()!=3)throw std::runtime_error("Invalid curve splits");
+    std::vector<double> curve{double(art::utils::DCT_Parametric)};double previous=0;
+    for(const auto &split:splits){const double v=num({{"v",split}},"v",0,1,99);if(v-previous<1)throw std::runtime_error("Curve splits must be ordered with a one percent gap");curve.push_back(v/100.);previous=v;}
+    bool changed=false;for(const char *key:{"highlights","lights","darks","shadows"}){const double v=num(settings,key,0,-100,100);curve.push_back(v);changed|=v!=0;}
+    return changed?curve:std::vector<double>{double(art::utils::DCT_Linear)};
+}
 Json inputProfileSettings(const pp::ColorManagementParams &p) {
     const std::string mode=p.inputProfile=="(cameraICC)"?"auto":p.inputProfile=="(camera)"||p.inputProfile.empty()?"matrix":p.inputProfile=="(embedded)"?"embedded":"inherited";
     Json state={{"mode",mode},{"toneCurve",p.toneCurve},{"lookTable",p.applyLookTable},{"hueSatMap",p.applyHueSatMap},
@@ -28,8 +51,192 @@ Json inputProfileSettings(const pp::ColorManagementParams &p) {
     if(mode=="inherited")state["reference"]=std::string(p.inputProfile);
     return state;
 }
+void validateInputProfile(const pp::ColorManagementParams &p) {
+    if(inputProfileSettings(p).at("mode")!="inherited"||p.inputProfile=="(none)")return;
+    const auto filename=p.inputProfile.substr(0,5)=="file:"?p.inputProfile.substr(5):p.inputProfile;
+    if((p.inputProfile.substr(0,5)=="file:"||filename.find('/')!=Glib::ustring::npos)&&!Glib::file_test(filename,Glib::FILE_TEST_IS_REGULAR))throw std::runtime_error("配方引用的输入配置文件不可用，请恢复相关文件后重试。");
+    auto *store=art::engine::DCPStore::getInstance();
+    if(store->isValidDCPFileName(filename)&&store->getProfile(filename))return;
+    if(art::engine::ICCStore::getInstance()->getProfile(p.inputProfile))return;
+    throw std::runtime_error("配方引用的输入配置文件不可用，请恢复相关文件后重试。");
+}
+void validateExternalMasks(const pp::ProcParams &p) {
+    std::function<void(const pp::Mask &)> check=[&](const pp::Mask &mask){
+        if(!mask.enabled)return;
+        if(mask.externalMask.enabled){
+            std::shared_ptr<art::engine::array2D<float>> pixels;
+            if(!art::engine::ExternalMaskManager::getInstance()->load_mask(mask.externalMask.filename,pixels,true,nullptr,&mask.externalMask))
+                throw std::runtime_error("配方引用的蒙版文件缺失或损坏，请恢复文件后重试："+std::string(mask.externalMask.filename));
+        }
+        for(const auto &child:mask.components)check(child);
+    };
+    const auto tool=[&](const auto &params){if(params.enabled)for(const auto &mask:params.masks)check(mask);};
+    tool(p.colorcorrection);tool(p.smoothing);tool(p.textureBoost);tool(p.localContrast);
+}
+Json externalMaskAssets(pp::ProcParams &p,const Json &replacements,bool validate) {
+    if(!replacements.is_object())throw std::runtime_error("Invalid mask asset replacements");
+    Json paths=Json::array();
+    std::function<void(pp::Mask &)> visit=[&](pp::Mask &mask){
+        auto &name=mask.externalMask.filename;
+        if(!name.empty()){
+            const std::string original=name;
+            if(replacements.contains(original)){
+                const auto target=replacements.at(original).get<std::string>();
+                if(target.empty())throw std::runtime_error("Empty mask asset replacement");
+                name=target;
+            }
+            const std::string path=name;
+            if(std::find(paths.begin(),paths.end(),path)==paths.end()){
+                if(validate){
+                    std::shared_ptr<art::engine::array2D<float>> pixels;
+                    if(!art::engine::ExternalMaskManager::getInstance()->load_mask(name,pixels,true,nullptr,&mask.externalMask))
+                        throw std::runtime_error("无法读取需要保存的蒙版资产（含停用蒙版）："+path);
+                }
+                paths.push_back(path);
+            }
+        }
+        for(auto &child:mask.components)visit(child);
+    };
+    // Disabled regions still belong to the document and must survive a reopen.
+    for(auto &m:p.colorcorrection.masks)visit(m);
+    for(auto &m:p.textureBoost.masks)visit(m);
+    for(auto &m:p.smoothing.masks)visit(m);
+    for(auto &m:p.localContrast.masks)visit(m);
+    return paths;
+}
+static pp::ExternalMask rasterSettings(const Json &r,int rotation) {
+    pp::ExternalMask mask;mask.enabled=true;mask.captrawRaster=true;mask.captrawRotation=rotation;
+    const std::string path=r.at("path"),hash=r.at("sha256");
+    if(path.empty()||hash.size()!=64||hash.find_first_not_of("0123456789abcdef")!=std::string::npos)throw std::runtime_error("Invalid raster mask identity");
+    for(const char *key:{"width","height"})if(!r.at(key).is_number_integer()||r.at(key)<1||r.at(key)>65000)throw std::runtime_error("Invalid raster mask dimensions");
+    mask.filename=path;mask.captrawSha256=hash;mask.captrawWidth=r.at("width");mask.captrawHeight=r.at("height");
+    if(int64_t(mask.captrawWidth)*mask.captrawHeight>64000000)throw std::runtime_error("Raster mask exceeds 64 MP");
+    return mask;
+}
+Json rasterMaskAssets(Json &a,const Json &replacements,bool validate) {
+    if(!replacements.is_object())throw std::runtime_error("Invalid mask asset replacements");
+    Json paths=Json::array();
+    std::function<void(Json &,int)> visit=[&](Json &m,int depth){
+        if(depth>8)throw std::runtime_error("Mask group nesting limit exceeded");
+        if(m.contains("raster")){
+            auto &r=m.at("raster");auto mask=rasterSettings(r,0);
+            const std::string path=mask.filename;
+            if(replacements.contains(path)){r["path"]=replacements.at(path);mask=rasterSettings(r,0);}
+            if(validate){std::shared_ptr<art::engine::array2D<float>> pixels;
+                if(!art::engine::ExternalMaskManager::getInstance()->load_mask(mask.filename,pixels,true,nullptr,&mask))throw std::runtime_error("栅格蒙版资产缺失、已改变或尺寸不符："+std::string(mask.filename));}
+            if(std::find(paths.begin(),paths.end(),std::string(mask.filename))==paths.end())paths.push_back(std::string(mask.filename));
+        }else if(m.value("type",std::string())=="raster"&&!m.contains("components"))throw std::runtime_error("Missing raster mask asset");
+        if(m.contains("components")){if(!m["components"].is_array()||m["components"].size()>32)throw std::runtime_error("Invalid mask components");for(auto &child:m["components"])visit(child,depth+1);}
+    };
+    if(!a.at("masks").is_array())throw std::runtime_error("Invalid masks");
+    for(auto &mask:a["masks"])visit(mask,0);
+    return paths;
+}
+static std::array<double,8> blackWhiteHues(const Glib::ustring &space) {
+    auto *store=art::engine::ICCStore::getInstance();const auto srgb=store->workingSpaceMatrix("sRGB"),ws=store->workingSpaceMatrix(space),inv=store->workingSpaceInverseMatrix(space);
+    const std::array<double,8> hues{0,1./12,1./6,1./3,.5,2./3,.75,5./6};std::array<double,8> out;
+    for(int i=0;i<8;++i){
+        float r,g,b;art::engine::Color::hsv2rgb01(hues[i],1,1,r,g,b);double rgb[]={r,g,b},xyz[3]={},converted[3]={};
+        for(auto &v:rgb)v=art::engine::Color::igamma_srgb(float(v*65535.))/65535.;
+        for(int row=0;row<3;++row)for(int col=0;col<3;++col)xyz[row]+=srgb[row][col]*rgb[col];
+        for(int row=0;row<3;++row)for(int col=0;col<3;++col)converted[row]+=inv[row][col]*xyz[col];
+        float y,u,v,h,s;art::engine::Color::rgb2yuv(converted[0],converted[1],converted[2],y,u,v,ws);art::engine::Color::yuv2hsl(u,v,h,s);
+        out[i]=h/(2.*3.141592653589793);if(out[i]<0)out[i]+=1;
+    }return out;
+}
+Json blackWhiteSettings(const pp::ProcParams &params) {
+    const auto &p=params.blackwhite;std::vector<int> mixer(8,0);const auto positions=blackWhiteHues(params.icm.workingProfile);
+    if(p.luminanceCurve.size()>1){art::engine::FlatCurve curve(p.luminanceCurve,true);for(int i=0;i<8;++i)mixer[i]=std::clamp(int(std::lround((curve.getVal(positions[i])-.5)*200.)),-100,100);}
+    return {{"enabled",p.enabled},{"mixer",mixer},{"base",{{"preset",std::string(p.setting)},{"filter",std::string(p.filter)},
+        {"weights",{p.mixerRed,p.mixerGreen,p.mixerBlue}},{"gamma",{p.gammaRed,p.gammaGreen,p.gammaBlue}},
+        {"tint",{{"amount",p.colorCast.getBottom()},{"hue",p.colorCast.getTop()}}}}}};
+}
+Json spotSettings(const pp::ProcParams &p,int width,int height) {
+    const int rotation=p.coarse.rotate;if(rotation==90||rotation==270)std::swap(width,height);
+    const auto point=[&](const art::engine::Coord &c){
+        if(c.x<0||c.y<0||c.x>=width||c.y>=height)throw std::runtime_error("配方中的修复点超出当前图像范围，无法无损恢复。");
+        double x=double(c.x)/std::max(1,width-1),y=double(c.y)/std::max(1,height-1),ox=x;
+        switch(rotation){case 90:x=y;y=1-ox;break;case 180:x=1-x;y=1-y;break;case 270:x=1-y;y=ox;break;}
+        return Json{{"x",x},{"y",y}};
+    };
+    Json list=Json::array();int i=0;
+    for(const auto &s:p.spot.entries){++i;list.push_back({{"id","legacy-spot-"+std::to_string(i)},{"name","修复点 "+std::to_string(i)},
+        {"enabled",p.spot.enabled},{"source",point(s.sourcePos)},{"target",point(s.targetPos)},{"radius",s.radius},
+        {"feather",double(s.feather)*100.},{"opacity",double(s.opacity)*100.},{"method",s.detail>=2?"heal":"clone"},
+        {"detail",s.detail>=2?s.detail-2:0},{"retainTexture",s.detail==1}});}
+    return list;
+}
+// Owned detail regions can be rebuilt without discarding inherited ART modules.
+static constexpr const char *detailPrefix="@CaptRAW-details-v1:";
+template<class Module> static void removeDetailRegions(Module &module) {
+    for(int i=int(module.masks.size())-1;i>=0;--i){
+        const std::string name=module.masks[i].name;
+        if(name.rfind(detailPrefix,0)!=0)continue;
+        module.enabled=name.substr(std::char_traits<char>::length(detailPrefix),1)=="1";
+        module.regions.erase(module.regions.begin()+i);module.masks.erase(module.masks.begin()+i);
+    }
+}
+template<class Module,class Region> static void addDetailRegion(Module &module,const Region &region,const pp::Mask &mask,const std::string &id) {
+    pp::Mask owned=mask;bool baseEnabled=module.enabled;
+    for(const auto &m:module.masks){const std::string name=m.name;if(name.rfind(detailPrefix,0)==0){baseEnabled=name.substr(std::char_traits<char>::length(detailPrefix),1)=="1";break;}}
+    // A dormant non-neutral inherited module must not activate as a side effect.
+    if(!baseEnabled)for(size_t i=0;i<module.regions.size();++i){const std::string name=module.masks[i].name;if(name.rfind(detailPrefix,0)!=0&&module.regions[i]!=Region())throw std::runtime_error("配方包含停用的独立 ART 局部处理参数，无法安全合并新的细节调整。原配方未修改。");}
+    owned.name=std::string(detailPrefix)+(baseEnabled?"1:":"0:")+id;
+    module.regions.push_back(region);module.masks.push_back(owned);module.enabled=true;
+}
+// Relative local WB operates on linear working RGB, not on raw sensor samples.
+// LittleCMS supplies Bradford adaptation; ART supplies the illuminant model.
+static std::vector<double> localWhiteBalance(double temperature,double tint,const Glib::ustring &space) {
+    if(temperature==0 && tint==0)return {};
+    namespace ae=art::engine;
+    const auto white=[](double t,double g){
+        ae::ColorTemp c(t,g,1,"Custom");double rgb[3];c.getMultipliers(rgb[0],rgb[1],rgb[2]);
+        double xyz[3]={};for(int r=0;r<3;++r)for(int k=0;k<3;++k)xyz[r]+=ae::xyz_sRGBd65[r][k]*rgb[k];
+        return cmsCIEXYZ{xyz[0]/xyz[1],1,xyz[2]/xyz[1]};
+    };
+    const auto neutral=white(6504,1),source=white(6504*std::exp2(temperature/100.),std::exp(-tint/200.));
+    auto *store=ae::ICCStore::getInstance();const auto ws=store->workingSpaceMatrix(space),inv=store->workingSpaceInverseMatrix(space);
+    std::vector<double> matrix(9);
+    for(int col=0;col<3;++col){
+        cmsCIEXYZ input{ws[0][col],ws[1][col],ws[2][col]},d65,balanced,output;
+        if(!cmsAdaptToIlluminant(&d65,cmsD50_XYZ(),&neutral,&input)||
+           !cmsAdaptToIlluminant(&balanced,&source,&neutral,&d65)||
+           !cmsAdaptToIlluminant(&output,&neutral,cmsD50_XYZ(),&balanced))throw std::runtime_error("Local white balance adaptation failed");
+        const double xyz[]={output.X,output.Y,output.Z};
+        for(int row=0;row<3;++row)for(int k=0;k<3;++k)matrix[row*3+col]+=inv[row][k]*xyz[k];
+    }
+    return matrix;
+}
 void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, std::vector<std::string> *maskIds) {
+    if(a.contains("colorGrading")){
+        const auto &g=a.at("colorGrading");if(!g.is_object())throw std::runtime_error("Invalid color grading settings");
+        std::vector<double> values;
+        for(const char *region:{"shadows","midtones","highlights","global"}){
+            const auto &wheel=g.at(region);if(!wheel.is_object())throw std::runtime_error("Invalid color grading wheel");
+            values.push_back(num(wheel,"hue",0,0,360));values.push_back(num(wheel,"saturation",0,0,100));values.push_back(num(wheel,"luminance",0,-100,100));
+        }
+        values.push_back(num(g,"blending",50,0,100));values.push_back(num(g,"balance",0,-100,100));
+        bool initial=true;for(int i=0;i<14;++i)initial&=values[i]==(i==12?50:0);if(initial)values.clear();
+        p.captrawGrading=std::move(values);
+    }
     if(maskIds)maskIds->clear();
+    if(a.contains("blackWhite")){
+        const auto &bw=a.at("blackWhite");if(!bw.is_object()||!bw.at("enabled").is_boolean()||!bw.at("mixer").is_array()||bw.at("mixer").size()!=8)throw std::runtime_error("Invalid black and white settings");
+        pp::BlackWhiteParams value;value.enabled=bw.at("enabled");
+        if(bw.contains("base")){
+            const auto &base=bw.at("base");value.setting=base.at("preset").get<std::string>();value.filter=base.at("filter").get<std::string>();
+            if(base.at("weights").size()!=3||base.at("gamma").size()!=3)throw std::runtime_error("Invalid black and white conversion");
+            int *weights[]={&value.mixerRed,&value.mixerGreen,&value.mixerBlue},*gamma[]={&value.gammaRed,&value.gammaGreen,&value.gammaBlue};
+            for(int i=0;i<3;++i){*weights[i]=int(num({{"v",base.at("weights")[i]}},"v",33,-100,200));*gamma[i]=int(num({{"v",base.at("gamma")[i]}},"v",0,-100,100));}
+            value.colorCast.setValues(int(num(base.at("tint"),"amount",0,0,100)),int(num(base.at("tint"),"hue",0,0,360)));
+        }
+        const auto positions=blackWhiteHues(p.icm.workingProfile);bool changed=false;std::vector<std::pair<double,double>> nodes;
+        std::vector<double> curve{double(art::utils::FCT_MinMaxCPoints)};
+        for(int i=0;i<8;++i){if(!bw.at("mixer")[i].is_number_integer())throw std::runtime_error("Black and white mixer requires integer values");const double v=num({{"v",bw.at("mixer")[i]}},"v",0,-100,100);changed|=v!=0;nodes.push_back({positions[i],.5+v/200.});}
+        std::sort(nodes.begin(),nodes.end());for(const auto &node:nodes)curve.insert(curve.end(),{node.first,node.second,0,0});
+        if(changed)value.luminanceCurve=curve;
+        p.blackwhite=value;
+    }
     if(a.contains("colorProfile")){
         const auto &c=a.at("colorProfile");const auto mode=c.at("mode").get<std::string>();
         if(mode=="auto")p.icm.inputProfile="(cameraICC)";
@@ -55,6 +262,7 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         for(int i=0;i<3;++i){const double v=m[i].get<double>();if(!std::isfinite(v)||v<=0||v>100)throw std::runtime_error("Invalid white balance multiplier");p.wb.mult[i]=v;}
         p.wb.method=pp::WBParams::CUSTOM_MULT;
     }
+    p.toneCurve.captrawParametric=a.contains("parametricCurve")?parametricCurve(a.at("parametricCurve")):std::vector<double>{double(art::utils::DCT_Linear)};
     p.toneCurve.enabled=true; p.toneCurve.contrast=int(num(a,"contrast",0,-100,100));
     p.toneCurve.curveMode=pp::ToneCurveParams::TcMode::STD;
     p.toneCurve.curve={double(art::gui::DCT_Spline)};
@@ -87,6 +295,22 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
     p.grain.enabled=num(a,"grain",0,0,100)>0;p.grain.strength=int(num(a,"grain",0,0,100));
     p.lensProf.lcMode=a.value("lensCorrections",false)?pp::LensProfParams::LcMode::LENSFUNAUTOMATCH:pp::LensProfParams::LcMode::NONE;
     p.lensProf.useDist=true;p.lensProf.useCA=true;p.lensProf.useVign=true;
+    p.lensProf.lfCameraMake="";p.lensProf.lfCameraModel="";p.lensProf.lfLens="";
+    if(a.contains("lensProfile")){
+        const auto &l=a.at("lensProfile");const std::string mode=l.at("mode");
+        if(mode!="auto"&&mode!="manual")throw std::runtime_error("Invalid lens profile mode");
+        p.lensProf.useDist=l.at("distortion").get<bool>();p.lensProf.useVign=l.at("vignette").get<bool>();p.lensProf.useCA=l.at("ca").get<bool>();
+        const std::string make=l.at("cameraMake"),model=l.at("cameraModel"),lens=l.at("lens");
+        if(mode=="manual"){
+            const auto *db=art::engine::LFDatabase::getInstance();
+            const auto camera=db->findCamera(make,model);
+            const auto found=db->findLens(art::engine::LFCamera(),lens);
+            if((!make.empty()||!model.empty())&&(!camera||camera.getMake()!=make||camera.getModel()!=model))throw std::runtime_error("镜头配置中的相机不在随包数据库中，请重新选择。");
+            if(!lens.empty()&&(!found||found.getLens()!=lens))throw std::runtime_error("镜头配置不在随包数据库中，请重新选择。");
+            p.lensProf.lfCameraMake=make;p.lensProf.lfCameraModel=model;p.lensProf.lfLens=lens;
+            if(a.value("lensCorrections",false))p.lensProf.lcMode=pp::LensProfParams::LcMode::LENSFUNMANUAL;
+        }
+    }
     p.hsl.enabled=a.contains("hsl");
     if(p.hsl.enabled){const std::array<double,8> positions{0,1./12,1./6,1./3,.5,2./3,.75,5./6};
         const auto hsl=[&](const char *name){const auto &values=a.at("hsl").at(name);if(values.size()!=8)throw std::runtime_error("Invalid HSL bands");std::vector<double> out{double(art::utils::FCT_MinMaxCPoints)};
@@ -97,6 +321,21 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
     p.coarse.rotate=rotation;
     const auto rotate=[&](double x,double y)->std::pair<double,double>{switch(rotation){case 90:return {1-y,x};case 180:return {1-x,1-y};case 270:return {y,1-x};default:return {x,y};}};
     if(rotation==90 || rotation==270)std::swap(width,height);
+    if(a.contains("spots")){
+        if(!a.at("spots").is_array())throw std::runtime_error("Invalid repair list");
+        p.spot.entries.clear();p.spot.enabled=false;
+        for(const auto &s:a.at("spots")){
+            pp::SpotEntry entry;
+            const auto position=[&](const Json &v){auto q=rotate(num(v,"x",0,0,1),num(v,"y",0,0,1));art::engine::Coord c;c.set(std::lround(q.first*(width-1)),std::lround(q.second*(height-1)));return c;};
+            entry.sourcePos=position(s.at("source"));entry.targetPos=position(s.at("target"));
+            entry.radius=int(num(s,"radius",40,pp::SpotParams::minRadius,pp::SpotParams::maxRadius));
+            entry.feather=num(s,"feather",50,0,100)/100.;entry.opacity=num(s,"opacity",100,0,100)/100.;
+            const auto method=s.at("method").get<std::string>();if(method!="clone"&&method!="heal")throw std::runtime_error("Invalid repair method");
+            entry.detail=method=="heal"?2+int(num(s,"detail",0,0,3)):(s.value("retainTexture",false)?1:0);
+            if(s.at("enabled").get<bool>()){p.spot.entries.push_back(entry);p.spot.enabled=true;}
+        }
+    }
+    if(a.contains("cropAspect")&&!a.at("cropAspect").is_null())num(a,"cropAspect",1,1e-6,1e6);
     p.crop.enabled=!a.at("crop").is_null();
     if(p.crop.enabled) {
         const auto &c=a.at("crop");
@@ -107,6 +346,11 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         p.crop.x=std::round(std::min(first.first,second.first)*width);p.crop.y=std::round(std::min(first.second,second.second)*height);
         p.crop.w=std::max(1,int(std::round(std::abs(second.first-first.first)*width)));p.crop.h=std::max(1,int(std::round(std::abs(second.second-first.second)*height)));
     }
+    removeDetailRegions(p.textureBoost);removeDetailRegions(p.smoothing);
+    // Whole-image detail precedes owned local regions; inherited ART settings stay intact.
+    const double texture=num(a,"texture",0,-100,100),clarity=num(a,"clarity",0,-100,100);
+    if(texture!=0){pp::TextureBoostParams::Region r;r.strength=texture/50.;addDetailRegion(p.textureBoost,r,pp::Mask(),"global:texture");}
+    if(clarity!=0){pp::TextureBoostParams::Region r;r.strength=clarity/50.;r.detailThreshold=4.;addDetailRegion(p.textureBoost,r,pp::Mask(),"global:clarity");}
     p.colorcorrection.regions.clear();p.colorcorrection.masks.clear();p.colorcorrection.showMask=-1;
     std::function<pp::Mask(const Json &,int)> makeMask;
     makeMask=[&](const Json &m,int depth)->pp::Mask{
@@ -127,7 +371,48 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         }
         const double feather=num(m,"feather",30,0,100);
         std::string type=m.value("type",std::string("brush"));
-        if(type=="brush") {
+        if(type=="raster") {
+            mask.externalMask=rasterSettings(m.at("raster"),rotation);
+            mask.externalMask.feather=feather;
+        } else if(type=="color") {
+            const auto &samples=m.at("colorSamples");
+            if(!samples.is_array()||samples.size()>5)throw std::runtime_error("Color range supports up to five samples");
+            const double refine=num(m,"colorRefine",50,0,100);
+            for(const auto &sample:samples){
+                for(const char *key:{"l","c","h"})if(!sample.at(key).is_number())throw std::runtime_error("Invalid color sample");
+                if(!sample.contains("point"))throw std::runtime_error("Missing color sample position");
+                for(const char *key:{"point","end"})if(sample.contains(key)){
+                    const auto &point=sample.at(key);
+                    if(!point.at("x").is_number()||!point.at("y").is_number())throw std::runtime_error("Invalid color sample position");
+                    num(point,"x",0,0,1);num(point,"y",0,0,1);
+                }
+                pp::Mask part;part.parametricMask.enabled=true;part.parametricMask.blur=-10;
+                auto &d=part.deltaEMask;d.enabled=true;
+                d.L=num(sample,"l",0,-1000,1000)/100.;d.C=num(sample,"c",0,0,1000)/100.;d.H=num(sample,"h",0,0,360);
+                d.range=.25+refine*.195;d.decay=50;d.weight_L=50;d.weight_C=75;d.weight_H=100;
+                mask.components.push_back(part);mask.componentModes.push_back(0);
+            }
+            mask.enabled=!samples.empty();
+        } else if(type=="luminance") {
+            const auto &range=m.at("luminanceRange");
+            if(!range.is_array()||range.size()!=4)throw std::runtime_error("Invalid luminance range");
+            std::array<double,4> v;
+            for(int i=0;i<4;++i)v[i]=num({{"value",range[i]}},"value",0,0,100)/100.;
+            if(v[0]>v[1]||v[1]>=v[2]||v[2]>v[3])throw std::runtime_error("Luminance range must have ordered falloffs and distinct limits");
+            auto &pm=mask.parametricMask;pm.enabled=true;pm.blur=-10;pm.lightnessDetail=0;
+            pm.lightness={double(art::utils::FCT_MinMaxCPoints)};
+            const auto point=[&](double x,double y){
+                if(pm.lightness.size()>1&&pm.lightness[pm.lightness.size()-4]==x)return;
+                pm.lightness.insert(pm.lightness.end(),{x,y,.35,.35});
+            };
+            point(0,v[1]==0?1:0);
+            // FlatCurve requires distinct X coordinates. Equal markers form a near-step
+            // across at most 0.0001 L*, retaining black/white endpoints without wrapping.
+            if(v[1]>0){point(v[0]==v[1]?std::max(0.,v[1]-1e-6):v[0],0);point(v[1],1);}
+            point(v[2],1);
+            if(v[2]<1)point(v[2]==v[3]?std::min(1.,v[2]+1e-6):v[3],0);
+            point(1,v[2]==1?1:0);
+        } else if(type=="brush") {
             mask.drawnMask.enabled=true;mask.drawnMask.feather=feather;
             mask.drawnMask.smoothness=feather/100.0;
             for(const auto &point:m.at("points")) {
@@ -160,20 +445,52 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         }
         return mask;
     };
+    const auto hasRange=[](const auto &self,const pp::Mask &mask)->bool{
+        if(mask.parametricMask.enabled||mask.deltaEMask.enabled)return true;
+        for(const auto &child:mask.components)if(self(self,child))return true;
+        return false;
+    };
     for(const auto &m:a.at("masks")){
         if(!m.value("enabled",true)||!m.value("initialized",true)||(m.value("type",std::string())=="brush"&&!m.contains("components")&&m.at("points").empty()))continue;
         auto mask=makeMask(m,0);if(!mask.enabled)continue;
+        const bool rangeMask=hasRange(hasRange,mask);
+        if(rangeMask)mask.name="@CaptRAW-range:"+std::to_string(p.colorcorrection.regions.size());
         pp::ColorCorrectionParams::Region region;
         region.mode=pp::ColorCorrectionParams::Mode::RGB;
+        if(m.contains("whiteBalance")){
+            const auto &wb=m.at("whiteBalance");if(!wb.is_object())throw std::runtime_error("Invalid local white balance");
+            region.whiteBalanceMatrix=localWhiteBalance(num(wb,"temperature",0,-100,100),num(wb,"tint",0,-100,100),p.icm.workingProfile);
+        }
+        if(m.contains("tone")){
+            const auto &t=m.at("tone");if(!t.is_object())throw std::runtime_error("Invalid local tone settings");
+            region.toneBands={int(num(t,"blacks",0,-100,100)),int(num(t,"shadows",0,-100,100)),0,int(num(t,"highlights",0,-100,100)),int(num(t,"whites",0,-100,100))};
+            if(std::all_of(region.toneBands.begin(),region.toneBands.end(),[](int v){return v==0;}))region.toneBands.clear();
+        }
         const double gain=std::exp2(num(m,"brightness",0,-3,3));
         const double contrast=std::exp2(num(m,"contrast",0,-100,100)/100.0);
         for(int i=0;i<3;++i){region.slope[i]=gain;region.power[i]=1.0/contrast;region.pivot[i]=0.18;}
         region.outSaturation=num(m,"saturation",0,-100,100);
         p.colorcorrection.regions.push_back(region);p.colorcorrection.masks.push_back(mask);
         if(maskIds)maskIds->push_back(m.value("id",std::string()));
+        if(m.contains("details")){
+            const auto &d=m.at("details");if(!d.is_object())throw std::runtime_error("Invalid local detail settings");
+            const auto id=m.at("id").get<std::string>();
+            const double hue=num(d,"hue",0,-180,180),texture=num(d,"texture",0,-100,100),clarity=num(d,"clarity",0,-100,100),noise=num(d,"noise",0,0,100);
+            const double noiseDetail=num(d,"noiseDetail",50,0,100);
+            if(hue!=0){pp::ColorCorrectionParams::Region color;color.mode=pp::ColorCorrectionParams::Mode::YUV;color.hueshift=hue;p.colorcorrection.regions.push_back(color);p.colorcorrection.masks.push_back(mask);if(maskIds)maskIds->push_back(id);}
+            // Later modules must reuse the pre-adjustment range, not select again
+            // from pixels already changed by color correction or other mask groups.
+            pp::Mask detailMask=mask;
+            if(rangeMask){detailMask=pp::Mask();detailMask.linkedMask.enabled=true;detailMask.linkedMask.toolname="colorcorrection";detailMask.linkedMask.name=mask.name;}
+            if(texture!=0){pp::TextureBoostParams::Region r;r.strength=texture/50.;addDetailRegion(p.textureBoost,r,detailMask,id+":texture");}
+            if(clarity!=0){pp::TextureBoostParams::Region r;r.strength=clarity/50.;r.detailThreshold=4.;addDetailRegion(p.textureBoost,r,detailMask,id+":clarity");}
+            if(noise!=0){pp::SmoothingParams::Region r;r.mode=pp::SmoothingParams::Region::Mode::NLMEANS;r.channel=pp::SmoothingParams::Region::Channel::LUMINANCE;r.nlstrength=int(noise);r.nldetail=int(noiseDetail);addDetailRegion(p.smoothing,r,detailMask,id+":noise");}
+        }
     }
     p.colorcorrection.enabled=!p.colorcorrection.regions.empty();
     p.icm.outputProfile="RTv4_sRGB";p.icm.outputIntent=art::engine::RI_RELATIVE;p.icm.outputBPC=true;
+    validateInputProfile(p.icm);
+    validateExternalMasks(p);
 }
 std::string profileText(const pp::ProcParams &p) {
     pp::KeyFile k;if(p.save(nullptr,k)!=0)throw std::runtime_error("Cannot serialize ART profile");return k.to_data();

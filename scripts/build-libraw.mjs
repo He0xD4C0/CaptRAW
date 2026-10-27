@@ -14,6 +14,6 @@ if(!existsSync(source)){
 if(!existsSync(resolve(prefix,'captraw-commit'))||readFileSync(resolve(prefix,'captraw-commit'),'utf8')!==commit){
  run('autoreconf',['-fi'],source);
  run('./configure',[`--prefix=${prefix}`,'--disable-examples','--disable-openmp','--disable-lcms','--disable-static','--enable-shared'],source,{CXXFLAGS:'-O3 -std=c++17 -arch arm64 -mmacosx-version-min=26.0',CFLAGS:'-O3 -arch arm64 -mmacosx-version-min=26.0',CPPFLAGS:'-I/opt/homebrew/opt/jpeg-turbo/include',LDFLAGS:'-L/opt/homebrew/opt/jpeg-turbo/lib'});
- run('make',['-j8'],source);run('make',['install'],source);writeFileSync(resolve(prefix,'captraw-commit'),commit);
+ run('make',['-j'+(process.env.CAPTRAW_BUILD_JOBS||'8')],source);run('make',['install'],source);writeFileSync(resolve(prefix,'captraw-commit'),commit);
 }
 console.log('LibRaw HE/HE* source build ready',prefix);

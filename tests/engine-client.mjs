@@ -36,3 +36,7 @@ export class EngineClient extends EventEmitter {
   }
   async stop() { await this.call('close').catch(() => {}); this.child.stdin.end(); }
 }
+
+// Fresh pre-0.12 profiles omitted the factory-neutral second-curve mode.
+// Only compare this known fresh-default metadata change; never rewrite migrated recipes.
+export const explicitFreshCurveMode=profile=>profile.replace(/(\[ToneCurve\][^\[]*?CurveMode=Standard\n)(?=Curve=)/,'$1CurveMode2=Neutral\n');

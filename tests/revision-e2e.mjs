@@ -1,7 +1,9 @@
-import {_electron as electron,expect} from '@playwright/test';
+import {readDocument} from './xmp-test.mjs';
+import {expect} from '@playwright/test';
+import {electron} from './electron-background.mjs';
 import {resolve} from 'node:path';
 import {readFileSync,writeFileSync,mkdirSync,rmSync,existsSync} from 'node:fs';
-const out=resolve('artifacts/revision');mkdirSync(out,{recursive:true});
+const out=resolve(process.env.CAPTRAW_REVISION_OUT||'artifacts/revision');mkdirSync(out,{recursive:true});
 const executablePath=process.env.CAPTRAW_APP,app=await electron.launch({executablePath,args:executablePath?[]:[process.cwd()]});
 const page=await app.firstWindow();page.setDefaultTimeout(20000);const errors=[],checks=[];page.on('pageerror',e=>errors.push(String(e)));
 const passed=name=>{checks.push(name);console.log('PASS',name);};
@@ -10,7 +12,7 @@ async function frames(){return page.evaluate(()=>window.__frames.length);}
 async function settle(action){const count=await frames();await action();await page.waitForFunction(n=>window.__frames.length>n,count);await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__frames.filter(f=>f.kind!=='detail').at(-1)?.url);}
 async function dialog(response){await app.evaluate(({dialog},response)=>{dialog.showMessageBox=async()=>({response});},response);}
 async function open(path=openFile){await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},path);await settle(()=>page.getByRole('button',{name:'打开',exact:true}).click());}
-async function save(name){const path=resolve(out,name+'.captraw.json');rmSync(path,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},path);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(path)).toBe(true);return JSON.parse(readFileSync(path,'utf8'));}
+async function save(name){const path=resolve(out,name+'.xmp');rmSync(path,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},path);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(path)).toBe(true);return await readDocument(path);}
 async function draw(from,to){const b=await page.getByTestId('viewport').boundingBox();await settle(async()=>{await page.mouse.move(b.x+b.width*from[0],b.y+b.height*from[1]);await page.mouse.down();await page.mouse.move(b.x+b.width*to[0],b.y+b.height*to[1],{steps:6});await page.mouse.up();});}
 try{
  await page.evaluate(()=>{window.__frames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__frames.push(e.frame);});});await open();
@@ -63,11 +65,11 @@ try{
  await dialog(0);await app.evaluate(({dialog})=>{dialog.showSaveDialog=async()=>({canceled:true});});await page.getByRole('button',{name:'关闭当前文件',exact:true}).click();await expect(page.locator('.film-item')).toHaveCount(1);passed('cancel save keeps the document open');
  await dialog(1);await page.getByRole('button',{name:'关闭当前文件',exact:true}).click();await expect(page.locator('.film-item')).toHaveCount(0);await expect(page.getByRole('heading',{name:'从光线，开始。'})).toBeVisible();passed('discard closes the file and clears canvas');
  await open();await settle(()=>page.getByRole('spinbutton',{name:'曝光',exact:true}).fill('.5'));await dialog(0);
- const saved=resolve(out,'saved-close.captraw.json');rmSync(saved,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},saved);
+ const saved=resolve(out,'saved-close.xmp');rmSync(saved,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},saved);
  await page.getByRole('button',{name:'关闭当前文件',exact:true}).click();await expect(page.locator('.film-item')).toHaveCount(0);expect(existsSync(saved)).toBe(true);passed('save-and-close writes a recipe before closing');
  await open(saved);await expect(page.getByRole('spinbutton',{name:'曝光',exact:true})).toHaveValue('0.5');passed('closed saved edits reopen');
  const exposure=page.getByRole('spinbutton',{name:'曝光',exact:true});await exposure.focus();await exposure.press('Meta+a');await settle(async()=>{await exposure.pressSequentially('-1.25');await exposure.press('Enter');});await expect(exposure).toHaveValue('-1.25');passed('negative decimal values can be typed normally');
- const finished=resolve(out,'finished.captraw.json');rmSync(finished,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},finished);await page.getByRole('button',{name:'完成',exact:true}).click();await expect(page.locator('.film-item')).toHaveCount(0);expect(existsSync(finished)).toBe(true);passed('Done saves and closes the current document');
+ const finished=resolve(out,'finished.xmp');rmSync(finished,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},finished);await page.getByRole('button',{name:'完成',exact:true}).click();await expect(page.locator('.film-item')).toHaveCount(0);expect(existsSync(finished)).toBe(true);passed('Done saves and closes the current document');
  await open();await page.keyboard.press('Meta+w');await expect(page.locator('.film-item')).toHaveCount(0);passed('Command-W closes the active file');
  await open();await open(resolve('build/samples/canon-r5.CR3'));
  await settle(()=>page.getByRole('spinbutton',{name:'曝光',exact:true}).fill('0.8'));
@@ -81,4 +83,4 @@ try{
  await expect(page.getByRole('button',{name:'关闭文件',exact:true})).toBeVisible();
  expect(errors).toEqual([]);
 }catch(e){await page.screenshot({path:resolve(out,'failure.png')});console.error(await page.locator('body').innerText());throw e;}
-finally{writeFileSync(resolve(out,'report.json'),JSON.stringify({packaged:!!executablePath,checks,errors},null,2)+'\n');await dialog(1);await app.close();}
+finally{writeFileSync(resolve(out,'report.json'),JSON.stringify({backgroundWindow:true,packaged:!!executablePath,checks,errors},null,2)+'\n');await dialog(1);await app.close();}

@@ -1,0 +1,30 @@
+import {ObjectSelection} from '@captraw/desktop-core/object-selection';import {resolve,join} from 'node:path';import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';import {createHash} from 'node:crypto';import assert from 'node:assert/strict';import {EngineClient} from './engine-client.mjs';
+const out=resolve(process.env.CAPTRAW_OBJECT_OUT||'artifacts/object-selection');mkdirSync(out,{recursive:true});const hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
+const native=resolve(process.env.CAPTRAW_NATIVE_ROOT||'build/native'),segment=resolve(process.env.CAPTRAW_SEGMENT_ROOT||'build/segmentation'),engine=new EngineClient({executable:join(native,'captraw-engine'),resources:join(native,'resources'),cache:join(out,'core')});engine.on('error',()=>{});
+const progress=[],controller=new ObjectSelection(join(native,'captraw-engine'),join(native,'resources'),join(segment,'captraw-segment'),join(segment,'models/small'),join(out,'host'),(id,message)=>progress.push({id,message}));const checks=[],pass=s=>{checks.push(s);console.log('PASS',s);};let receipt={};
+try{
+ const path=resolve('artifacts/segmentation-input/inputs/canon-r5.CR3.png');assert(existsSync(path));const sourceHash=hash(path),image=await engine.call('open',{path,sessionId:'object-source'}),a={...image.adjustments,rotation:90,crop:{x:.1,y:.2,width:.6,height:.6}};
+ const profile=(await engine.call('compose',{path,width:image.width,height:image.height,adjustments:a,artProfile:''})).artProfile;
+ const before=await engine.call('save');const input=await controller.begin(image,a,profile);assert(input.width>input.height);assert.deepEqual(await engine.call('save'),before);pass('isolated unrotated uncropped input preserves the editing processor');
+ const prompts=[{point:{x:.72,y:.59},exclude:false}];const prediction=await controller.predict(input.id,prompts);assert.equal(prediction.candidates.length,3);assert.equal(controller.previews.size,3);assert(prediction.candidates.some(c=>c.pixels));
+ const asset=await controller.commit(input.id,prediction.revision,prediction.selected);assert.equal(hash(asset.path),asset.sha256);assert.equal(controller.previews.size,0);await assert.rejects(controller.predict(input.id,prompts));assert(existsSync(asset.path));pass('real model candidates commit to persistent private assets before candidate cleanup');
+ const next=await controller.begin(image,a,profile);await assert.rejects(controller.predict(next.id,[{point:{x:1.1,y:.5},exclude:false}]));await assert.rejects(controller.predict(next.id,[{point:{x:.5,y:.5},exclude:true}]));
+ const tasks=[controller.predict(next.id,prompts),controller.predict(next.id,[...prompts,{point:{x:.1,y:.1},exclude:true}])];const results=await Promise.allSettled(tasks);assert.equal(results[0].status,'rejected');assert.equal(results[1].status,'fulfilled');await assert.rejects(controller.commit(next.id,prediction.revision,0));pass('invalid prompts rejected; latest request wins and stale candidates cannot commit');
+ controller.invalidate(image.id,{...a,exposure:1});await assert.rejects(controller.commit(next.id,results[1].value.revision,0));await controller.cancel();assert(existsSync(asset.path));pass('changed editing parameters invalidate pending choices without deleting committed assets');
+ const pending=controller.begin(image,a,profile);pending.catch(()=>{});await new Promise(r=>setTimeout(r,5));await controller.cancel();await assert.rejects(pending);const retry=await controller.begin(image,a,profile);const waiting=controller.predict(retry.id,prompts);waiting.catch(()=>{});await controller.cancel();await assert.rejects(waiting);assert.equal(controller.previews.size,0);pass('cancel interrupts preparation and inference; retry creates a clean selection');
+ const immediate=controller.begin(image,a,profile);immediate.catch(()=>{});await controller.cancel();await assert.rejects(immediate);assert.equal(controller.previews.size,0);pass('same-tick cancellation prevents a preparation task from starting later');
+ const box={start:{x:702/1536,y:263/1024},end:{x:978/1536,y:667/1024}},boxRows=[];
+ for(const rotation of [0,90,180,270]){
+  const edits={...image.adjustments,rotation,crop:rotation?{x:.1,y:.1,width:.8,height:.8}:null};
+  const profile=(await engine.call('compose',{path,width:image.width,height:image.height,adjustments:edits,artProfile:''})).artProfile;
+  const input=await controller.begin(image,edits,profile),prediction=await controller.predict(input.id,[],rotation%180?{start:box.end,end:box.start}:box);
+  const asset=await controller.commit(input.id,prediction.revision,prediction.selected);boxRows.push({rotation,crop:edits.crop,asset});
+ }
+ assert.equal(new Set(boxRows.map(r=>r.asset.sha256)).size,1);pass('box-only prompts, reversed corners, four rotations and cropped views yield identical canonical masks');
+ const boxed=await controller.begin(image,a,profile);
+ for(const invalid of [{start:{x:0,y:0},end:{x:0,y:1}},{start:{x:-.1,y:0},end:{x:.5,y:.5}},{start:{x:NaN,y:0},end:{x:.5,y:.5}}])await assert.rejects(controller.predict(boxed.id,[],invalid));
+ await assert.rejects(controller.predict(boxed.id,Array(63).fill(prompts[0]),box));
+ const refined=await controller.predict(boxed.id,[{point:{x:.3,y:.4},exclude:true}],box);assert.equal(refined.candidates.length,3);await controller.cancel();pass('box validation enforces finite nonempty bounds and combined prompt limit; negative refinement is allowed');
+ assert.equal(hash(path),sourceHash);receipt={boxRows,...receipt,asset,input,prediction,source:path,sourceHash,progress};
+
+}finally{await controller.cancel();controller.shutdown();await engine.stop();writeFileSync(join(out,'report.json'),JSON.stringify({checks,...receipt},null,2)+'\n');}

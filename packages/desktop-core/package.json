@@ -1,0 +1,18 @@
+{
+  "name": "@captraw/desktop-core", "version": "0.0.0", "private": true,
+  "type": "module", "license": "GPL-3.0-or-later",
+  "exports": {
+    "./engine": { "types": "./dist/engine.d.ts", "import": "./dist/engine.js" },
+    "./batch-export": { "types": "./dist/batch-export.d.ts", "import": "./dist/batch-export.js" },
+    "./documents": { "types": "./dist/documents.d.ts", "import": "./dist/documents.js" },
+    "./mask-assets": { "types": "./dist/mask-assets.d.ts", "import": "./dist/mask-assets.js" },
+    "./object-selection": { "types": "./dist/object-selection.d.ts", "import": "./dist/object-selection.js" },
+    "./presets": { "types": "./dist/presets.d.ts", "import": "./dist/presets.js" },
+    "./segmentation": { "types": "./dist/segmentation.d.ts", "import": "./dist/segmentation.js" },
+    "./synchronize": { "types": "./dist/synchronize.d.ts", "import": "./dist/synchronize.js" },
+    "./xmp": { "types": "./dist/xmp.d.ts", "import": "./dist/xmp.js" }
+  },
+  "scripts": { "build": "tsc", "typecheck": "tsc --noEmit", "dev": "tsc --watch --preserveWatchOutput" },
+  "dependencies": { "@captraw/contracts": "workspace:*" },
+  "devDependencies": { "@types/node": "^22.0.0", "typescript": "7.0.2" }
+}
