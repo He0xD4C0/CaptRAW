@@ -1,10 +1,14 @@
+import {ENGINE_VERSION} from '@captraw/contracts';
+import {Documents} from '@captraw/desktop-core/documents';
+import {XMP} from '@captraw/desktop-core/xmp';
 import {EngineClient} from './engine-client.mjs';
 import {resolve,join} from 'node:path';
 import {homedir} from 'node:os';
 import {pathToFileURL} from 'node:url';
-import {readFileSync,writeFileSync,mkdirSync,copyFileSync,rmSync,existsSync,statSync,utimesSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync,copyFileSync,rmSync,statSync,utimesSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
+const documents=new Documents(new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp')));
 const out=resolve(process.env.CAPTRAW_EXTERNAL_OUT||'artifacts/external-masks');mkdirSync(out,{recursive:true});
 const engine=new EngineClient({cache:join(out,'cache')}),old=join(homedir(),'Applications/CaptRAW-0.25.app/Contents/Resources/native');
 const reference=new EngineClient({executable:join(old,'captraw-engine'),resources:join(old,'resources'),cache:join(out,'reference')});
@@ -60,8 +64,8 @@ try{
  pass('nested additive, subtractive and intersected components are validated recursively');
  await render(image,profile);rmSync(asset);await assert.rejects(engine.call('save'),/蒙版/);copyFileSync(original,asset);
  const restored=await render(image,profile);assert.equal(hash(restored.frame.file),hash(valid.frame.file));
- const recipe={schemaVersion:1,engineVersion:'CaptRAW-17_ART-1.26.10_LibRaw-3b20539',baselineVersion:4,source:{path,size:statSync(path).size,sha256:hash(path)},adjustments:image.adjustments,artProfile:restored.artProfile};
- writeFileSync(join(out,'valid.captraw.json'),JSON.stringify(recipe,null,2));writeFileSync(join(out,'missing.captraw.json'),JSON.stringify({...recipe,artProfile:local(recipe.artProfile,missing)},null,2));
+ const recipe={engineVersion:ENGINE_VERSION,baselineVersion:4,source:{path,size:statSync(path).size,sha256:hash(path)},adjustments:image.adjustments,artProfile:restored.artProfile};
+ writeFileSync(join(out,'valid.xmp'),await documents.serialize(recipe));writeFileSync(join(out,'missing.xmp'),await documents.serialize({...recipe,artProfile:local(recipe.artProfile,missing)}));
  pass('restoring a deleted asset recovers identical preview pixels and a reusable recipe');
  // Delete after preflight, at ART's first actual processing progress notification.
  const raw=resolve('build/samples/nikon-d850.NEF');sources[raw]=hash(raw);

@@ -23,7 +23,7 @@ export class ObjectSelection {
   try{
    await mkdir(join(this.cache,'objects'),{recursive:true});check();c.directory=await mkdtemp(join(this.cache,'objects','selection-'));check();
    const worker=new NativeEngine(this.binary,this.resources,join(c.directory,'render'));c.worker=worker;c.closed=new Promise<void>(done=>worker.child.once('close',()=>done()));
-   this.progress(c.id,'正在准备完整照片…');await worker.call('open',{path:image.path,sessionId:c.id,baselineVersion:image.baselineVersion||4,artProfile});check();
+   this.progress(c.id,'正在准备完整照片…');await worker.call('open',{path:image.path,sessionId:c.id});check();
    let listener:(message:any)=>void=()=>{},timer:ReturnType<typeof setTimeout>|undefined;
    const preview=new Promise<any>((accept,reject)=>{listener=m=>{if(m.event==='preview'&&m.frame.sessionId===c.id&&m.frame.revision===1&&m.frame.kind==='fit')accept(m.frame);else if(m.event==='error')reject(new Error(m.message));};worker.on('engine-event',listener);timer=setTimeout(()=>reject(new Error('对象选择的显影快照超时。')),120000);});
    let frame;try{[,frame]=await Promise.all([worker.call('update',{revision:1,adjustments:{...structuredClone(adjustments),rotation:0,crop:null},artProfile}),preview]);}finally{worker.off('engine-event',listener);clearTimeout(timer);}

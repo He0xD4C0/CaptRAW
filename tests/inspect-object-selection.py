@@ -1,11 +1,14 @@
 from pathlib import Path
+import subprocess
 import os,json
 import numpy as np
 import tifffile
 from PIL import Image
-out=Path(os.environ.get('CAPTRAW_OBJECT_E2E_OUT','artifacts/object-selection-installed-0.29'))
+out=Path(os.environ.get('CAPTRAW_BOX_E2E_OUT' if os.environ.get('CAPTRAW_OBJECT_KIND')=='box' else 'CAPTRAW_OBJECT_E2E_OUT','artifacts/object-box-gui' if os.environ.get('CAPTRAW_OBJECT_KIND')=='box' else 'artifacts/object-selection-gui'))
 box=os.environ.get('CAPTRAW_OBJECT_KIND')=='box'
-r=json.loads((out/('box.captraw.json' if box else 'committed.captraw.json')).read_text())
+root=Path(__file__).resolve().parents[1]
+path=out/('box.xmp' if box else 'committed.xmp')
+r=json.loads(subprocess.check_output(["node", "--input-type=module", "-e", "import {readDocument} from './tests/xmp-test.mjs'; console.log(JSON.stringify(await readDocument(process.argv[1])));", str(path.resolve())],cwd=root,text=True))
 asset=np.asarray(Image.open(out/r['maskAssets']['files'][0]['path']))
 coverage=np.asarray(Image.open(out/'selected-candidate.png')) if box else np.asarray(Image.open(out/'committed-coverage.png'))[:,:,3]
 assert asset.shape==coverage.shape

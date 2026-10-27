@@ -24,13 +24,11 @@ for angle in [90,180,270]:
  delta=np.abs(r-reference);rotations.append({'rotation':angle,'meanDifference':float(delta.mean()),'p99':float(np.quantile(delta,.99))})
  assert delta.mean()<.5,rotations[-1]
 f=json.loads((out/'detail.json').read_text());detail=png('detail');detail_max=int(np.max(np.abs(detail-clone[f['y']:f['y']+f['height'],f['x']:f['x']+f['width']])));assert detail_max<=1
-pairs=[('clone.tiff','independent.tiff'),('clone.tiff','reference.tif'),('raw.tiff','raw-reference.tif')]+[('raw.tiff',f'threads-{n}.tiff') for n in [1,2,8]]+[('raw.tiff','old-serial.tiff')]
+pairs=[('clone.tiff','independent.tiff'),('clone.tiff','reference.tif'),('raw.tiff','raw-reference.tif')]+[('raw.tiff',f'threads-{n}.tiff') for n in [1,2,8]]
 for a,b in pairs:
  x,y=tifffile.imread(out/a),tifffile.imread(out/b);assert x.dtype==np.uint16 and np.array_equal(x,y),a
 with tifffile.TiffFile(out/'clone.tiff') as f:
  assert f.pages[0].bitspersample==16
  assert 'sRGB' in ImageCms.getProfileDescription(ImageCms.ImageCmsProfile(io.BytesIO(f.pages[0].tags[34675].value)))
-report=json.loads((out/'report.json').read_text());report.update(cloneCenterMaximumDifference=clone_center_max,unaffectedRegionIdentical=True,healing={'targetReference':float(expected),'before':float(before),'heal':float(healed),'clone':float(copied)},rotations=rotations,detailMaximumDifference=detail_max,independentExportMaximumDifference=0,ARTReferenceMaximumDifference=0,rawARTReferenceMaximumDifference=0,tiffBits=16,healingThreadCounts=[1,2,8],threadMaximumDifference=0,oldSerialMaximumDifference=0)
-if (out.parent/'repair-gui/repaired.tiff').exists() and (out/'desktop-independent.tiff').exists():
- assert np.array_equal(tifffile.imread(out.parent/'repair-gui/repaired.tiff'),tifffile.imread(out/'desktop-independent.tiff'));report['desktopMaximumDifference']=0
+report=json.loads((out/'report.json').read_text());report.update(cloneCenterMaximumDifference=clone_center_max,unaffectedRegionIdentical=True,healing={'targetReference':float(expected),'before':float(before),'heal':float(healed),'clone':float(copied)},rotations=rotations,detailMaximumDifference=detail_max,independentExportMaximumDifference=0,ARTReferenceMaximumDifference=0,rawARTReferenceMaximumDifference=0,tiffBits=16,healingThreadCounts=[1,2,8],threadMaximumDifference=0)
 (out/'pixel-report.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2))

@@ -3,11 +3,11 @@
 #include "engine/procparams.h"
 namespace captraw {
 std::vector<double> parametricCurve(const Json &);
-Json defaults(double temperature, double green);
+Json defaults();
 Json inputProfileSettings(const art::engine::procparams::ColorManagementParams &);
 Json blackWhiteSettings(const art::engine::procparams::ProcParams &);
 Json colorGradingSettings(const art::engine::procparams::ProcParams &);
-Json spotSettings(const art::engine::procparams::ProcParams &,int width,int height);
+void applyInputProfile(art::engine::procparams::ColorManagementParams &,const Json &);
 void validateInputProfile(const art::engine::procparams::ColorManagementParams &);
 void validateExternalMasks(const art::engine::procparams::ProcParams &);
 Json externalMaskAssets(art::engine::procparams::ProcParams &,const Json &replacements,bool validate);

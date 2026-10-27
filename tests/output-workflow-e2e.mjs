@@ -1,17 +1,18 @@
+import {readDocument} from './xmp-test.mjs';
 import {expect} from '@playwright/test';
 import {electron} from './electron-background.mjs';
 import {EngineClient} from './engine-client.mjs';
-import {readFileSync,writeFileSync,mkdirSync,rmSync,existsSync,copyFileSync,readdirSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync,rmSync,copyFileSync,readdirSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {homedir} from 'node:os';
 import {createHash} from 'node:crypto';
 const out=resolve(process.env.CAPTRAW_OUTPUT_E2E_OUT||'artifacts/output-workflow-gui');mkdirSync(out,{recursive:true});
 const executablePath=process.env.CAPTRAW_APP,checks=[],errors=[],outputs=[];let app,page;
 const source=resolve('build/samples/luminance-range.png'),hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex'),sourceHash=hash(source),pass=s=>{checks.push(s);console.log('PASS',s);};
-const second=join(out,'照片 二.png');copyFileSync(source,second);rmSync(second+'.captraw.json',{force:true});
+const second=join(out,'照片 二.png');copyFileSync(source,second);rmSync(second.replace(/\.[^.]+$/,'.xmp'),{force:true});
 async function settle(action){const n=await page.evaluate(()=>window.__frames.length);await action();await page.waitForFunction(n=>window.__frames.length>n,n);await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__frames.filter(f=>f.kind!=='detail').at(-1)?.url);}
 async function open(path){await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},path);await settle(()=>page.getByRole('button',{name:'打开',exact:true}).click());}
-async function save(name){const path=join(out,name+'.captraw.json');rmSync(path,{force:true});await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},path);await settle(()=>page.getByRole('button',{name:'保存',exact:true}).click());return JSON.parse(readFileSync(path));}
+async function save(name){const path=join(out,name+'.xmp');rmSync(path,{force:true});await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},path);await settle(()=>page.getByRole('button',{name:'保存',exact:true}).click());return (await readDocument(path));}
 async function menu(){await page.getByRole('button',{name:'导出',exact:true}).click();await expect(page.getByRole('dialog',{name:'导出设置'})).toBeVisible();}
 async function exportFile(name,dimensions,format='tiff',cancel=false){const path=join(out,name+(format==='tiff'?'.tiff':'.jpg'));if(!cancel)rmSync(path,{force:true});await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},path);await menu();await page.getByRole('button',{name:format==='tiff'?'TIFF · 16 位':'JPEG',exact:false}).click();if(cancel){await page.locator('.job-toast.running').getByRole('button',{name:'取消'}).click();await expect(page.locator('.job-toast.cancelled')).toBeVisible();}else{await expect(page.locator('.job-toast.done')).toContainText('已导出 '+name,{timeout:120000});outputs.push({path,dimensions});}return path;}
 try{

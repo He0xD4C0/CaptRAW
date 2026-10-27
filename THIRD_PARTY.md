@@ -26,6 +26,8 @@ CaptRAW 原型采用 GPL-3.0-or-later；完整条款和上游作者声明见 `LI
 
 本地交付附带 ART、LibRaw 原源码归档与 CaptRAW 源码归档。对外分发时应同时提供这些对应源码，并按各依赖条款提供对应版本源码及构建资料；不能只分发应用而丢弃这些材料。
 
+0.33 的 `native/white-balance.cc` 的 Robertson 表与逆投影改编自固定 ART `src/engine/dcp.cc`（Copyright 2012 Oliver Duis，GPL-3.0-or-later），保留文件内声明；相机转换调用原有 DCP 方法，仅扩展访问权限。没有加入 Adobe DNG SDK 运行依赖。独立 QA 使用 Colour Science 0.4.6（BSD-3-Clause），不随安装包分发；自产双光源 DNG 测试数据按 CC0 提供。
+
 0.17 的引擎 14 增加 `native/grading.cc` 与 ART 黑白后的独立分级入口、版本化参数、部分配置选择标记。原生实现调用 ART 已有 HSL 转换和 ICCStore 矩阵，不包含研究缓存中的 darktable HSL 源码，也没有新增 darktable / OCIO 运行依赖。新适配按本项目 GPL-3.0-or-later 提供；不表示复现了 Adobe 算法，Web 交互验收见本项目记录，ACR 画质等效性仍未证实。
 
 0.18 的五种 SDR 输出复用原包中的 `RTv4_sRGB` / `RTv4_Medium` / `RTv4_Large` / `RTv4_DisplayP3` / `RTv4_Rec2020`，ICC 版权字段均为 Public Domain；配置文件保持原字节，来自固定 ART 源码 `data/iccprofiles/output/`。实际色彩转换仍使用 ART / LittleCMS，不新增运行库。
@@ -40,3 +42,5 @@ SAM2.1 Small 官方 checkpoint（SHA-256 `6d1aa6f30de5c92224f8172114de081d104bbd
 ONNX Runtime 官方 macOS ARM64 v1.30.0 动态库采用 MIT，并原样携带其 `ThirdPartyNotices.txt`。libpng 与显影引擎已有包相同，另附许可。包内 `Resources/segmentation/` 携带 `NOTICE.txt`、`licenses/`、固定模型清单与依赖清单；`tests/segmentation-sources.json` 保存上游 URL、原始归档 / checkpoint 及转换产物的校验值。自产预处理图与桥接代码随本项目源码提供。
 
 SAM2 / ORT 源码链接及训练复现限制见 [SEGMENTATION.md](docs/SEGMENTATION.md)。代码、权重和转换产物可本地运行、修改、再分发；这不意味着已验证 checkpoint 的完整训练数据来源或可重训复现。当前用户体验采用 Small，属于已验证可部署的实现选择，不是声称已完成全部模型质量选型或优于其他候选。
+
+0.34 的输入配置文件检查复用 ART DCP 解析器与 Little CMS，未增加 Adobe DNG SDK 依赖。DCP 元数据与独立文件校验补丁不替换原显影算法；用户导入的 DCP / ICC 保存在用户数据目录及其编辑资产中，不随安装包或源码归档分发。`ProfileEmbedPolicy` 仅是资产内声明，不代表完整版权授权。`tests/profile-assets.py` 自产 DCP / ICC 测试输入按 CC0 提供。

@@ -1,5 +1,7 @@
 #include "core.h"
 #include "recipe.h"
+#include "white-balance.h"
+#include "input-profile.h"
 #include "engine/rtengine.h"
 #include "engine/image8.h"
 #include "engine/imagefloat.h"
@@ -33,6 +35,13 @@ namespace fs=std::filesystem;
 namespace ae=art::engine;
 namespace pp=art::engine::procparams;
 namespace captraw {
+static void resolveWhiteBalance(pp::ProcParams &params,ae::ImageSource *source,const Json &adjustments){
+    if(params.wb.method!=pp::WBParams::CUSTOM_TEMP)return;
+    // recipe.cc validates CRS units; exact camera coefficients enter ART's existing path.
+    const auto m=whiteBalanceMultipliers(source,params.icm,adjustments.value("temperature",6500.),adjustments.value("tint",0.));
+    for(int i=0;i<3;++i)params.wb.mult[i]=m[i];
+    params.wb.method=pp::WBParams::CUSTOM_MULT;
+}
 static bool isRaw(const std::string &path) {
     auto ext=fs::path(path).extension().string();
     std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return std::tolower(c);});
@@ -251,6 +260,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         return choices;
     }
     Json open(const Json &a){
+        if(a.contains("baselineVersion")&&a.at("baselineVersion")!=4)throw std::runtime_error("Unsupported baseline version");
         close();previewAvailable=false;previewPending=false;curveHistogram=nullptr;presets=Json::array();initialized=false;showingBefore=false;selectedMask.clear();fitMask=nullptr;detailMask=nullptr;maskIds.clear();path=a.at("path");id=a.at("sessionId");int err=0;
         maskFailure=false;
         started=std::chrono::steady_clock::now();
@@ -264,14 +274,13 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         processor->setMonitorProfile("RTv4_sRGB",ae::RI_RELATIVE);
         processor->setPreviewScale(std::max(1,int(std::ceil(std::max(baseWidth,baseHeight)/2048.0))));
         ae::ColorTemp wb;processor->getCamWB(wb);
-        adjustments=defaults(wb.getTemp()>0?wb.getTemp():6500,wb.getGreen()>0?wb.getGreen():1);
+        adjustments=defaults();params.setDefaults();
         int cx=0,cy=0,cw=0,ch=0;Json cameraCrop=nullptr;
         if(initial->getImageSource()->getCameraCrop(cx,cy,cw,ch))cameraCrop={{"x",double(cx)/baseWidth},{"y",double(cy)/baseHeight},{"width",double(cw)/baseWidth},{"height",double(ch)/baseHeight}};
-        const int baselineVersion=a.value("baselineVersion",4);if(baselineVersion!=2&&baselineVersion!=3&&baselineVersion!=4)throw std::runtime_error("Unsupported baseline version");
-        if(baselineVersion>=4)adjustments["crop"]=cameraCrop;
-        if(baselineVersion>=3&&wb.getTemp()>0){auto exact=wbResult(wb,"camera");for(auto it=exact.begin();it!=exact.end();++it)adjustments[it.key()]=it.value();}
+        adjustments["crop"]=cameraCrop;
+        if(wb.getTemp()>0){auto exact=wbResult(wb,"camera");for(auto it=exact.begin();it!=exact.end();++it)adjustments[it.key()]=it.value();}
         else adjustments["wbMode"]="custom";
-        params.setDefaults();applyAdjustments(params,adjustments,baseWidth,baseHeight);baseline=params;
+        applyAdjustments(params,adjustments,baseWidth,baseHeight);resolveWhiteBalance(params,initial->getImageSource(),adjustments);baseline=params;
         adjustments["colorProfile"]=inputProfileSettings(params.icm);
         adjustments["blackWhite"]=blackWhiteSettings(params);
         adjustments["colorGrading"]=colorGradingSettings(params);
@@ -282,9 +291,13 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         }
         Json options=Json::array();for(size_t i=0;i<presets.size();++i)options.push_back({{"id",std::to_string(i)},{"name",presets[i].at("name")}});
         profileOptions=inputProfiles();
-        Json stored=Json::array();if(a.contains("artProfile")){pp::ProcParams document;document.setDefaults();loadProfile(document,a.at("artProfile"));stored=spotSettings(document,baseWidth,baseHeight);}
-        Json result={{"lensCatalog",lensCatalog()},{"lensStatus",lensStatus()},{"cameraCrop",cameraCrop},{"recipeSpots",stored},{"inputProfiles",profileOptions},{"baselineVersion",baselineVersion},{"whiteBalancePresets",options},{"id",id},{"path",path},{"name",fs::path(path).filename().string()},
-            {"width",baseWidth},{"height",baseHeight},{"camera",md->getCamera()},{"lens",md->getLens()},
+        std::string profileCamera=md->getCamera();
+        if(Glib::ustring(fs::path(path).extension().string()).lowercase()==".dng"){
+            auto *dcp=ae::DCPStore::getInstance()->getProfile(path);
+            if(dcp&&!dcp->getCameraModel().empty())profileCamera=dcp->getCameraModel();
+        }
+        Json result={{"lensCatalog",lensCatalog()},{"lensStatus",lensStatus()},{"cameraCrop",cameraCrop},{"inputProfiles",profileOptions},{"baselineVersion",4},{"whiteBalancePresets",options},{"id",id},{"path",path},{"name",fs::path(path).filename().string()},
+            {"width",baseWidth},{"height",baseHeight},{"camera",md->getCamera()},{"profileCamera",profileCamera},{"lens",md->getLens()},
             {"iso",md->getISOSpeed()},{"aperture",md->getFNumber()},{"shutter",md->getShutterSpeed()},{"focalLength",md->getFocalLen()},{"adjustments",adjustments},{"artProfile",profileText(params)}};
         return result;
     }
@@ -303,6 +316,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             loadProfile(candidate,a.value("artProfile",std::string()));
             profileChanged=candidate!=params;
             std::vector<std::string> nextMaskIds;applyAdjustments(candidate,next,baseWidth,baseHeight,&nextMaskIds);
+            resolveWhiteBalance(candidate,initial->getImageSource(),next);
             maskIds=std::move(nextMaskIds);
             params=candidate;adjustments=next;
         }
@@ -336,21 +350,25 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         processor->endUpdateParams(flags);
         return {{"artProfile",profileText(params)},{"lensStatus",optics}};
     }
-    Json wbResult(const ae::ColorTemp &wb,const std::string &mode,const Json &exactCamera=Json()){
-        double r,g,b;wb.getMultipliers(r,g,b);initial->getImageSource()->wbMul2Camera(r,g,b);
-        Json mult=exactCamera.is_array()?exactCamera:Json::array({r,g,b});
-        const double rawTint=std::log(wb.getGreen())*100.,rawTemp=wb.getTemp();
-        const double temp=std::clamp(rawTemp,1500.,60000.),tint=std::clamp(rawTint,-100.,100.);
-        const ae::ColorTemp projected(temp,std::exp(tint/100.),1,"");double pr,pg,pb;projected.getMultipliers(pr,pg,pb);initial->getImageSource()->wbMul2Camera(pr,pg,pb);
-        const double normal=mult[1].get<double>();bool approximate=wb.clipped()||temp!=rawTemp||tint!=rawTint;
-        for(int i=0;i<3;++i){const double v=mult[i].get<double>();if(!std::isfinite(v)||v<=0||v>100)throw std::runtime_error("White balance estimate is outside the supported range");}
-        const double pm[3]={pr/pg,1.,pb/pg};for(int i=0;i<3;++i)approximate|=std::abs(pm[i]-mult[i].get<double>()/normal)>.01;
-        return {{"temperature",int(temp)},{"tint",tint},{"wbMode",mode},{"wbMultipliers",mult},{"wbApproximate",approximate}};
+    Json wbResult(const ae::ColorTemp &wb,const std::string &mode,const Json &exactCamera=Json(),const pp::ColorManagementParams *profile=nullptr){
+        Json mult=exactCamera;
+        if(!mult.is_array()){double r,g,b;wb.getMultipliers(r,g,b);initial->getImageSource()->wbMul2Camera(r,g,b);mult=Json::array({r,g,b});}
+        const auto coordinates=whiteBalanceCoordinates(initial->getImageSource(),profile?*profile:params.icm,{mult[0],mult[1],mult[2]});
+        const double temp=std::clamp(coordinates[0],2000.,50000.),tint=std::clamp(coordinates[1],-150.,150.);
+        const bool approximate=temp!=coordinates[0]||tint!=coordinates[1];
+        return {{"temperature",int(std::round(temp))},{"tint",int(std::round(tint))},{"wbMode",mode},{"wbMultipliers",mult},{"wbApproximate",approximate}};
     }
     Json whiteBalance(const Json &a){
         if(!processor||!previewAvailable)throw std::runtime_error("请等待照片预览完成后再设置白平衡。");
         processor->stopProcessing();const auto mode=a.at("mode").get<std::string>();ae::ColorTemp wb;
-        if(mode=="camera")processor->getCamWB(wb);
+        if(mode=="profile"){
+            if(!adjustments.contains("wbMultipliers")||adjustments.at("wbMultipliers").is_null())throw std::runtime_error("当前白平衡没有固定系数，请重新选择配置文件。");
+            auto next=adjustments;next["colorProfile"]=a.at("colorProfile");auto candidate=params;
+            applyAdjustments(candidate,next,baseWidth,baseHeight);validateInputProfile(candidate.icm);
+            auto result=wbResult(wb,adjustments.value("wbMode",std::string("custom")),adjustments.at("wbMultipliers"),&candidate.icm);
+            result["colorProfile"]=inputProfileSettings(candidate.icm);return result;
+        }
+        else if(mode=="camera")processor->getCamWB(wb);
         else if(mode=="auto"){if(!processor->getAutoWB(wb,1))throw std::runtime_error("无法计算自动白平衡。");}
         else if(mode=="preset"){
             const auto index=a.at("preset").get<std::string>();size_t i=0;while(i<presets.size()&&std::to_string(i)!=index)++i;
@@ -515,6 +533,23 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
 Engine::Engine(const std::string &r,const std::string &c,EventSink sink):impl(std::make_unique<Impl>(r,c,sink)){}
 Engine::~Engine()=default;
 Json Engine::call(const std::string &method,const Json &p){
+    if(method=="inspectInputProfile")return inspectInputProfile(p.at("path"));
+    if(method=="inputProfileAsset"){
+        pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
+        auto adjustments=p.value("adjustments",Json::object());
+        if(adjustments.contains("colorProfile"))applyInputProfile(params.icm,adjustments.at("colorProfile"));
+        auto settings=inputProfileSettings(params.icm);std::string path;
+        if(settings.at("mode")=="inherited"&&params.icm.inputProfile!="(none)"){
+            path=params.icm.inputProfile;if(path.rfind("file:",0)==0)path=path.substr(5);
+            if(p.contains("replacement")){
+                path=p.at("replacement").get<std::string>();
+                params.icm.inputProfile=path.rfind("captraw-profile:",0)==0?path:"file:"+path;
+                settings=inputProfileSettings(params.icm);
+                adjustments["colorProfile"]=settings;
+            }
+        }else if(p.contains("replacement"))throw std::runtime_error("配置文件资产没有对应引用。");
+        return {{"path",path},{"artProfile",profileText(params)},{"adjustments",adjustments}};
+    }
     if(method=="maskAssets"){
         pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
         const auto replacements=p.value("replacements",Json::object());const bool validate=p.value("validate",false);
@@ -531,6 +566,12 @@ Json Engine::call(const std::string &method,const Json &p){
         if(width<1||height<1||width>200000||height>200000)throw std::runtime_error("Invalid image dimensions");
         pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
         applyAdjustments(params,p.at("adjustments"),width,height);validateInputProfile(params.icm);
+        if(params.wb.method==pp::WBParams::CUSTOM_TEMP){
+            int error=0;auto *image=ae::InitialImage::load(p.at("path").get<std::string>(),isRaw(p.at("path")),&error);
+            if(!image||error){if(image)image->decreaseRef();throw std::runtime_error("无法读取原片以转换白平衡。");}
+            try{resolveWhiteBalance(params,image->getImageSource(),p.at("adjustments"));}catch(...){image->decreaseRef();throw;}
+            image->decreaseRef();
+        }
         return {{"artProfile",profileText(params)}};
     }
     if(method=="publish"){
@@ -556,7 +597,7 @@ Json Engine::call(const std::string &method,const Json &p){
         return {{"samples",samples}};
     }
     if(method=="curve"){
-        auto a=defaults(6500,1);a["curve"]=p.at("points");pp::ProcParams params;params.setDefaults();applyAdjustments(params,a,1000,1000);
+        auto a=defaults();a["curve"]=p.at("points");pp::ProcParams params;params.setDefaults();applyAdjustments(params,a,1000,1000);
         ae::DiagonalCurve curve(params.toneCurve.curve);std::vector<double> samples;for(int i=0;i<=512;i++)samples.push_back(curve.getVal(i/512.0));return {{"samples",samples}};
     }
     if(method=="open"){try{return impl->open(p);}catch(...){impl->close();throw;}}

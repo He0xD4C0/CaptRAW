@@ -21,7 +21,9 @@ export class Presets {
  private path(id:string){return join(this.root,validID(id),'preset.xmp');}
  private summary(id:string,p:PresetDocument):PresetSummary{return {id,name:p.name,group:p.group,groups:p.groups,approximateWB:!!p.approximateWB,warnings:p.warnings};}
  private async read(path:string){
-  const {packet,properties}=await this.xmp.read(path),{adjustments,warnings}=decodeAdjustments(properties);
+  const {packet,properties}=await this.xmp.read(path),engineVersion=readExtension(properties,'EngineVersion')||'';
+  if(engineVersion&&engineVersion!==ENGINE_VERSION)throw new Error('XMP 使用了不支持的 ART 显影版本。');
+  const {adjustments,warnings}=decodeAdjustments(properties);
   const label=(key:string,fallback:string)=>{const node=lookup(properties,CRS,key);return node?.items?.find(n=>n.lang==='x-default')?.value||node?.items?.[0]?.value||node?.value||fallback;};
   const groups=SYNC_GROUPS.filter(g=>g.fields.some(key=>Object.hasOwn(adjustments,key))).map(g=>g.id);
   if(!groups.length)throw new Error('此 XMP 尚无可应用的调节。'+warnings.join(' '));

@@ -10,10 +10,11 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <fstream>
 namespace captraw {
 namespace pp = art::engine::procparams;
-Json defaults(double temperature, double green) {
-    return {{"wbMode","camera"},{"wbMultipliers",nullptr},{"wbApproximate",false},{"exposure",0},{"temperature",temperature},{"tint",std::log(green)*100.0},
+Json defaults() {
+    return {{"wbMode","camera"},{"wbMultipliers",nullptr},{"wbApproximate",false},{"exposure",0},{"temperature",6500},{"tint",0},
         {"contrast",0},{"saturation",0},{"vibrance",0},{"rotation",0},{"crop",nullptr},
         {"curve",Json::array({{{"x",0},{"y",0}},{{"x",1},{"y",1}}})},{"masks",Json::array()},
         {"highlights",0},{"shadows",0},{"whites",0},{"blacks",0},{"sharpening",0},{"sharpenRadius",1},
@@ -51,10 +52,33 @@ Json inputProfileSettings(const pp::ColorManagementParams &p) {
     if(mode=="inherited")state["reference"]=std::string(p.inputProfile);
     return state;
 }
+void applyInputProfile(pp::ColorManagementParams &p,const Json &c) {
+    const auto mode=c.at("mode").get<std::string>();
+    if(mode=="auto")p.inputProfile="(cameraICC)";
+    else if(mode=="matrix")p.inputProfile="(camera)";
+    else if(mode=="embedded")p.inputProfile="(embedded)";
+    else if(mode=="inherited"){
+        p.inputProfile=c.at("reference").get<std::string>();
+        if(inputProfileSettings(p).at("mode")!="inherited")throw std::runtime_error("Invalid inherited input profile");
+    }else throw std::runtime_error("Invalid input profile mode");
+    p.toneCurve=c.value("toneCurve",p.toneCurve);p.applyLookTable=c.value("lookTable",p.applyLookTable);
+    p.applyHueSatMap=c.value("hueSatMap",p.applyHueSatMap);p.applyBaselineExposureOffset=c.value("baselineExposure",p.applyBaselineExposureOffset);
+    if(c.contains("illuminant")&&(!c.at("illuminant").is_number_integer()||c.at("illuminant")<0||c.at("illuminant")>2))throw std::runtime_error("Invalid DCP illuminant");
+    p.dcpIlluminant=c.value("illuminant",p.dcpIlluminant);
+}
 void validateInputProfile(const pp::ColorManagementParams &p) {
     if(inputProfileSettings(p).at("mode")!="inherited"||p.inputProfile=="(none)")return;
     const auto filename=p.inputProfile.substr(0,5)=="file:"?p.inputProfile.substr(5):p.inputProfile;
     if((p.inputProfile.substr(0,5)=="file:"||filename.find('/')!=Glib::ustring::npos)&&!Glib::file_test(filename,Glib::FILE_TEST_IS_REGULAR))throw std::runtime_error("配方引用的输入配置文件不可用，请恢复相关文件后重试。");
+    // Content-addressed imports and document copies must never hit a stale path cache.
+    const std::string name=Glib::path_get_basename(filename);const auto dot=name.find_last_of('.');
+    if(dot==64&&std::all_of(name.begin(),name.begin()+64,[](char c){return (c>='0'&&c<='9')||(c>='a'&&c<='f');})){
+        std::ifstream input(filename.c_str(),std::ios::binary);if(!input)throw std::runtime_error("配置文件资产不可读取。");
+        std::unique_ptr<GChecksum,decltype(&g_checksum_free)> checksum(g_checksum_new(G_CHECKSUM_SHA256),g_checksum_free);
+        char buffer[65536];size_t count=0;
+        while(input){input.read(buffer,sizeof(buffer));const auto n=input.gcount();count+=n;if(count>64*1024*1024)throw std::runtime_error("配置文件资产超过大小限制。");g_checksum_update(checksum.get(),reinterpret_cast<const guchar *>(buffer),n);}
+        if(input.bad()||name.substr(0,64)!=g_checksum_get_string(checksum.get()))throw std::runtime_error("配置文件资产内容校验失败，请恢复原始资产后重试。");
+    }
     auto *store=art::engine::DCPStore::getInstance();
     if(store->isValidDCPFileName(filename)&&store->getProfile(filename))return;
     if(art::engine::ICCStore::getInstance()->getProfile(p.inputProfile))return;
@@ -151,21 +175,6 @@ Json blackWhiteSettings(const pp::ProcParams &params) {
         {"weights",{p.mixerRed,p.mixerGreen,p.mixerBlue}},{"gamma",{p.gammaRed,p.gammaGreen,p.gammaBlue}},
         {"tint",{{"amount",p.colorCast.getBottom()},{"hue",p.colorCast.getTop()}}}}}};
 }
-Json spotSettings(const pp::ProcParams &p,int width,int height) {
-    const int rotation=p.coarse.rotate;if(rotation==90||rotation==270)std::swap(width,height);
-    const auto point=[&](const art::engine::Coord &c){
-        if(c.x<0||c.y<0||c.x>=width||c.y>=height)throw std::runtime_error("配方中的修复点超出当前图像范围，无法无损恢复。");
-        double x=double(c.x)/std::max(1,width-1),y=double(c.y)/std::max(1,height-1),ox=x;
-        switch(rotation){case 90:x=y;y=1-ox;break;case 180:x=1-x;y=1-y;break;case 270:x=1-y;y=ox;break;}
-        return Json{{"x",x},{"y",y}};
-    };
-    Json list=Json::array();int i=0;
-    for(const auto &s:p.spot.entries){++i;list.push_back({{"id","legacy-spot-"+std::to_string(i)},{"name","修复点 "+std::to_string(i)},
-        {"enabled",p.spot.enabled},{"source",point(s.sourcePos)},{"target",point(s.targetPos)},{"radius",s.radius},
-        {"feather",double(s.feather)*100.},{"opacity",double(s.opacity)*100.},{"method",s.detail>=2?"heal":"clone"},
-        {"detail",s.detail>=2?s.detail-2:0},{"retainTexture",s.detail==1}});}
-    return list;
-}
 // Owned detail regions can be rebuilt without discarding inherited ART modules.
 static constexpr const char *detailPrefix="@CaptRAW-details-v1:";
 template<class Module> static void removeDetailRegions(Module &module) {
@@ -237,26 +246,14 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         if(changed)value.luminanceCurve=curve;
         p.blackwhite=value;
     }
-    if(a.contains("colorProfile")){
-        const auto &c=a.at("colorProfile");const auto mode=c.at("mode").get<std::string>();
-        if(mode=="auto")p.icm.inputProfile="(cameraICC)";
-        else if(mode=="matrix")p.icm.inputProfile="(camera)";
-        else if(mode=="embedded")p.icm.inputProfile="(embedded)";
-        else if(mode=="inherited"){
-            p.icm.inputProfile=c.at("reference").get<std::string>();
-            if(inputProfileSettings(p.icm).at("mode")!="inherited")throw std::runtime_error("Invalid inherited input profile");
-        }else throw std::runtime_error("Invalid input profile mode");
-        p.icm.toneCurve=c.value("toneCurve",p.icm.toneCurve);p.icm.applyLookTable=c.value("lookTable",p.icm.applyLookTable);
-        p.icm.applyHueSatMap=c.value("hueSatMap",p.icm.applyHueSatMap);p.icm.applyBaselineExposureOffset=c.value("baselineExposure",p.icm.applyBaselineExposureOffset);
-        if(c.contains("illuminant")&&(!c.at("illuminant").is_number_integer()||c.at("illuminant")<0||c.at("illuminant")>2))throw std::runtime_error("Invalid DCP illuminant");
-        p.icm.dcpIlluminant=c.value("illuminant",p.icm.dcpIlluminant);
-    }
+    if(a.contains("colorProfile"))applyInputProfile(p.icm,a.at("colorProfile"));
     p.exposure.enabled=true;
     p.exposure.expcomp=num(a,"exposure",0,-5,5);
     p.exposure.hrmode=pp::ExposureParams::HR_COLORSOFT;
     p.wb.enabled=true; p.wb.method=pp::WBParams::CUSTOM_TEMP;
-    p.wb.temperature=int(num(a,"temperature",6500,1500,60000));
-    p.wb.green=std::exp(num(a,"tint",0,-100,100)/100.0); p.wb.equal=1;
+    // Validate CRS coordinates here; core.cc resolves them with this image's profile.
+    num(a,"temperature",6500,2000,50000);num(a,"tint",0,-150,150);
+    p.wb.temperature=6500;p.wb.green=1;p.wb.equal=1;
     if(a.contains("wbMultipliers")&&!a["wbMultipliers"].is_null()){
         const auto &m=a["wbMultipliers"];if(!m.is_array()||m.size()!=3)throw std::runtime_error("Invalid white balance multipliers");
         for(int i=0;i<3;++i){const double v=m[i].get<double>();if(!std::isfinite(v)||v<=0||v>100)throw std::runtime_error("Invalid white balance multiplier");p.wb.mult[i]=v;}

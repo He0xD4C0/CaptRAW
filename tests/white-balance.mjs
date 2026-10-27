@@ -39,14 +39,8 @@ try{
  const profile=await render('sampled',image,sample);
  await engine.call('export',{path:source,artProfile:profile,output:join(out,'sampled.tiff'),format:'tiff'});
  await render('manual',image,{temperature:3500,tint:25,wbMode:'custom',wbMultipliers:null});
- const legacy=await engine.call('open',{path:source,sessionId:'legacy',baselineVersion:2});assert.equal(legacy.baselineVersion,2);assert.equal(legacy.adjustments.wbMultipliers,null);
- const legacyProfile=await render('legacy',legacy);await engine.call('export',{path:source,artProfile:legacyProfile,output:join(out,'legacy.tiff'),format:'tiff'});
- const older=new EngineClient({executable:process.env.CAPTRAW_LEGACY_ENGINE||process.env.HOME+'/Applications/CaptRAW-0.3.app/Contents/Resources/native/captraw-engine',resources:process.env.CAPTRAW_LEGACY_RESOURCES||process.env.HOME+'/Applications/CaptRAW-0.3.app/Contents/Resources/native/resources',cache:'build/white-balance-legacy-reference'});
- try{
-  const old=await older.call('open',{path:source,sessionId:'old'}),pending=older.preview(1);const result=await older.call('update',{revision:1,adjustments:old.adjustments});await pending;
-  await older.call('export',{path:source,artProfile:result.artProfile,output:join(out,'legacy-reference.tiff'),format:'tiff'});
-
- }finally{await older.stop();}
+ for(const baselineVersion of [2,3,5,'4',null])await assert.rejects(engine.call('open',{path:source,sessionId:'obsolete',baselineVersion}),/Unsupported baseline/);
+ const reopened=await engine.call('open',{path:source,sessionId:'current',baselineVersion:4});assert.equal(reopened.baselineVersion,4);assert.deepEqual(reopened.adjustments,image.adjustments);
  const independent=new EngineClient({cache:'build/white-balance-independent'});try{await independent.call('export',{path:source,artProfile:profile,output:join(out,'sampled-independent.tiff'),format:'tiff'});}finally{await independent.stop();}
- writeFileSync(join(out,'report.json'),JSON.stringify({engine:process.env.CAPTRAW_ENGINE||'development native',results,coordinates,invalidRequestsRejected:true,sample,legacyBaseline:2},null,2)+'\n');console.log('White balance estimates, presets, sampling, coordinate invariance and legacy exports completed');
+ writeFileSync(join(out,'report.json'),JSON.stringify({engine:process.env.CAPTRAW_ENGINE||'development native',results,coordinates,invalidRequestsRejected:true,sample,rejectedBaselines:[2,3,5,'4',null]},null,2)+'\n');console.log('White balance estimates, presets, sampling, coordinate invariance and obsolete baseline rejection completed');
 }finally{await engine.stop();}

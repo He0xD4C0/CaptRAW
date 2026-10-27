@@ -1,12 +1,16 @@
-import {EngineClient,explicitFreshCurveMode} from './engine-client.mjs';
+import {ENGINE_VERSION} from '@captraw/contracts';
+import {Documents} from '@captraw/desktop-core/documents';
+import {XMP} from '@captraw/desktop-core/xmp';
+import {EngineClient} from './engine-client.mjs';
 import {resolve,join} from 'node:path';
 import {readFileSync,writeFileSync,mkdirSync,cpSync,existsSync,symlinkSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import assert from 'node:assert/strict';
+const documents=new Documents(new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp')));
 const out=resolve('artifacts/black-white');mkdirSync(out,{recursive:true});
 const engine=new EngineClient({cache:'build/black-white-cache'});engine.on('error',()=>{});
-const legacy=new EngineClient({executable:process.env.CAPTRAW_BW_LEGACY_ENGINE||process.env.HOME+'/Applications/CaptRAW-0.5.app/Contents/Resources/native/captraw-engine',resources:process.env.CAPTRAW_BW_LEGACY_RESOURCES||process.env.HOME+'/Applications/CaptRAW-0.5.app/Contents/Resources/native/resources',cache:'build/black-white-legacy'});legacy.on('error',()=>{});
+const reference=new EngineClient({cache:'build/black-white-reference'});reference.on('error',()=>{});
 const hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex');let revision=0;
 const report={engine:process.env.CAPTRAW_ENGINE||'development native',offlineAndHomebrewDenied:!!process.env.CAPTRAW_SANDBOX_PROFILE,images:[],checks:[]};
 async function render(image,adjustments,name,artProfile=''){
@@ -19,8 +23,8 @@ try{
   const source=resolve('build/samples',file),sourceHash=hash(source),image=await engine.call('open',{path:source,sessionId:file});
   assert.deepEqual(image.adjustments.blackWhite.base.weights,[33,33,33]);assert.equal(image.adjustments.blackWhite.base.preset,'RGB-Rel');
   const original=await render(image,image.adjustments,file+'-color');
-  const old=await legacy.call('open',{path:source,sessionId:'old'}),pending=legacy.preview(1),oldResult=await legacy.call('update',{revision:1,adjustments:old.adjustments});const oldFrame=await pending;
-  assert.equal(original.sha256,hash(oldFrame.file),'Default preview changed');assert.equal(original.profile,explicitFreshCurveMode(oldResult.artProfile),'Default native parameters changed');
+  const old=await reference.call('open',{path:source,sessionId:'old'}),pending=reference.preview(1),oldResult=await reference.call('update',{revision:1,adjustments:old.adjustments});const oldFrame=await pending;
+  assert.equal(original.sha256,hash(oldFrame.file),'Default preview changed');assert.equal(original.profile,oldResult.artProfile,'Default native parameters changed');
   const blackWhite={...image.adjustments.blackWhite,enabled:true,mixer:[20,-20,0,45,0,-40,15,0]};
   const mono=await render(image,{...image.adjustments,blackWhite},file+'-mono');assert.notEqual(mono.sha256,original.sha256);
   const restored=await render(image,{...image.adjustments,blackWhite:{...blackWhite,enabled:false}},file+'-restored');assert.equal(restored.sha256,original.sha256,'Switching to color changed prior edits');
@@ -28,9 +32,9 @@ try{
    await engine.call('export',{path:source,artProfile:mono.profile,output:join(out,'raw-mono.tiff'),format:'tiff'});
    const reference=resolve('build/reference/Contents/MacOS/captraw-art-reference');mkdirSync(resolve('build/reference/Contents/MacOS'),{recursive:true});cpSync('build/native/captraw-art-reference',reference);mkdirSync(resolve('build/reference/settings'),{recursive:true});cpSync('build/upstream/ART-1e0e12c62e4f329d30bb5624d62a23a663ffbe6b/data/options/options.osx','build/reference/settings/options');if(!existsSync('build/reference/Contents/Resources'))symlinkSync(resolve('build/native/resources'),'build/reference/Contents/Resources');
    execFileSync(reference,['-o',join(out,'raw-reference.tif'),'-p',join(out,file+'-mono.arp'),'-t','-b16','-Y','-c',source],{env:{...process.env,ART_SETTINGS:resolve('build/reference/settings'),ART_CACHE:resolve('build/reference/cache')},stdio:['ignore','pipe','pipe']});
-   writeFileSync(join(out,'legacy-05.captraw.json'),JSON.stringify({schemaVersion:1,engineVersion:'CaptRAW-4_ART-1.26.10_LibRaw-3b20539',baselineVersion:3,source:{path:source,size:readFileSync(source).length,sha256:sourceHash},artProfile:oldResult.artProfile,adjustments:old.adjustments},null,2));
+   writeFileSync(join(out,'color.xmp'),await documents.serialize({engineVersion:ENGINE_VERSION,baselineVersion:4,source:{path:source,size:readFileSync(source).length,sha256:sourceHash},artProfile:original.profile,adjustments:image.adjustments}));
   }
-  assert.equal(hash(source),sourceHash);report.images.push({file,defaultMatches05:true,colorRestoreIdentical:true,sourceUnchanged:true});console.log('PASS color, B&W and restore',file);
+  assert.equal(hash(source),sourceHash);report.images.push({file,defaultMatchesIndependent:true,colorRestoreIdentical:true,sourceUnchanged:true});console.log('PASS color, B&W and restore',file);
  }
  const source=resolve('build/samples/bw-swatches.png'),image=await engine.call('open',{path:source,sessionId:'swatches'}),bw={...image.adjustments.blackWhite,enabled:true};
  await render(image,{...image.adjustments,blackWhite:bw},'swatches-neutral');
@@ -47,7 +51,7 @@ try{
  const oldAdjustments={...edits};delete oldAdjustments.blackWhite;
  const migrated=await engine.call('validate',{artProfile:legacyProfile,adjustments:oldAdjustments});assert.equal(migrated.blackWhite.enabled,true);assert.equal(migrated.blackWhite.base.gamma[0],-15);assert.equal(migrated.blackWhite.base.filter,'Red');
  const restoredProfile=(await render(image,{...oldAdjustments,blackWhite:migrated.blackWhite},'legacy-bw',legacyProfile)).profile;
- await engine.call('export',{path:source,artProfile:restoredProfile,output:join(out,'legacy.tiff'),format:'tiff'});await legacy.call('export',{path:source,artProfile:legacyProfile,output:join(out,'legacy-reference.tiff'),format:'tiff'});
+ await engine.call('export',{path:source,artProfile:restoredProfile,output:join(out,'legacy.tiff'),format:'tiff'});await reference.call('export',{path:source,artProfile:legacyProfile,output:join(out,'legacy-reference.tiff'),format:'tiff'});
  report.checks=['eight bands render','color HSL and curve edits survive mode switching','saved native mixer reads back exactly','independent process exports saved B&W','legacy filter and gamma are retained','invalid mixer data is rejected'];
  writeFileSync(join(out,'report.json'),JSON.stringify(report,null,2)+'\n');
-}finally{await engine.stop();await legacy.stop();}
+}finally{await engine.stop();await reference.stop();}

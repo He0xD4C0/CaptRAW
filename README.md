@@ -1,10 +1,13 @@
 <h1 align="center">
+  <img alt="CaptRAW Logo" src="./apps/desktop/src/assets/logo.svg" width="160" height="160" />
   <br>CaptRAW<br>
 </h1>
+<p align="center">新世代开源 RAW 显像方案</p>
+
 
 ## 安装与使用
 
-构建产物为 `release/CaptRAW-0.31.0-arm64.dmg`，将应用拖入 Applications，也可直接运行 `release/mac-arm64/CaptRAW.app`。本次依赖瓶装库的最低系统为 **macOS 26.0，ARM64**；其他版本未验收。原型没有 Developer ID 签名和 Apple 公证，本机验收不等于跨机器 Gatekeeper 验收。
+构建产物为 `release/CaptRAW-0.34.0-arm64.dmg`，将应用拖入 Applications，也可直接运行 `release/mac-arm64/CaptRAW.app`。本次依赖瓶装库的最低系统为 **macOS 26.0，ARM64**；其他版本未验收。原型使用 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证，本机验收不等于跨机器 Gatekeeper 验收。
 
 打开照片后在右侧折叠面板调整；“曲线 → 参数”控制四个区域，图下三个分界支持鼠标、方向键和数值输入；最右工具栏切换编辑、裁切、修复和蒙版。蒙版面板创建组、添加组件或减去 / 相交，拖动中心移动、端点改变范围；画笔和橡皮擦仅在蒙版模式出现。文件名旁、胶片缩略图和底栏都有关闭入口，未保存时选择保存 / 放弃 / 取消；底栏“完成”保存后关闭。裁切区域内的“完成”结束裁切。1:1 按物理屏幕像素显示，并从核心请求全分辨率区域；拖动可平移。
 
@@ -12,11 +15,13 @@
 - 裁切模式：`X` 切换横竖，`Enter` 完成；拖动边角缩放、框内移动、框外新建。
 - `P` 或 `\` 切换初始显影；按住“按住对比”按钮临时查看。
 - `I` 白平衡吸管；可选 5×5 / 11×11 / 25×25 原图像素，在中性灰处单击；`Esc` 退出。自动与预设结果保存为固定的通道系数；手动改色温 / 色调转为自定义。
+- “配置文件 → 导入 DCP / ICC”将文件复制到本地库；保存 XMP 时随附可校验资产。移动编辑文件须保留 `.xmp.assets` 文件夹。DCP 检查机型限制，控件按实际能力显示；Adobe 名称 / digest 自动匹配仍待验证。
+- 全局白平衡使用 Adobe Temperature / Tint 坐标（2000–50000 K，-150–150），由当前相机 DCP / 矩阵转换。XMP 只含其中一项时保留另一项；Adobe 相机配置、自动模式重算与完整像素等效仍待验证，见 [白平衡接口](docs/ENGINE.md#xmp-白平衡坐标033)。
 - `⇧L` 新建亮度范围，直接单击或拖框取样；“显示亮度图”切换灰度视图，“亮度取样”重新启用吸管。
 - `B` 修复：先单击来源，再单击目标；Option 单击重新取样，拖动两端重定位；Backspace 删除选中点，`[` / `]` 改半径，Shift 配合改羽化。
 - `E` 编辑，`M` 蒙版，`K` 新画笔，`⇧K` 添加画笔组件，`G` 线性，`J` 径向，`C` 裁切，`H` 平移，空格临时平移，`R/L` 右 / 左旋转，`Y` 覆盖层，`X` 反选蒙版。
 - `[` / `]` 改画笔大小，`⇧[` / `⇧]` 改羽化，按住 Option 临时擦除。实际参数及颜色使用 ART 语义，不能按相同数值复现 ACR。
-- 配方使用 `.captraw.json`。重新打开配方恢复完整编辑；默认也识别原片旁的同名配方。0.4 接入精确白平衡系数并保存基线版本；旧版配方维持原有初始显影和对比状态。撤销历史仅存在于当前会话；关闭文件与退出应用均提示未保存更改。
+- 编辑和预设使用 `.xmp`；默认识别原片旁的同名 XMP。当前初始显影基线固定为 4，旧 JSON 格式不读取、不迁移。撤销历史仅存在于当前会话；关闭文件与退出应用均提示未保存更改。Adobe 参数支持范围见 [XMP 接口说明](docs/ENGINE.md#xmp-编辑文档与预设032替代旧文件格式)。
 - 默认导出新文件；保存对话框中的覆盖选择才允许替换已有输出。取消或失败保留已有目标文件。
 
 ## 构建
@@ -43,101 +48,41 @@ pnpm package
 ## 验证
 
 ```sh
-pnpm typecheck
-pnpm test
+pnpm ci:check
 node scripts/fetch-samples.mjs
-# 只下载并校验 D850；不传 --only 时仍处理完整固定清单，未知名称直接报错：
-node scripts/fetch-samples.mjs --only nikon-d850.NEF
 uv venv build/qa-venv
 uv pip install --python build/qa-venv/bin/python -r tests/requirements.txt
 build/qa-venv/bin/python tests/synthetic.py
-node tests/white-balance.mjs
-node tests/input-profiles.mjs
-node tests/black-white.mjs
-node tests/repair.mjs
-node tests/local-details.mjs
-node tests/local-white-balance.mjs
-node tests/local-tone.mjs
-node tests/global-details.mjs
-build/qa-venv/bin/python tests/inspect-global-details.py
-build/qa-venv/bin/python tests/inspect-local-tone.py
-build/qa-venv/bin/python tests/inspect-local-white-balance.py
-build/qa-venv/bin/python tests/inspect-local-details.py
-build/qa-venv/bin/python tests/inspect-repair.py
-node tests/curve-conformance.mjs
-node tests/core-regression.mjs
-build/qa-venv/bin/python tests/inspect-regression.py
-node tests/mask-preview.mjs
-build/qa-venv/bin/python tests/inspect-mask-preview.py
-node tests/mask-groups.mjs
-build/qa-venv/bin/python tests/inspect-mask-groups.py
-node tests/extended-controls.mjs
-# HE 全清单需要额外下载；只验收已有且哈希正确的样本：
-CAPTRAW_NIKON_CACHED_ONLY=1 node tests/nikon-he.mjs
-# 相机构图测试还需 ExifTool、上述 Nikon 样本与保留的 0.8 安装核心：
-node tests/camera-crop.mjs
-CAPTRAW_APP="$HOME/Applications/CaptRAW-0.13.app/Contents/MacOS/CaptRAW" node tests/camera-crop-e2e.mjs
-node tests/acceptance-native.mjs
-build/qa-venv/bin/python tests/inspect-acceptance.py
-node tests/xtrans-stability.mjs
-build/qa-venv/bin/python tests/inspect-xtrans-stability.py
+node tests/xmp-sdk.mjs
+node tests/xmp-documents.mjs
 pnpm test:e2e
-node tests/white-balance-e2e.mjs
-build/qa-venv/bin/python tests/inspect-white-balance.py
-node tests/input-profiles-e2e.mjs
-build/qa-venv/bin/python tests/inspect-input-profiles.py
-node tests/black-white-e2e.mjs
-node tests/repair-e2e.mjs
-node tests/local-details-e2e.mjs
-node tests/local-white-balance-e2e.mjs
-node tests/local-tone-e2e.mjs
-node tests/global-details-e2e.mjs
-# 裁切工作流使用上一步 local-tone-e2e 生成的 RAW 配方；原生对照需保留 0.12 安装核心。
-node tests/crop-workflow-e2e.mjs
-node tests/crop-workflow.mjs
-build/qa-venv/bin/python tests/inspect-crop-workflow.py
-node tests/desktop-consistency.mjs artifacts/global-details-gui/global.captraw.json artifacts/global-details/desktop-independent.tiff
-node tests/desktop-consistency.mjs artifacts/local-tone-gui/local.captraw.json artifacts/local-tone/desktop-independent.tiff
-build/qa-venv/bin/python tests/inspect-local-tone.py
-node tests/desktop-consistency.mjs artifacts/local-white-balance-gui/local.captraw.json artifacts/local-white-balance/desktop-independent.tiff
-build/qa-venv/bin/python tests/inspect-local-white-balance.py
-node tests/desktop-consistency.mjs artifacts/local-details-gui/local.captraw.json artifacts/local-details/desktop-independent.tiff
-build/qa-venv/bin/python tests/inspect-local-details.py
-node tests/desktop-consistency.mjs artifacts/repair-gui/repaired.captraw.json artifacts/repair/desktop-independent.tiff
-build/qa-venv/bin/python tests/inspect-repair.py
-node tests/desktop-consistency.mjs artifacts/black-white-gui/mixed.captraw.json artifacts/black-white/desktop-independent.tiff
-build/qa-venv/bin/python tests/inspect-black-white.py
-node tests/mask-overlay-e2e.mjs
+node tests/xmp-e2e.mjs
 node tests/revision-e2e.mjs
 node tests/workbench-e2e.mjs
 node tests/restart-e2e.mjs
-node tests/desktop-consistency.mjs
-build/qa-venv/bin/python tests/inspect-desktop.py
+node tests/white-balance.mjs
+build/qa-venv/bin/python tests/inspect-white-balance.py
+node tests/white-balance-e2e.mjs
+node tests/desktop-consistency.mjs artifacts/white-balance-gui/switched.xmp artifacts/white-balance-gui/independent.tiff
 ```
 
-旧白平衡基线交叉对照测试需要保留 0.3 安装版，默认使用 `~/Applications/CaptRAW-0.3.app`；也可通过 `CAPTRAW_LEGACY_ENGINE` / `CAPTRAW_LEGACY_RESOURCES` 指定。应用运行不依赖旧版本。0.4 修正 X-Trans 旧算法的边缘未初始化读取，历史 X-Trans 配方的边缘输出可能因此改变；该变化与白平衡旧基线保护分别验收。
+原生和桌面测试需先执行 `pnpm build`；`xmp-e2e` 使用 `xmp-documents` 生成的 Adobe 样本。设定 `CAPTRAW_APP=/绝对路径/CaptRAW.app/Contents/MacOS/CaptRAW` 可测试安装包；`CAPTRAW_ENGINE`、`CAPTRAW_RESOURCES` 和 `CAPTRAW_XMP_BINARY` 指向同一候选包内对应程序与资源。默认入口测试本地构建，不代表已安装应用通过验收。
 
-输入配置文件的默认显影交叉对照测试使用 `~/Applications/CaptRAW-0.4.app`，可通过 `CAPTRAW_PROFILE_LEGACY_ENGINE` / `CAPTRAW_PROFILE_LEGACY_RESOURCES` 指定其他保留的 0.4 核心。仅测试需要旧版，应用不依赖它。
+Nikon 相机构图还需 ExifTool 和 `tests/nikon-he.mjs` 固定样本。`tests/camera-crop.mjs` 使用固定 ART CLI 作为同配方 TIFF 像素对照。历史 GUI 与文档专项已迁移至 XMP、当前处理版本和基线 4，移除旧 JSON 迁移验收；各专项仍需先生成对应夹具。语法迁移通过不表示这些专项已全部在新安装包重跑；旧版验收保留于 [验收记录](docs/ACCEPTANCE.md)。
 
-黑白测试的旧版交叉对照使用 `~/Applications/CaptRAW-0.5.app`，可通过 `CAPTRAW_BW_LEGACY_ENGINE` / `CAPTRAW_BW_LEGACY_RESOURCES` 指定；同样仅用于测试。`CaptRAWLuminanceCurve` 是本项目的 ART 扩展，原版 ART 和旧核心不会执行它，旧宿主会拒绝新版本配方。
+白平衡独立数值与双光源 DNG 验证（Colour Science 仅作为 QA 参考，不进入产品）：
 
-修复回归以保留的 `~/Applications/CaptRAW-0.6.app` 比较中性参数和旧单线程输出；旧版只用于测试。修复算法现在有确定的迭代顺序，含旧修复参数的历史配方可能与此前多线程输出略有差异。
+```sh
+cmake --build build/native --target captraw-wb-probe -j 4
+uv venv build/wb-reference-venv
+uv pip install --python build/wb-reference-venv/bin/python colour-science==0.4.6 tifffile==2026.10.15
+build/wb-reference-venv/bin/python tests/white-balance-reference.py
+node tests/white-balance-reference.mjs
+```
 
-局部细节回归使用保留的 `~/Applications/CaptRAW-0.7.app` 比较旧蒙版及中性参数；仅测试依赖旧版。独立原生纹理 / 平滑设置会保留，只有本项目带标记的区域随蒙版更新；若旧配方存在停用但非中性的独立设置，新局部细节会明确拒绝合并，避免激活隐藏处理。
+固定样本的授权、机型 / 压缩模式和 SHA-256 位于 [tests/fixtures.json](tests/fixtures.json)。追加 Nikon HE 验收使用 `tests/nikon-he.mjs`；只测试已有且哈希正确的样本可设置 `CAPTRAW_NIKON_CACHED_ONLY=1`。`tests/nikon-adobe-reference.mjs` 使用 Adobe DNG Converter 生成独立参考，转换器不参与产品运行或分发。测试图及参考不进入应用或源码归档。
 
-局部明暗的中性和已有全局明暗兼容测试使用保留的 `~/Applications/CaptRAW-0.10.app` 原生核心；零值不会启用新处理或保存新频段字段。
-
-局部白平衡中性兼容测试使用保留的 `~/Applications/CaptRAW-0.9.app` 原生核心，仅测试依赖旧版；不运行旧版窗口。
-
-GUI 测试通过 Playwright 操作真实、隐藏的 Electron 窗口；原生对话框由测试显式提供响应，迟到结果等故障场景使用标明的受控注入。正常显影、取样和导出调用包内核心。使用 `CAPTRAW_APP=/absolute/path/CaptRAW.app/Contents/MacOS/CaptRAW` 对安装后的应用执行 GUI 测试；不依赖开发服务器。`CAPTRAW_ENGINE` 和 `CAPTRAW_RESOURCES` 可将原生验收指向安装包内核心。
-
-0.9 安装版已完成 29 / 29 Nikon HE / HE★ 固定样本的包内解码、独立 Adobe 感光点对照和后台界面工作流，覆盖六种机型的清单所列模式。0.13 沿用相同解码库，本批未重新运行全部 29 项；不能据此推及所有固件或模式。Adobe 转换器仅作独立测试参考，不随产品分发、不参与运行。
-
-追加 Nikon 验收使用 `tests/nikon-he.mjs` 的完整清单：下载保留 `.part`、校验后才转为 NEF；单项失败会记录并继续其余项。`CAPTRAW_NIKON_OUT` 可把追加结果与已发布证据分开。指定安装版资源时，感光点工具直接链接包内 LibRaw，并与核心同样接受禁网 / 禁 Homebrew 约束；不再用开发库代替分发库。
-
-`tests/nikon-adobe-reference.mjs` 对已完整下载的样本生成独立 Adobe DNG Converter 参考，再由开源库逐感光点比较；转换器只作为本机测试工具，不参与产品运行或分发。`tests/nikon-he-e2e.mjs` 在安装版逐个验证可见预览、曝光变化、保存和源哈希。最终 0.9 记录见 `artifacts/nikon-he-0.9/`、`nikon-he-independent/` 和 `nikon-he-gui-0.9/`。其中一张 Fenny 的 Z6III 样本为 CC BY-SA 4.0，其余遵循固定清单的 CC0 声明，测试图及参考不进入应用或源码归档。
-
-固定样本与授权、机型 / 压缩模式、SHA-256 位于 [tests/fixtures.json](tests/fixtures.json)。测试证据输出 `artifacts/`，性能测量基于文件系统已缓存的本机读取，不等于冷磁盘、其他设备或完整画质盲评。结果见 [验收记录](docs/ACCEPTANCE.md)。安装包完成后运行 `node scripts/source-release.mjs`，生成 CaptRAW、固定 ART 与 LibRaw 源码归档及 `release/SHA256SUMS`；源代码和依赖清单应与二进制一并保留。
+测试证据输出至 `artifacts/`。历史性能记录不等于冷磁盘、其他设备或完整画质盲评。安装包完成后运行 `node scripts/source-release.mjs`，源码、依赖清单和二进制应一并保留。
 
 ## Monorepo 结构
 
@@ -166,13 +111,3 @@ PR 和 `main` 推送执行 Ubuntu 快检，使用 Node 22.23.1、pnpm 11.25.0 �
 核心接口与持久化约定见 [docs/ENGINE.md](docs/ENGINE.md)。开源说明见 [THIRD_PARTY.md](THIRD_PARTY.md)，项目采用 GPL-3.0-or-later，保留 ART 与 RawTherapee 作者声明。
 
 所有 `tests/*e2e.mjs` 默认使用隐藏且不可聚焦的 Electron 窗口，通过 `CAPTRAW_E2E_BACKGROUND=1` 保持后台渲染，不弹窗或抢占焦点。共享启动器在运行前拒绝不支持该模式的旧安装包，并验证窗口实际隐藏。后台控件、截图和像素检查不代表用户已完成可见窗口人工验收；正常启动应用仍显示工作台。
-
-参数曲线验证（安装后的应用仍全程隐藏）：
-
-```sh
-CAPTRAW_APP="$HOME/Applications/CaptRAW-0.14.app/Contents/MacOS/CaptRAW" node tests/parametric-curve-e2e.mjs
-CAPTRAW_ENGINE="$HOME/Applications/CaptRAW-0.14.app/Contents/Resources/native/captraw-engine" CAPTRAW_RESOURCES="$HOME/Applications/CaptRAW-0.14.app/Contents/Resources/native/resources" CAPTRAW_SANDBOX_PROFILE="$PWD/tests/offline-native.sb" node tests/parametric-curve.mjs
-build/qa-venv/bin/python tests/inspect-parametric-curve.py
-```
-
-上述测试复用固定三种 RAW、`tests/synthetic.py` 生成的明暗样本、0.13 安装核心以及 `artifacts/crop-workflow-gui/durable.captraw.json` 的裁切迁移样本。

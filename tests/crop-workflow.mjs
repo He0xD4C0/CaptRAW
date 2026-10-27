@@ -1,5 +1,6 @@
+import {readDocument} from './xmp-test.mjs';
 import {EngineClient} from './engine-client.mjs';import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';import {resolve,join} from 'node:path';import assert from 'node:assert/strict';import {createHash} from 'node:crypto';
-const out=resolve('artifacts/crop-workflow');mkdirSync(out,{recursive:true});const recipe=JSON.parse(readFileSync('artifacts/crop-workflow-gui/durable.captraw.json')),e=new EngineClient({cache:'build/crop-workflow-cache'}),checks=[];const pass=s=>{checks.push(s);console.log('PASS',s);};
+const out=resolve('artifacts/crop-workflow');mkdirSync(out,{recursive:true});const recipe=(await readDocument('artifacts/crop-workflow-gui/durable.xmp')),e=new EngineClient({cache:'build/crop-workflow-cache'}),checks=[];const pass=s=>{checks.push(s);console.log('PASS',s);};
 try{
  await e.call('open',{path:recipe.source.path,sessionId:'crop',baselineVersion:recipe.baselineVersion});let profile,hash;
  for(const [i,aspect] of [recipe.adjustments.cropAspect,null].entries()){

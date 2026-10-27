@@ -1,7 +1,12 @@
+import {ENGINE_VERSION} from '@captraw/contracts';
+import {Documents} from '@captraw/desktop-core/documents';
+import {XMP} from '@captraw/desktop-core/xmp';
+import {readDocument} from './xmp-test.mjs';
 import {EngineClient} from './engine-client.mjs';
 import {saveRecipeWithMasks,restoreRecipeMasks} from '@captraw/desktop-core/mask-assets';
 import assert from 'node:assert/strict';import {resolve,join} from 'node:path';import {homedir} from 'node:os';
 import {readFileSync,writeFileSync,copyFileSync,mkdirSync,existsSync} from 'node:fs';import {createHash} from 'node:crypto';
+const documents=new Documents(new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp')));
 const out=resolve(process.env.CAPTRAW_RASTER_OUT||'artifacts/raster-masks');mkdirSync(out,{recursive:true});
 const sha=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
 const engine=new EngineClient({cache:join(out,'cache')}),old=join(homedir(),'Applications/CaptRAW-0.27.app/Contents/Resources/native'),reference=new EngineClient({executable:join(old,'captraw-engine'),resources:join(old,'resources'),cache:join(out,'reference')});engine.on('error',()=>{});reference.on('error',()=>{});
@@ -45,16 +50,16 @@ try{
  for(const enabled of [true,false]){
   const a={...image.adjustments,rotation:90,masks:[{...mask(),enabled,raster:undefined,components:[{...mask(),operation:'add'},brush]}]};
   const result=await render(image,a,enabled?'document-on':'document-off');
-  const recipe={schemaVersion:1,engineVersion:'CaptRAW-19_ART-1.26.10_LibRaw-3b20539',baselineVersion:4,source:{path:image.path,size:readFileSync(image.path).length,sha256:sha(image.path)},artProfile:result.artProfile,adjustments:a};
-  const file=join(out,enabled?'栅格.captraw.json':'停用栅格.captraw.json');await saveRecipeWithMasks(engine,file,recipe);const stored=JSON.parse(readFileSync(file));assert.equal(stored.maskAssets.files.length,1);assert(stored.adjustments.masks[0].components[0].raster.path.startsWith('captraw-mask:'));
+  const recipe={engineVersion:ENGINE_VERSION,baselineVersion:4,source:{path:image.path,size:readFileSync(image.path).length,sha256:sha(image.path)},artProfile:result.artProfile,adjustments:a};
+  const file=join(out,enabled?'栅格.xmp':'停用栅格.xmp');await saveRecipeWithMasks(engine,file,recipe,value=>documents.serialize(value));const stored=(await readDocument(file));assert.equal(stored.maskAssets.files.length,1);assert(stored.adjustments.masks[0].components[0].raster.path.startsWith('captraw-mask:'));
   const opened=await restoreRecipeMasks(engine,file,stored,join(out,'restored-assets'));assert(opened.adjustments.masks[0].components[0].raster.path.startsWith(join(out,'restored-assets')));
   const again=await render(image,opened.adjustments,enabled?'document-on-restored':'document-off-restored',opened.artProfile);assert.equal(sha(join(out,enabled?'document-on-preview.png':'document-off-preview.png')),sha(join(out,enabled?'document-on-restored-preview.png':'document-off-restored-preview.png')));
  }
  pass('active and disabled raster components save all assets and restore their projected paths');
- const protectedFile=join(out,'栅格.captraw.json'),protectedBytes=readFileSync(protectedFile);
+ const protectedFile=join(out,'栅格.xmp'),protectedBytes=readFileSync(protectedFile);
  const incomplete={call:async(method,params)=>{const result=await engine.call(method,params);if(method==='maskAssets'&&params.replacements)delete result.adjustments;return result;}};
- const savedRecipe=JSON.parse(protectedBytes),liveRecipe=await restoreRecipeMasks(engine,protectedFile,savedRecipe,join(out,'contract-assets'));
- await assert.rejects(saveRecipeWithMasks(incomplete,protectedFile,liveRecipe),/完整蒙版配方/);assert.deepEqual(readFileSync(protectedFile),protectedBytes);
+ const savedRecipe=(await readDocument(protectedFile)),liveRecipe=await restoreRecipeMasks(engine,protectedFile,savedRecipe,join(out,'contract-assets'));
+ await assert.rejects(saveRecipeWithMasks(incomplete,protectedFile,liveRecipe,value=>documents.serialize(value)),/完整蒙版配方/);assert.deepEqual(readFileSync(protectedFile),protectedBytes);
  await assert.rejects(restoreRecipeMasks(incomplete,protectedFile,savedRecipe,join(out,'contract-assets')),/完整蒙版配方/);pass('incomplete core response cannot replace a saved document');
  const large=await engine.call('open',{path:join(out,'uniform-large.png'),sessionId:'raster-large'});
  const largeResult=await render(large,{...large.adjustments,masks:[{...mask(),feather:100}]},'large-feather');

@@ -1,3 +1,4 @@
+import {readDocument} from './xmp-test.mjs';
 import {expect} from '@playwright/test';
 import {electron} from './electron-background.mjs';import {resolve,join} from 'node:path';import {readFileSync,writeFileSync,mkdirSync,existsSync,rmSync} from 'node:fs';import {createHash} from 'node:crypto';
 const root=process.cwd(),out=resolve(process.env.CAPTRAW_NIKON_GUI_OUT||'artifacts/nikon-he-gui');mkdirSync(out,{recursive:true});const hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -12,7 +13,7 @@ try{
  const file=resolve('build/samples/nikon-he',s.name+'.NEF');await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},file);const started=Date.now();await settle(()=>page.getByRole('button',{name:'打开',exact:true}).click());
  await expect(page.locator('.document-title')).toContainText(s.name);await expect(page.locator('canvas')).toBeVisible();await expect(page.getByRole('alert')).toHaveCount(0);const baseline=await pixels(),firstVisibleMs=Date.now()-started;
  await settle(async()=>{const exposure=page.getByRole('spinbutton',{name:'曝光',exact:true});await exposure.fill('.5');await exposure.press('Tab');});expect(await pixels()).not.toBe(baseline);
- const recipe=join(out,s.name+'.captraw.json');rmSync(recipe,{force:true});await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},recipe);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(recipe)).toBe(true);const saved=JSON.parse(readFileSync(recipe));expect(saved.source.sha256).toBe(s.sha256);expect(saved.adjustments.exposure).toBe(.5);expect(hash(file)).toBe(s.sha256);
+ const recipe=join(out,s.name+'.xmp');rmSync(recipe,{force:true});await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},recipe);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(recipe)).toBe(true);const saved=(await readDocument(recipe));expect(saved.source.sha256).toBe(s.sha256);expect(saved.adjustments.exposure).toBe(.5);expect(hash(file)).toBe(s.sha256);
  await page.screenshot({path:join(out,s.name+'.png')});results.push({name:s.name,camera:s.camera,mode:s.mode,crop:s.crop,sourceSHA256:s.sha256,sourceUnchanged:true,firstVisibleMs,visiblePreviewAndExposure:true,recipe});console.log('PASS GUI',s.name,firstVisibleMs);
  writeFileSync(join(out,'report.json'),JSON.stringify({executablePath,backgroundWindow:true,packaged:!!executablePath,selectedSamples:fixtures.length,results,errors},null,2)+'\n');
  }

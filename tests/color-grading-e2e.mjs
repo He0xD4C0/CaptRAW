@@ -1,17 +1,21 @@
+import {ENGINE_VERSION} from '@captraw/contracts';
+import {Documents} from '@captraw/desktop-core/documents';
+import {XMP} from '@captraw/desktop-core/xmp';
+import {readDocument} from './xmp-test.mjs';
 import {expect} from '@playwright/test';
 import {electron} from './electron-background.mjs';
 import {EngineClient} from './engine-client.mjs';
 import {readFileSync,writeFileSync,mkdirSync,cpSync,rmSync,existsSync} from 'node:fs';
 import {resolve,join} from 'node:path';
-import {homedir} from 'node:os';
 import {createHash} from 'node:crypto';
+const documents=new Documents(new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp')));
 const out=resolve(process.env.CAPTRAW_GRADING_E2E_OUT||'artifacts/color-grading-gui');mkdirSync(out,{recursive:true});
 const executablePath=process.env.CAPTRAW_APP,checks=[],errors=[],frames=[];let app,page;
 const hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex'),pass=s=>{checks.push(s);console.log('PASS',s);};
 async function launch(){app=await electron.launch({executablePath,args:executablePath?[]:[process.cwd()]});page=await app.firstWindow();page.setDefaultTimeout(45000);page.on('pageerror',e=>errors.push(String(e)));await page.evaluate(()=>{window.__frames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__frames.push(e.frame);});});}
 async function settle(action){const n=await page.evaluate(()=>window.__frames.length);await action();await page.waitForFunction(n=>window.__frames.length>n,n);await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__frames.filter(f=>f.kind!=='detail').at(-1)?.url);}
 async function open(path){await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},resolve(path));await settle(()=>page.getByRole('button',{name:'打开',exact:true}).click());}
-async function save(name){const path=join(out,name+'.captraw.json');rmSync(path,{force:true});await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},path);await settle(()=>page.getByRole('button',{name:'保存',exact:true}).click());await expect.poll(()=>existsSync(path)).toBe(true);return JSON.parse(readFileSync(path));}
+async function save(name){const path=join(out,name+'.xmp');rmSync(path,{force:true});await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},path);await settle(()=>page.getByRole('button',{name:'保存',exact:true}).click());await expect.poll(()=>existsSync(path)).toBe(true);return (await readDocument(path));}
 const pixels=async()=>hash(await page.evaluate(()=>window.__frames.filter(f=>f.kind!=='detail').at(-1).file));
 const wheel=region=>page.getByRole('group',{name:region+'色轮',exact:true});
 async function view(region){await page.getByRole('button',{name:region==='all'?'三轮总览':region+'分级视图',exact:true}).click();}
@@ -24,17 +28,17 @@ async function drag(region,to,{modifier,fromHandle=true,cancel=false}={}){
 }
 async function context(region,item){await wheel(region).click({button:'right'});await page.getByRole('menuitem',{name:item,exact:true}).click();}
 async function exportFile(name){const file=join(out,name+'.tiff');rmSync(file,{force:true});await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},file);await page.getByRole('button',{name:'导出',exact:true}).click();await page.getByRole('button',{name:'TIFF · 16 位'}).click();await expect(page.locator('.job-toast.done')).toBeVisible({timeout:120000});expect(existsSync(file)).toBe(true);}
-const source=resolve('build/samples/local-tone.png'),sourceHash=hash(source),legacyPath=join(out,'旧版 0.16.captraw.json');
-const oldRoot=join(homedir(),'Applications/CaptRAW-0.16.app/Contents/Resources/native'),old=new EngineClient({executable:join(oldRoot,'captraw-engine'),resources:join(oldRoot,'resources'),cache:join(out,'legacy-cache')});
-try{const im=await old.call('open',{path:source,sessionId:'legacy'}),pending=old.preview(1);const r=await old.call('update',{revision:1,adjustments:im.adjustments});cpSync((await pending).file,join(out,'legacy.png'));writeFileSync(legacyPath,JSON.stringify({schemaVersion:1,engineVersion:'CaptRAW-13_ART-1.26.10_LibRaw-3b20539',baselineVersion:4,source:{path:source,size:readFileSync(source).length,sha256:sourceHash},adjustments:im.adjustments,artProfile:r.artProfile}));}finally{await old.stop();}
-const legacyHash=hash(legacyPath);
+const source=resolve('build/samples/local-tone.png'),sourceHash=hash(source),inputPath=join(out,'初始显影.xmp');
+const fixtureEngine=new EngineClient({cache:join(out,'fixture-cache')});
+try{const im=await fixtureEngine.call('open',{path:source,sessionId:'fixture'}),pending=fixtureEngine.preview(1);const r=await fixtureEngine.call('update',{revision:1,adjustments:im.adjustments});cpSync((await pending).file,join(out,'initial.png'));writeFileSync(inputPath,await documents.serialize({engineVersion:ENGINE_VERSION,baselineVersion:4,source:{path:source,size:readFileSync(source).length,sha256:sourceHash},adjustments:im.adjustments,artProfile:r.artProfile}));}finally{await fixtureEngine.stop();}
+const inputHash=hash(inputPath);
 try{
  await launch();await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].webContents.session.enableNetworkEmulation({offline:true}));
- await open(legacyPath);const initialPixels=await pixels();expect(initialPixels).toBe(hash(join(out,'legacy.png')));
+ await open(inputPath);const initialPixels=await pixels();expect(initialPixels).toBe(hash(join(out,'initial.png')));
  await grading();
  for(const name of ['阴影','中间调','高光']){await expect(wheel(name)).toBeVisible();await wheel(name).scrollIntoViewIfNeeded();await expect(wheel(name)).toBeInViewport();}
  const mid=await wheel('中间调').boundingBox(),shadow=await wheel('阴影').boundingBox(),high=await wheel('高光').boundingBox();expect(mid.y).toBeLessThan(shadow.y);expect(shadow.x).toBeLessThan(high.x);
- const initial=await save('initial');expect(initial.engineVersion).toContain('CaptRAW-14');expect(initial.baselineVersion).toBe(4);expect(initial.artProfile).not.toContain('[CaptRAW Color Grading]');pass('legacy 0.16 recipe keeps exact pixels and exposes three visible wheels in the ACR arrangement');
+ const initial=await save('initial');expect(initial.engineVersion).toBe(ENGINE_VERSION);expect(initial.baselineVersion).toBe(4);expect(initial.artProfile).not.toContain('[CaptRAW Color Grading]');pass('current XMP keeps exact pixels and exposes three visible wheels in the ACR arrangement');
  await drag('阴影',[-.35,.606]);const tinted=await save('tinted'),tintedPixels=await pixels();expect(tinted.adjustments.colorGrading.shadows.hue).toBeCloseTo(240,0);expect(tinted.adjustments.colorGrading.shadows.saturation).toBe(70);expect(tintedPixels).not.toBe(initialPixels);
  await settle(()=>page.getByRole('button',{name:'撤销',exact:true}).click());expect(await pixels()).toBe(initialPixels);await settle(()=>page.getByRole('button',{name:'重做',exact:true}).click());expect(await pixels()).toBe(tintedPixels);pass('wheel drag changes native pixels and forms exactly one undo/redo step');
  await drag('阴影',[-.2,.346],{modifier:'Shift'});const shifted=(await save('shift')).adjustments.colorGrading.shadows;expect(shifted.hue).toBe(240);expect(shifted.saturation).toBe(40);
@@ -54,7 +58,7 @@ try{
  await view('all');await page.locator('.color-grading-panel').scrollIntoViewIfNeeded();await page.screenshot({path:join(out,'three-wheels.png')});
  await page.getByRole('button',{name:'蒙版 M',exact:true}).click();await expect(page.locator('.grading-wheel')).toHaveCount(0);await page.getByRole('button',{name:'编辑',exact:true}).click();await grading();
  expect((await save('mode-restored')).adjustments.colorGrading).toEqual(mixed.adjustments.colorGrading);pass('grading controls stay in edit mode and retain document state across tool changes');
- await app.close();await launch();await open(join(out,'mixed.captraw.json'));expect(await pixels()).toBe(mixedPixels);expect((await save('restarted')).adjustments).toEqual(mixed.adjustments);pass('Chinese/space paths and a fresh application restore the entire recipe and exact pixels');
+ await app.close();await launch();await open(join(out,'mixed.xmp'));expect(await pixels()).toBe(mixedPixels);expect((await save('restarted')).adjustments).toEqual(mixed.adjustments);pass('Chinese/space paths and a fresh application restore the entire recipe and exact pixels');
  await grading();await view('all');await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].setSize(1100,760));for(const name of ['阴影','中间调','高光']){await wheel(name).scrollIntoViewIfNeeded();await expect(wheel(name)).toBeInViewport();}await page.screenshot({path:join(out,'small-window.png')});pass('three-wheel controls remain reachable in the supported small window');
  const raw=resolve('build/samples/nikon-d850.NEF'),rawHash=hash(raw);await open(raw);await grading();await view('全局');await value('全局分级色相',35);await value('全局分级饱和度',25);await value('全局分级明度',-5);const rawRecipe=await save('真实 RAW 分级');
  const n=await page.evaluate(()=>window.__frames.filter(f=>f.kind==='detail').length);await page.getByRole('button',{name:'1:1',exact:true}).click();await page.waitForFunction(n=>window.__frames.filter(f=>f.kind==='detail').length>n,n);await page.waitForFunction(()=>!!document.querySelector('canvas').dataset.detail);await page.locator('.rendering').waitFor({state:'hidden'});
@@ -62,6 +66,6 @@ try{
  await exportFile('raw');await page.screenshot({path:join(out,'raw-global-wheel.png')});expect(hash(raw)).toBe(rawHash);pass('real RAW grading displays true 1:1 detail and exports TIFF16 through the desktop');
  const independent=new EngineClient({cache:join(out,'independent-cache'),executable:executablePath?resolve(executablePath,'../../Resources/native/captraw-engine'):undefined,resources:executablePath?resolve(executablePath,'../../Resources/native/resources'):undefined});
  try{await independent.call('export',{path:raw,artProfile:rawRecipe.artProfile,output:join(out,'raw-independent.tiff'),format:'tiff'});}finally{await independent.stop();}
- expect(hash(source)).toBe(sourceHash);expect(hash(legacyPath)).toBe(legacyHash);expect(errors).toEqual([]);pass('source files and original legacy recipe remain unchanged; no page runtime errors');
+ expect(hash(source)).toBe(sourceHash);expect(hash(inputPath)).toBe(inputHash);expect(errors).toEqual([]);pass('source files and original XMP remain unchanged; no page runtime errors');
 }catch(e){if(page)await page.screenshot({path:join(out,'failure.png')});throw e;}
 finally{writeFileSync(join(out,'report.json'),JSON.stringify({backgroundWindow:true,packaged:!!executablePath,checks,errors,frames},null,2)+'\n');if(app){await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});}).catch(()=>{});await app.close().catch(()=>{});}}

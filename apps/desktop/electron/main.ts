@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, protocol, net, Menu } from 'electron';
 import { resolve, join, dirname, basename, extname } from 'node:path';
-import { readFile, readdir, stat, rename, mkdir, rm } from 'node:fs/promises';
+import { readdir, stat, rename, mkdir, rm } from 'node:fs/promises';
 import { createReadStream, existsSync,rmSync } from 'node:fs';
 import { randomUUID, createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
@@ -10,10 +10,11 @@ import {ObjectSelection} from '@captraw/desktop-core/object-selection';
 import {Presets} from '@captraw/desktop-core/presets';
 import {XMP} from '@captraw/desktop-core/xmp';
 import {Documents} from '@captraw/desktop-core/documents';
+import {InputProfiles} from '@captraw/desktop-core/input-profiles';
 import {Synchronizer} from '@captraw/desktop-core/synchronize';
 import {validateExportOptions} from '@captraw/contracts/export-options';
 import {BatchExporter,validateBatch} from '@captraw/desktop-core/batch-export';
-import type { ImageSession, EditDocument, EngineEvent, ColorProfileSettings, BlackWhiteSettings, ColorGradingSettings } from '@captraw/contracts';
+import type { ImageSession, EditDocument, EngineEvent } from '@captraw/contracts';
 import {ENGINE_VERSION,OUTPUT_COLOR_SPACES,type OutputColorSpace} from '@captraw/contracts';
 protocol.registerSchemesAsPrivileged([{ scheme: 'captraw', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 const backgroundTest=process.env.CAPTRAW_E2E_BACKGROUND==='1';
@@ -21,12 +22,14 @@ if(backgroundTest&&process.env.CAPTRAW_E2E_USER_DATA)app.setPath('userData',reso
 if(backgroundTest&&process.platform==='darwin')app.setActivationPolicy('accessory');
 let presets:Presets;
 let documents:Documents;
+let inputProfiles:InputProfiles;
 let objects:ObjectSelection;
 let synchronizer:Synchronizer;
 let batchExporter:BatchExporter;
 let exportPending=false;
 let win: BrowserWindow;
 let engine: NativeEngine | undefined;
+let openingEngine:NativeEngine|undefined;
 let exporter: NativeEngine | undefined;
 let exportCancelled = false;
 let exportTemp:string|undefined;
@@ -60,7 +63,7 @@ function createEngine() {
       send({ event: 'preview', frame: { ...frame, mask, luminance, url: `captraw://preview/${token}` } });
       const entries = [...frames.entries()];
       for (const [key, old] of entries.slice(0, -12)) { frames.delete(key); await rm(old, { force: true }).catch(() => {}); }
-    } else if (message.event === 'error' && !quitting) send(message);
+    } else if (message.event === 'error' && e===engine && !quitting) send(message);
   });
   return e;
 }
@@ -74,8 +77,7 @@ async function hashFile(path: string) {
 function requireSession(id: string) {
   if (openingImage || !session || session.id !== id) throw new Error('当前图片正在切换，请等待载入完成后重试。'); return session;
 }
-async function openImage(path: string, requestedBaseline?:2|3|4) {
-  if(requestedBaseline!==undefined&&requestedBaseline!==2&&requestedBaseline!==3&&requestedBaseline!==4)throw new Error('不支持的初始显影版本。');
+async function openImage(path: string) {
   path=resolve(path);const explicitRecipe=/\.xmp$/i.test(path);
   if(/\.json$/i.test(path))throw new Error('仅支持 XMP 编辑文件；旧 JSON 格式已移除。');
   const recipeFile=explicitRecipe?path:join(dirname(path),basename(path,extname(path))+'.xmp');
@@ -94,22 +96,35 @@ async function openImage(path: string, requestedBaseline?:2|3|4) {
     if(loaded.source&&((await stat(path)).size!==loaded.source.size||await hashFile(path)!==loaded.source.sha256))throw new Error('XMP 关联的原始图片已改变，停止加载编辑。');
   }
   if(explicitRecipe&&dirtyPaths.has(path))throw new Error('这张照片还有未保存编辑。请先保存或关闭照片，再打开其他编辑文件。');
-  const baselineVersion=requestedBaseline??4;
-  const image=await native().call('open',{path,sessionId:randomUUID(),baselineVersion,artProfile:loaded?.artProfile||''});
+  const candidate=createEngine();openingEngine=candidate;
+  try{
+  const image=await candidate.call('open',{path,sessionId:randomUUID()});
   let recipe:EditDocument|undefined;
   if(loaded){
     let adjustments={...image.adjustments,...loaded.adjustments};
-    if(!loaded.engineVersion&&loaded.adjustments.temperature!==undefined)adjustments={...adjustments,wbMode:'custom',wbMultipliers:null,wbApproximate:true};
+    if(!loaded.engineVersion&&(loaded.adjustments.temperature!==undefined||loaded.adjustments.tint!==undefined))adjustments={...adjustments,wbMode:'custom',wbMultipliers:null,wbApproximate:false};
     recipe={...loaded,source:loaded.source||{path,size:(await stat(path)).size,sha256:await hashFile(path)},adjustments};
-    recipe=await restoreRecipeMasks(native(),recipeFile,recipe,cache);
-    const checked=await native().call('validate',{artProfile:recipe.artProfile,adjustments:recipe.adjustments});
+    recipe=await restoreRecipeMasks(candidate,recipeFile,recipe,cache);
+    const checked=await candidate.call('validate',{artProfile:recipe.artProfile,adjustments:recipe.adjustments});
+    if(checked.colorProfile?.mode==='inherited'&&checked.colorProfile.reference!=='(none)')inputProfiles.assertCompatible(await candidate.call('inspectInputProfile',{path:checked.colorProfile.reference.replace(/^file:/,'')}),image.profileCamera||image.camera,/\.(nef|cr3|cr2|arw|raf|dng|orf|rw2|pef)$/i.test(path));
     for(const key of ['colorProfile','blackWhite','colorGrading'] as const)if(checked[key])recipe.adjustments[key]=checked[key];
   }
+  if(quitting)throw new Error('应用正在退出。');
+  const previous=engine;engine=candidate;previous?.terminate();
   session={...image,initialAdjustments:image.adjustments,recipe,xmpWarnings:loaded?.warnings};
   if(recipe)session!.adjustments=recipe.adjustments;
   return session;
+  }catch(error){candidate.terminate();throw error;}finally{if(openingEngine===candidate)openingEngine=undefined;}
 }
 function registerIPC() {
+  ipcMain.handle('profiles:list',()=>inputProfiles.list());
+  ipcMain.handle('profiles:inspect',(_,reference)=>inputProfiles.inspect(reference));
+  ipcMain.handle('profiles:import',async(_,id)=>{
+    const current=requireSession(id);
+    const r=await dialog.showOpenDialog(win,{title:'导入输入配置文件',properties:['openFile'],filters:[{name:'DCP / ICC 配置文件',extensions:['dcp','icc','icm']}]});
+    if(r.canceled||!r.filePaths.length)return null;requireSession(id);
+    return inputProfiles.importFile(r.filePaths[0],current.profileCamera||current.camera,/\.(nef|cr3|cr2|arw|raf|dng|orf|rw2|pef)$/i.test(current.path));
+  });
   ipcMain.handle('presets:list',()=>presets.list());
   ipcMain.handle('presets:create',(_,input)=>presets.create(input));
   ipcMain.handle('presets:update',(_,p)=>presets.update(p.id,p.input));
@@ -140,10 +155,10 @@ function registerIPC() {
     return ['save','discard','cancel'][response];
   });
   ipcMain.handle('files:choose', async () => (await dialog.showOpenDialog(win, { title: '打开 RAW 或编辑配方', properties: ['openFile', 'multiSelections'], filters: [{ name: '照片与配方', extensions: ['nef','cr3','cr2','arw','raf','dng','orf','rw2','pef','tif','tiff','jpg','jpeg','png','xmp'] }] })).filePaths);
-  ipcMain.handle('image:open', async (_, path: string,baselineVersion?:2|3|4) => {
+  ipcMain.handle('image:open', async (_, path: string) => {
     if(openingImage)throw new Error('正在载入照片，请稍候。');
     openingImage=true;
-    try{await objects.cancel();return await openImage(path,baselineVersion);}finally{openingImage=false;}
+    try{await objects.cancel();return await openImage(path);}finally{openingImage=false;}
   });
   ipcMain.handle('image:update', async (_, p) => { requireSession(p.sessionId);objects.invalidate(p.sessionId,p.adjustments); return native().call('update', p); });
   ipcMain.handle('image:viewport', async (_, p) => { requireSession(p.sessionId); await native().call('viewport', p); });
@@ -154,12 +169,12 @@ function registerIPC() {
   ipcMain.handle('image:close', async () => { await objects.cancel();await engine?.call('close'); session = undefined; });
   ipcMain.handle('recipe:save', async (_, { session: supplied, artProfile }: { session: ImageSession; artProfile: string }) => {
     const current = requireSession(supplied.id);
-    const result = await dialog.showSaveDialog(win, { title: '保存无损编辑配方', message: '含外部蒙版时会同时保存资产文件夹；移动配方时请保留配套文件夹。', defaultPath: join(dirname(current.path),basename(current.path,extname(current.path))+'.xmp'), filters: [{ name: 'XMP 编辑文件', extensions: ['xmp'] }] });
+    const result = await dialog.showSaveDialog(win, { title: '保存无损编辑配方', message: '含外部蒙版或输入配置文件时会同时保存资产文件夹；移动配方时请保留配套文件夹。', defaultPath: join(dirname(current.path),basename(current.path,extname(current.path))+'.xmp'), filters: [{ name: 'XMP 编辑文件', extensions: ['xmp'] }] });
     if (result.canceled || !result.filePath) return '';
     if (resolve(result.filePath) === current.path || !/\.xmp$/i.test(result.filePath)) throw new Error('请使用 .xmp 保存编辑。');
     await native().call('validate',{artProfile,adjustments:supplied.adjustments});
     const source = await stat(current.path);
-    const recipe: EditDocument = { xmpPacket: existsSync(result.filePath)?(await documents.xmp.read(result.filePath)).packet:current.recipe?.xmpPacket, engineVersion: ENGINE_VERSION, source: { path: current.path, size: source.size, sha256: await hashFile(current.path) }, artProfile, adjustments: supplied.adjustments,baselineVersion:current.baselineVersion||4 };
+    const recipe: EditDocument = { xmpPacket: existsSync(result.filePath)?(await documents.xmp.read(result.filePath)).packet:current.recipe?.xmpPacket, engineVersion: ENGINE_VERSION, source: { path: current.path, size: source.size, sha256: await hashFile(current.path) }, artProfile, adjustments: supplied.adjustments,baselineVersion:4 };
     await saveRecipeWithMasks(native(),result.filePath,recipe,value=>documents.serialize(value));
     current.recipe={...recipe,xmpPacket:(await documents.xmp.read(result.filePath)).packet};
     return result.filePath;
@@ -207,6 +222,7 @@ app.whenReady().then(async () => {
   synchronizer=new Synchronizer(binary,resources,cache,message=>send({event:'synchronize-progress',message}));
   const xmp=new XMP(app.isPackaged?join(root,'captraw-xmp'):resolve(__dirname,'../../../../build/xmp/captraw-xmp'));
   documents=new Documents(xmp);
+  inputProfiles=new InputProfiles(join(app.getPath('userData'),'input-profiles'),{call:(method,params)=>native().call(method,params)});
   presets=new Presets(join(app.getPath('userData'),'xmp-presets'),{call:(method,params)=>native().call(method,params)},cache,xmp);
   batchExporter=new BatchExporter(binary,resources,cache,job=>send({event:'job',job}));
   protocol.handle('captraw', async request => {
@@ -238,4 +254,4 @@ async function confirmQuit(){
   try{const {response}=await dialog.showMessageBox(win,{type:'warning',message:`还有 ${dirtyCount} 张照片的编辑未保存`,detail:'返回工作台可保存编辑。放弃并退出不会修改原始照片或已保存的配方。',buttons:['继续编辑','放弃并退出'],defaultId:0,cancelId:0,noLink:true});if(response===1){quitting=true;app.quit();}}
   finally{checkingQuit=false;}
 }
-app.on('before-quit', event => {if(dirtyCount&&!quitting){event.preventDefault();void confirmQuit();return;} quitting = true; objects?.shutdown();synchronizer?.cancel();batchExporter?.shutdown();engine?.terminate(); exporter?.terminate();if(exportTemp)rmSync(exportTemp,{force:true}); if (cache) rmSync(cache, { recursive: true, force: true }); });
+app.on('before-quit', event => {if(dirtyCount&&!quitting){event.preventDefault();void confirmQuit();return;} quitting = true; objects?.shutdown();synchronizer?.cancel();batchExporter?.shutdown();engine?.terminate();openingEngine?.terminate(); exporter?.terminate();if(exportTemp)rmSync(exportTemp,{force:true}); if (cache) rmSync(cache, { recursive: true, force: true }); });

@@ -1,5 +1,139 @@
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+export function patchInputProfileMetadata(upstream){
+ const patch=(file,marker,edits)=>{
+  const path=join(upstream,'src/engine',file);let source=readFileSync(path,'utf8');
+  if(source.includes(marker))return;
+  for(const [before,after] of edits){
+   if(!source.includes(before)||source.indexOf(before)!==source.lastIndexOf(before))throw new Error('ART input profile patch anchor mismatch: '+file+' / '+before.slice(0,60));
+   source=source.replace(before,()=>after);
+  }
+  writeFileSync(path,source);
+ };
+ patch('dcp.h','// CaptRAW: input profile metadata.',[
+  ['#include <memory>','#include <memory>\n#include <string>'],
+  ['    Illuminants getIlluminants() const;',`    // CaptRAW: input profile metadata.
+    const std::string &getProfileName() const { return profile_name; }
+    const std::string &getCameraModel() const { return camera_model; }
+    int getEmbedPolicy() const { return embed_policy; }
+    Illuminants getIlluminants() const;`],
+  ['    Matrix color_matrix_1;',`    std::string profile_name;
+    std::string camera_model;
+    int embed_policy = -1;
+    Matrix color_matrix_1;`]
+ ]);
+ patch('dcp.cc','// CaptRAW: validate external profile metadata.',[
+  ['        fseek(f, 0, SEEK_SET);',`        if (fseek(f, 0, SEEK_END) != 0) return false;
+        file_size_ = ftell(f);
+        if (file_size_ < 8 || fseek(f, 0, SEEK_SET) != 0) return false;`],
+  ['        get2(f, order_);\n        if (!offset) {\n            offset = get4(f, order_);\n        }',`        if (order_ != INTEL && order_ != MOTOROLA) return false;
+        const auto magic = get2(f, order_);
+        if (magic != 42 && magic != 0x4352) return false;
+        offset = get4(f, order_);
+        if (offset < 8 || offset > file_size_ - 2) return false;`],
+  ['        int base = 0;\n        for (int i = 0; i < numtags; i++) {',`        if (12L * numtags > file_size_ - ftell(f)) return false;
+        int base = 0;
+        for (int i = 0; i < numtags; i++) {`],
+  ['            if (parse_tag(t, f, base, order_)) {\n                tags_[t.id] = std::move(t);\n            }',`            if (!parse_tag(t, f, base, order_) || find(t.id)) return false;
+            tags_[t.id] = std::move(t);`],
+  ['        return true;\n    }\n\n    bool find(int id) const', '        return validateProfile();\n    }\n\n    bool find(int id) const'],
+  ['            if (t.type == ASCII) {','            if (t.type == ASCII || t.type == BYTE) {'],
+  ['                std::ostringstream buf;\n                unsigned char *value = &(t.value[0]);\n                buf << value;\n                return buf.str();',`                const auto end = std::find(t.value.begin(), t.value.begin() + t.count, 0);
+                return std::string(t.value.begin(), end);`],
+  ['        if (!t.count) {\n            t.count = 1;\n        }','        if (!t.count) return false;'],
+  ['        if (valuesize > 4) {\n            fseek(f, get4(f, order) + base, SEEK_SET);\n        }',`        if (valuesize > 4) {
+            const auto offset = get4(f, order);
+            if (offset < 0 || offset > file_size_ - valuesize - base ||
+                fseek(f, offset + base, SEEK_SET) != 0) return false;
+        }
+        if (valuesize > file_size_ - ftell(f) || loaded_bytes_ + valuesize > 64 * 1024 * 1024) return false;
+        loaded_bytes_ += valuesize;`],
+  ["        t.value[readSize] = '\\0';","        if (readSize != static_cast<size_t>(valuesize)) return false;\n        t.value[readSize] = '\\0';"],
+  ['    std::unordered_map<int, Tag> tags_;',`    // CaptRAW: validate external profile metadata. Keep parsing in ART.
+    bool validateProfile()
+    {
+        const auto matches = [&](int id, TagType type, unsigned count) {
+            const auto it = tags_.find(id);
+            return it != tags_.end() && it->second.type == type && it->second.count == count;
+        };
+        if (!matches(50721, SRATIONAL, 9)) return false;
+        for (int id : {50721, 50722, 50964, 50965})
+            if (find(id) && !matches(id, SRATIONAL, 9)) return false;
+        for (int id : {50778, 50779})
+            if (find(id) && !matches(id, SHORT, 1)) return false;
+        for (int id : {50941, 51107, 51108})
+            if (find(id) && !matches(id, LONG, 1)) return false;
+        if (find(51109) && !matches(51109, SRATIONAL, 1)) return false;
+        for (int id : {50708, 50936, 50942}) {
+            const auto it = tags_.find(id);
+            if (it != tags_.end() && it->second.type != ASCII && it->second.type != BYTE) return false;
+        }
+        if (find(50941) && (toInt(50941) < 0 || toInt(50941) > 3)) return false;
+        for (int dims : {50937, 50981}) {
+            const int data = dims == 50937 ? 50938 : 50982;
+            if (!find(dims)) {
+                if (find(data) || (dims == 50937 && find(50939))) return false;
+                continue;
+            }
+            if (!matches(dims, LONG, 3)) return false;
+            const int h = toInt(dims), s = toInt(dims, 4), v = toInt(dims, 8);
+            const auto count = getCount(data);
+            if (h < 1 || s < 2 || v < 1 || count % 3 ||
+                h > 10000000 / s || h * s > 10000000 / v ||
+                static_cast<unsigned>(h * s * v) != count / 3 || !matches(data, FLOAT, count)) return false;
+            if (dims == 50937 && find(50939) && !matches(50939, FLOAT, count)) return false;
+        }
+        if (find(50940)) {
+            const auto count = getCount(50940);
+            if (count < 4 || count % 2 || !matches(50940, FLOAT, count)) return false;
+            double previous = -1;
+            for (unsigned i = 0; i < count; i += 2) {
+                const double x = toDouble(50940, i * 4), y = toDouble(50940, (i + 1) * 4);
+                if (!std::isfinite(x) || !std::isfinite(y) || x <= previous || x < 0 || x > 1 || y < 0 || y > 1) return false;
+                previous = x;
+            }
+        }
+        return true;
+    }
+    long file_size_ = 0;
+    size_t loaded_bytes_ = 0;
+    std::unordered_map<int, Tag> tags_;`],
+  ['    light_source_1 = md.find(CALIBRATION_ILLUMINANT_1)',`    profile_name = md.toString(50936); // ProfileName (ASCII or UTF-8 BYTE)
+    camera_model = md.toString(50708); // UniqueCameraModel; DNG standalone profile restriction
+    embed_policy = md.find(50941) ? md.toInt(50941) : -1; // ProfileEmbedPolicy
+
+    light_source_1 = md.find(CALIBRATION_ILLUMINANT_1)`]
+ ]);
+ // Keep stricter standalone checks out of ART's existing embedded-DNG path.
+ patch('dcp.h','// CaptRAW: opt-in standalone validation.',[
+  ['    explicit DCPProfile(const Glib::ustring &filename);',`    // CaptRAW: opt-in standalone validation.
+    explicit DCPProfile(const Glib::ustring &filename, bool strict_validation = false);`]
+ ]);
+ patch('dcp.cc','// CaptRAW: opt-in standalone validation.',[
+  ['DCPProfile::DCPProfile(const Glib::ustring &filename)','DCPProfile::DCPProfile(const Glib::ustring &filename, bool strict_validation)'],
+  ['    DCPMetadata md(file);','    DCPMetadata md(file, strict_validation);'],
+  ['    explicit DCPMetadata(FILE *file): order_(UNKNOWN), file_(file) {}',`    // CaptRAW: opt-in standalone validation.
+    explicit DCPMetadata(FILE *file, bool strict): order_(UNKNOWN), file_(file), strict_(strict) {}`],
+  ['        return validateProfile();','        return !strict_ || validateProfile();'],
+  ['            if (!parse_tag(t, f, base, order_) || find(t.id)) return false;\n            tags_[t.id] = std::move(t);',`            if (parse_tag(t, f, base, order_)) {
+                if (strict_ && find(t.id)) return false;
+                tags_[t.id] = std::move(t);
+            } else if (strict_) return false;`],
+  ['        if (!t.count) return false;',`        if (!t.count) {
+            if (strict_) return false;
+            t.count = 1;
+        }`],
+  ['loaded_bytes_ + valuesize > 64 * 1024 * 1024','(strict_ && loaded_bytes_ + valuesize > 64 * 1024 * 1024)'],
+  ['    FILE *file_;','    FILE *file_;\n    bool strict_;']
+ ]);
+}
+export function patchWhiteBalanceAccess(upstream){
+ const path=join(upstream,'src/engine/dcp.h'),s=readFileSync(path,'utf8');
+ if(s.includes('// CaptRAW: DCP white-point conversion.'))return;
+ const changed=s.replace('    Matrix findXyztoCamera(', 'public: // CaptRAW: DCP white-point conversion.\n    Matrix findXyztoCamera(').replace('    Matrix makeXyzCam(', 'private:\n    Matrix makeXyzCam(');
+ if(changed===s||!changed.includes('private:\n    Matrix makeXyzCam('))throw new Error('DCP white balance access anchor mismatch');
+ writeFileSync(path,changed);
+}
 export function patchMaskGroups(upstream){
  const patch=(file,marker,edit)=>{const path=join(upstream,'src/engine',file),source=readFileSync(path,'utf8');if(source.includes(marker))return;const changed=edit(source);if(changed===source||!changed.includes(marker))throw new Error('ART mask patch anchor mismatch: '+file);writeFileSync(path,changed);};
  patch('procparams.h','std::vector<Mask> components;',s=>s.replace('class Mask {\npublic:','class Mask {\npublic:\n    std::vector<Mask> components;\n    std::vector<int> componentModes;').replace('const Glib::ustring &prefix, const Glib::ustring &suffix);\n    void save','const Glib::ustring &prefix, const Glib::ustring &suffix, int depth = 0);\n    void save'));

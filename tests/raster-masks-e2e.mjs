@@ -1,3 +1,4 @@
+import {readDocument} from './xmp-test.mjs';
 import {expect} from '@playwright/test';
 import {electron} from './electron-background.mjs';
 import {EngineClient} from './engine-client.mjs';
@@ -6,12 +7,12 @@ import {readFileSync,writeFileSync,mkdirSync,rmSync,existsSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 const out=resolve('artifacts/raster-masks-gui');mkdirSync(out,{recursive:true});
 const executablePath=process.env.CAPTRAW_APP,checks=[],errors=[],sha=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
-const fixture=resolve('artifacts/raster-masks/栅格.captraw.json'),original=JSON.parse(readFileSync(fixture)),sourceSHA=sha(original.source.path);let app,page;
+const fixture=resolve('artifacts/raster-masks/栅格.xmp'),original=(await readDocument(fixture)),sourceSHA=sha(original.source.path);let app,page;
 const pass=s=>{checks.push(s);console.log('PASS',s);};
 async function launch(){app=await electron.launch({executablePath,args:executablePath?[]:[process.cwd()]});page=await app.firstWindow();page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(String(e)));await page.evaluate(()=>{window.__frames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__frames.push(e.frame);});});}
 async function settle(action){const n=await page.evaluate(()=>window.__frames.length);await action();await page.waitForFunction(n=>window.__frames.length>n,n);await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__frames.filter(f=>f.kind!=='detail').at(-1)?.url);}
 async function open(path){await app.evaluate(({dialog},path)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[path]});},path);await settle(()=>page.getByRole('button',{name:'打开',exact:true}).click());}
-async function save(name){const path=join(out,name+'.captraw.json');rmSync(path,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},path);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(path)).toBe(true);return {path,recipe:JSON.parse(readFileSync(path))};}
+async function save(name){const path=join(out,name+'.xmp');rmSync(path,{force:true});await app.evaluate(({dialog},path)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:path});},path);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(path)).toBe(true);return {path,recipe:(await readDocument(path))};}
 const pixels=()=>page.locator('canvas').evaluate(c=>c.toDataURL());
 try{
  await launch();await open(fixture);await page.getByRole('button',{name:'蒙版 M',exact:true}).click();

@@ -28,7 +28,7 @@ export class Synchronizer {
    for(const [i,target] of targets.entries()){
     this.progress(`正在同步 ${i+1}/${targets.length} · ${target.image.name}`);
     try{
-     const sessionId=randomUUID();await worker.call('open',{path:target.image.path,sessionId,baselineVersion:target.image.baselineVersion||4,artProfile:target.profile});
+     const sessionId=randomUUID();await worker.call('open',{path:target.image.path,sessionId});
      let listener:(message:any)=>void=()=>{},timeout:ReturnType<typeof setTimeout>|undefined;
      const preview=new Promise<any>((accept,reject)=>{listener=message=>{if(message.event==='preview'&&message.frame.sessionId===sessionId&&message.frame.revision===1&&message.frame.kind==='fit')accept(message.frame);else if(message.event==='error')reject(new Error(message.message));};worker.on('engine-event',listener);timeout=setTimeout(()=>reject(new Error('照片预览超时，请重试。')),120000);});
      let result,frame;try{[result,frame]=await Promise.all([worker.call('update',{revision:1,adjustments:target.adjustments,artProfile:target.profile}),preview]);}finally{worker.off('engine-event',listener);clearTimeout(timeout);}

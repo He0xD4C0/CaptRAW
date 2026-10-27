@@ -1,5 +1,32 @@
 # CaptRAW 本机验收记录
 
+## 0.34 输入配置资产与新标识
+
+从 `release/CaptRAW-0.34.0-arm64.dmg` 只读挂载并安装至 `~/Applications/CaptRAW-0.34.app`。处理版本仍为 20、基线 4；旧安装版和用户原片保留。完整应用 `codesign --verify --deep --strict` 通过，签名为 ad-hoc，没有 Developer ID 或公证。
+
+- 使用用户提供的 `raw_tonecurve_icon.svg`，源字节 SHA-256 为 `046aca59db488e9e1139cdb35096adc201d509d0a3b75b2ba098484f71396850`。标题栏与 favicon 使用同一 SVG，macOS ICNS 由其生成；移除旧 Swift 图标绘制代码。安装版图标与构建结果一致，隐藏 GUI 验证图片已加载且可见。
+- 构建、类型检查及 **11 项单测**通过。**54 项安装版隐藏 GUI 检查**通过：配置导入 / 标识 12、白平衡 14、XMP 9、关闭 / 曲线 / 蒙版回归 19，页面错误 0。另在当前开发构建完成既有配置文件 GUI 12 项检查。
+- DCP / RGB ICC 显式导入、中文空格路径、重复内容复用、真实 DCP 控件、撤销 / 重做、保存、移动 / 重命名、全新进程恢复及导出均完成。删除原配置和本地库后，配套 XMP 资产仍能恢复。新旧引擎候选切换保证坏资产打开失败后仍可继续调曝光和撤销。
+- 延迟 IPC 回复测试由可见导入按钮发起：期间手动改白平衡，返回后使用当前状态；切换工具面板和照片后，迟到结果不能改写新照片。此测试只延迟回复；真实文件导入路径另有前述 GUI 验收。
+- **24 项宿主 / 安装版核心检查**在 OS 禁网及拒绝 Homebrew 路径读取下通过：配置资产 10、XMP 14。包含现有 **160 / 160 DCP**、错误机型 / 非 RGB / 损坏输入拒绝、ICC / ICM 去重、缓存已加载后资产篡改拒绝、绝对引用快照、移动恢复、原子保存、链接 / 越界 / 清单不一致拒绝和 DCP 随附限制。
+- DCP 与 ICC 的移动恢复 TIFF 为 **1016×760、RGB uint16、带 ICC**，与原输出最大像素差 0。安装版桌面 DCP 输出与移动后输出、独立无界面进程导出也逐像素相同。既有 Nikon D850 / Canon R5 / Fujifilm X-T4 配置处理回归通过；D850 矩阵 TIFF16 与固定 ART CLI 参考输出一致。双光源白平衡独立参考回归通过。
+- 安装版主流程完成真实 RAW → 全局 / 蒙版编辑 → 1:1 → XMP → TIFF16 → 重开，首帧 **1491.12 ms**，通过 5 秒门槛；仅为一次隐藏窗口实测，不代表冷磁盘或滑杆 P95。安装版 ASAR 的 **7 个构建文件**与工作区 dist 逐字节一致，应用元数据一致。
+
+证据：`artifacts/profile-import-installed-0.34/{report,pixels}.json`、`profile-assets-offline-0.34/{report,pixels}.json`、`white-balance-installed-0.34/report.json`、`xmp-installed-0.34/report.json`、`revision-installed-0.34/report.json`、`xmp-offline-0.34/report.json`、`main-installed-0.34/e2e-report.json`、`input-profiles/pixel-report.json`、`white-balance-reference/{native,pixels}.json`、`install-0.34.json`、`asar-0.34.json`、`release-0.34-evidence.json`。所有 E2E 均隐藏、不可聚焦，未自动打开可见应用；用户人工验收、跨机器 Gatekeeper 和完整 ACR 同级仍未完成。`CameraProfileDigest` 自动确认、增强 Look、校准签名关系仍未实现，不按同名或文件 MD5 猜测替代。
+
+## 0.33 XMP 白平衡与历史测试清理
+
+从 `release/CaptRAW-0.33.0-arm64.dmg` 只读挂载并安装至 `~/Applications/CaptRAW-0.33.app`。原生处理版本 20、初始基线 4；不迁移旧处理版本或 JSON。旧安装版与用户原片保留。应用采用 ad-hoc 签名，`codesign --verify --deep --strict` 通过；没有 Developer ID 或公证。
+
+- **11 项单测、构建、类型检查通过**。历史文档 / GUI 专项共 41 个脚本改用 XMP，并去除旧 JSON 恢复验收；这不表示 41 个专项都在新安装包完整运行。
+- **42 项安装版隐藏 GUI 检查**：白平衡 14、XMP 9、关闭 / 曲线 / 蒙版回归 19，页面错误 0。新增验证只聚焦或 Tab 不改参数，Escape 撤回完整白平衡，切换 DCP / 相机矩阵保留精确系数并重新投影数值，单步撤销恢复；Tint -150–150 的实际像素响应、标准字段保存和全新进程恢复。
+- 安装版主流程完成真实 RAW → 全局 / 蒙版编辑 → 1:1 → XMP → TIFF16 → 重开；本机首个显示帧 **1044.71 ms**，通过 5 秒门槛。此为单次隐藏窗口实测，不代表冷磁盘或基础滑杆 P95 验收。
+- **14 项宿主 / 安装版核心检查**在 OS 禁网及拒绝 `/opt/homebrew`、`/usr/local` 读取下通过。新增外部 Tint 修改使旧系数失效、Tint 单项预设保留 Temperature / Exposure；未知字段、限定符、嵌套蒙版、资产及原文件保护继续通过。
+- **50 组独立白点正反转换**与 Colour Science 0.4.6 一致（显式使用 ART 的历史表项）；3 个自产双光源 DNG 的预览 / compose 系数与独立矩阵参考一致，灰块 RGB 相对偏差最大 **0.058%**，独立 TIFF16 像素相同。另验证同一 DNG 同时包含 ICC 与 DCP 时，嵌入 ICC 选择进入正确的相机矩阵回退路径。
+- 安装版 D850 输出 **8256×5504、RGB uint16、带 ICC**；与独立 0.33 进程及安装版 0.32 渲染器读取同一 ARP 后逐像素一致。这验证接入与持久化一致性，不是 Adobe 画质等效。
+
+证据：`artifacts/white-balance-reference/{reference,native,pixels}.json`、`white-balance-installed-0.33/{report,pixels}.json`、`xmp-installed-0.33/report.json`、`revision-installed-0.33/report.json`、`main-installed-0.33/e2e-report.json`、`xmp-offline-0.33/report.json`、`asar-0.33.json`、`release-0.33-evidence.json`。所有 E2E 窗口隐藏、不可聚焦，原生对话框注入选择；未自动打开可见应用，也不代替用户人工验收。完整 ACR 语义、Adobe 读取、画质与跨平台缺口仍见 [能力表](ACR-PARITY.md)。
+
 
 ## 0.32 XMP 文件替换验收
 

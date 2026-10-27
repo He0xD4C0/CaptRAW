@@ -15,7 +15,8 @@ set(CAPTRAW_SUPPORT
   "${CMAKE_SOURCE_DIR}/src/gui/paramsedited.cc"
   "${CMAKE_SOURCE_DIR}/src/gui/exiffiltersettings.cc")
 add_library(captraw-core STATIC ${CAPTRAW_SUPPORT}
-  "${CAPTRAW_SOURCE_DIR}/core.cc" "${CAPTRAW_SOURCE_DIR}/recipe.cc")
+  "${CAPTRAW_SOURCE_DIR}/core.cc" "${CAPTRAW_SOURCE_DIR}/recipe.cc" "${CAPTRAW_SOURCE_DIR}/white-balance.cc"
+  "${CAPTRAW_SOURCE_DIR}/input-profile.cc")
 target_compile_features(captraw-core PUBLIC cxx_std_17)
 target_link_libraries(captraw-core PUBLIC art_engine art_utils nlohmann_json::nlohmann_json
   ${CAIROMM_LIBRARIES} ${GIOMM_LIBRARIES} ${GIO_LIBRARIES} ${GTKMM_LIBRARIES}
@@ -23,6 +24,8 @@ target_link_libraries(captraw-core PUBLIC art_engine art_utils nlohmann_json::nl
 add_executable(captraw-engine "${CAPTRAW_SOURCE_DIR}/worker.cc")
 target_compile_features(captraw-engine PUBLIC cxx_std_17)
 target_link_libraries(captraw-engine PRIVATE captraw-core)
+add_executable(captraw-wb-probe EXCLUDE_FROM_ALL "${CAPTRAW_SOURCE_DIR}/../tests/white-balance-probe.cc")
+target_link_libraries(captraw-wb-probe PRIVATE captraw-core)
 add_executable(captraw-art-reference ${CAPTRAW_SUPPORT}
   "${CMAKE_SOURCE_DIR}/src/gui/main-cli.cc"
   "${CMAKE_SOURCE_DIR}/src/gui/fastexport.cc"
@@ -31,6 +34,7 @@ target_link_libraries(captraw-art-reference PRIVATE art_engine art_utils
   ${CAIROMM_LIBRARIES} ${GIOMM_LIBRARIES} ${GIO_LIBRARIES} ${GTKMM_LIBRARIES}
   ${RSVG_LIBRARIES} ${EXIV2_LIBRARIES})
 if(APPLE)
+  target_link_libraries(captraw-wb-probe PRIVATE "-framework Foundation")
   target_link_libraries(captraw-engine PRIVATE "-framework Foundation")
   target_link_libraries(captraw-art-reference PRIVATE "-framework Foundation")
 endif()

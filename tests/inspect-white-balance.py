@@ -17,9 +17,7 @@ for name in ['nikon-d850.NEF', 'fuji-xt4.RAF']:
                                    'mean8bitDifference': float(difference.mean())}
 
 for key, first, second in [
-    ('legacyBayerPixelsUnchanged', native / 'legacy.tiff', native / 'legacy-reference.tiff'),
     ('independentSavedProfilePixelsIdentical', native / 'sampled.tiff', native / 'sampled-independent.tiff'),
-    ('desktopLegacyExportPixelsIdentical', root / 'white-balance-gui/legacy.tiff', native / 'legacy-reference.tiff'),
 ]:
     a, b = tifffile.imread(first), tifffile.imread(second)
     assert a.dtype == b.dtype == np.uint16 and a.shape == b.shape

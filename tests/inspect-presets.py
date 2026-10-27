@@ -2,7 +2,7 @@ from pathlib import Path
 import os,json
 import numpy as np
 import tifffile
-out=Path(os.environ.get('CAPTRAW_PRESETS_E2E_OUT','artifacts/presets-installed-0.31'))
+out=Path(os.environ.get('CAPTRAW_PRESETS_E2E_OUT','artifacts/presets-gui'))
 with tifffile.TiffFile(out/'preset.tiff') as f:
     image=f.asarray()
     assert image.dtype==np.uint16 and 34675 in f.pages[0].tags

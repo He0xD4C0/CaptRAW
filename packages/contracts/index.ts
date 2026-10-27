@@ -25,7 +25,7 @@ export interface ColorProfileSettings {
   toneCurve:boolean;lookTable:boolean;hueSatMap:boolean;baselineExposure:boolean;illuminant:0|1|2;
 }
 export interface InputProfileOption {
-  id:ColorProfileSettings['mode'];name:string;kind:'dcp'|'icc'|'matrix'|'srgb';
+  id:ColorProfileSettings['mode'];reference?:string;sha256?:string;cameraModel?:string;embedPolicy?:number;name:string;kind:'dcp'|'icc'|'matrix'|'srgb';
   dcp?:{toneCurve:boolean;lookTable:boolean;hueSatMap:boolean;baselineExposure:boolean;illuminants:{id:1|2;temperature:number}[]};
 }
 export interface BlackWhiteSettings {
@@ -63,16 +63,18 @@ export interface Adjustments {
 }
 export interface EditDocument {
   xmpPacket?:string; warnings?:string[]; engineVersion: string; source: { path: string; size: number; sha256: string };
-  artProfile: string; adjustments: Adjustments;baselineVersion?:2|3|4;
+  artProfile: string; adjustments: Adjustments;baselineVersion?:4;
   maskAssets?:{schemaVersion:1;files:{id:string;path:string;bytes:number}[]};
+  inputProfileAsset?:{id:string;path:string;bytes:number};
 }
 export interface ImageSession {
   id: string; path: string; name: string; width: number; height: number;
   lensCatalog?:LensCatalog;lensStatus?:LensProfileStatus;
+  profileCamera?:string;
   camera: string; lens: string; iso: number; adjustments: Adjustments; recipe?: EditDocument;
   xmpWarnings?:string[];
   initialAdjustments?: Adjustments;
-  baselineVersion?:2|3|4;whiteBalancePresets?:{id:string;name:string}[];
+  baselineVersion?:4;whiteBalancePresets?:{id:string;name:string}[];
   inputProfiles?:InputProfileOption[];
   cameraCrop?:Adjustments['crop'];
   aperture?:number;shutter?:number;focalLength?:number;
@@ -90,14 +92,17 @@ export interface ExportResult {source:string;output?:string;error?:string}
 export interface BatchExportRequest {documents:{path:string;width:number;height:number;artProfile:string;adjustments:Adjustments}[];format:'jpeg'|'tiff';colorSpace:OutputColorSpace;options?:ExportOptions}
 export interface JobStatus { id: string; state: 'running' | 'done' | 'cancelled' | 'error'; progress: number; message: string; total?:number;results?:ExportResult[] }
 export type EngineEvent = {event:'object-progress';id:string;message:string} | { event: 'preview'; frame: PreviewFrame } | { event: 'job'; job: JobStatus } | { event: 'error'; message: string } | {event:'synchronize-progress';message:string} | {event:'command';command:'open'|'save'|'close'};
-export interface WhiteBalanceRequest {mode:'camera'|'auto'|'sample'|'preset';preset?:string;x?:number;y?:number;size?:number}
-export interface WhiteBalanceResult {temperature:number;tint:number;wbMode:string;wbMultipliers:number[];wbApproximate:boolean}
+export interface WhiteBalanceRequest {mode:'camera'|'auto'|'sample'|'preset'|'profile';preset?:string;x?:number;y?:number;size?:number;colorProfile?:ColorProfileSettings}
+export interface WhiteBalanceResult {temperature:number;tint:number;wbMode:string;wbMultipliers:number[];wbApproximate:boolean;colorProfile?:ColorProfileSettings}
 export const OUTPUT_COLOR_SPACES={'srgb':'sRGB','adobe-rgb':'Adobe RGB (1998)','prophoto-rgb':'ProPhoto RGB','display-p3':'Display P3','rec2020':'Rec. 2020'} as const;
 export type OutputColorSpace=keyof typeof OUTPUT_COLOR_SPACES;
 export interface ObjectBox {start:Point;end:Point}
 export interface ObjectPrompt {point:Point;exclude:boolean}
 export interface ObjectCandidateResult {id:string;revision:number;selected:number;candidates:{index:number;pixels:number;url:string}[]}
 export interface CaptRAWAPI {
+  importInputProfile(sessionId:string):Promise<InputProfileOption|null>;
+  listInputProfiles():Promise<{items:InputProfileOption[];errors:string[]}>;
+  inspectInputProfile(reference:string):Promise<InputProfileOption>;
   listPresets():Promise<{items:import('./presets.js').PresetSummary[];errors:string[]}>;
   createPreset(input:import('./presets.js').PresetInput):Promise<import('./presets.js').PresetSummary>;
   updatePreset(id:string,input:import('./presets.js').PresetInput):Promise<import('./presets.js').PresetSummary>;
@@ -116,7 +121,7 @@ export interface CaptRAWAPI {
   parametricCurve(settings:ParametricCurveSettings):Promise<{samples:number[]}>;
   chooseFiles(): Promise<string[]>;
   droppedFiles(files: File[]): string[];
-  open(path: string,baselineVersion?:2|3|4): Promise<ImageSession>;
+  open(path: string): Promise<ImageSession>;
   update(sessionId: string, revision: number, adjustments: Adjustments, artProfile?: string, maskId?:string, luminance?:boolean,colorSampling?:boolean): Promise<{ artProfile: string; lensStatus:LensProfileStatus }>;
   viewport(sessionId: string, revision: number, x: number, y: number, width: number, height: number): Promise<void>;
   sampleColor(sessionId:string,revision:number,start:Point,end?:Point):Promise<{l:number;c:number;h:number;pixels:number;revision:number}>;
@@ -132,4 +137,4 @@ export interface CaptRAWAPI {
   onEvent(listener: (event: EngineEvent) => void): () => void;
 }
 declare global { interface Window { captraw: CaptRAWAPI; } }
-export const ENGINE_VERSION='CaptRAW-19_ART-1.26.10_LibRaw-3b20539';
+export const ENGINE_VERSION='CaptRAW-20_ART-1.26.10_LibRaw-3b20539';

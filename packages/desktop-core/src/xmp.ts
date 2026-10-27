@@ -44,13 +44,14 @@ export const text=(value:unknown):XMPNode=>({value:String(value)});
 export function lookup(properties:XMPProperty[],ns:string,name:string){return properties.find(p=>p.ns===ns&&p.name===name)?.node??undefined;}
 export function readExtension(properties:XMPProperty[],name:string){const value=lookup(properties,CT,name);return value?decode(value):undefined;}
 const curves={curve:'ToneCurvePV2012',redCurve:'ToneCurvePV2012Red',greenCurve:'ToneCurvePV2012Green',blueCurve:'ToneCurvePV2012Blue'} as const;
-export const standardKeys=['exposure','temperature',...Object.keys(curves)] as (keyof Adjustments)[];
+export const standardKeys=['exposure','temperature','tint',...Object.keys(curves)] as (keyof Adjustments)[];
 export function encodeAdjustments(adjustments:Partial<Adjustments>):XMPProperty[]{
  const fields: XMPProperty[]=[];
- for(const [key,name] of [['exposure','Exposure2012'],['temperature','Temperature']] as const)fields.push(property(CRS,name,adjustments[key]===undefined?null:text(adjustments[key])));
+ for(const [key,name] of [['exposure','Exposure2012'],['temperature','Temperature'],['tint','Tint']] as const){if(key!=='exposure'&&adjustments[key]!==undefined&&!Number.isInteger(adjustments[key]))throw new Error(`XMP ${name} 必须为整数。`);fields.push(property(CRS,name,adjustments[key]===undefined?null:text(adjustments[key])));}
+ if(adjustments.temperature!==undefined||adjustments.tint!==undefined)fields.push(property(CRS,'WhiteBalance',text('Custom')));
  for(const [key,name] of Object.entries(curves) as [keyof typeof curves,string][]){const points=adjustments[key];fields.push(property(CRS,name,points?{items:points.map(p=>text(`${p.x*255}, ${p.y*255}`)),options:0x600}:null));}
  const native=structuredClone(adjustments);for(const key of standardKeys)delete native[key];
- fields.push(property(CT,'ARTAdjustments',encode(native)),property(CT,'ARTWhiteBalanceTemperature',adjustments.wbMultipliers?encode(adjustments.temperature):null));
+ fields.push(property(CT,'ARTAdjustments',encode(native)),property(CT,'ARTWhiteBalanceCoordinates',adjustments.wbMultipliers?encode([adjustments.temperature,adjustments.tint]):null));
  return fields;
 }
 export function decodeAdjustments(properties:XMPProperty[]){
@@ -58,16 +59,21 @@ export function decodeAdjustments(properties:XMPProperty[]){
  const adjustments:Partial<Adjustments>=raw||{};
  // Reject duplicated ownership: standard properties are the only persisted representation of these controls.
  if(standardKeys.some(key=>Object.hasOwn(adjustments,key)))throw new Error('显影扩展重复定义标准 XMP 参数。');
- for(const [key,name,low,high] of [['exposure','Exposure2012',-5,5],['temperature','Temperature',1500,60000]] as const){const node=lookup(properties,CRS,name);if(node){const n=Number(node.value);if(!node.value?.trim()||!Number.isFinite(n)||n<low||n>high)throw new Error(`XMP ${name} 超出当前显影核心范围。`);adjustments[key]=n;}}
+ for(const [key,name,low,high] of [['exposure','Exposure2012',-5,5],['temperature','Temperature',2000,50000],['tint','Tint',-150,150]] as const){const node=lookup(properties,CRS,name);if(node){const n=Number(node.value);if(!node.value?.trim()||!Number.isFinite(n)||n<low||n>high)throw new Error(`XMP ${name} 超出当前显影核心范围。`);adjustments[key]=n;}}
+ for(const [key,name] of [['temperature','Temperature'],['tint','Tint']] as const)if(adjustments[key]!==undefined&&!Number.isInteger(adjustments[key]))throw new Error(`XMP ${name} 必须为整数。`);
  for(const [key,name] of Object.entries(curves) as [keyof typeof curves,string][]){const node=lookup(properties,CRS,name);if(!node)continue;
   if(!node.items||node.items.length<2||node.items.length>128)throw new Error('XMP 曲线点数量无效。');
   let previous=-1;adjustments[key]=node.items.map(item=>{const parts=item.value?.split(',').map(v=>Number(v.trim()));if(!parts||parts.length!==2||parts.some(v=>!Number.isFinite(v)||v<0||v>255)||parts[0]<=previous)throw new Error('XMP 曲线点无效。');previous=parts[0];return {x:parts[0]/255,y:parts[1]/255};});
  }
- if(adjustments.temperature!==undefined&&adjustments.wbMultipliers&&readExtension(properties,'ARTWhiteBalanceTemperature')!==adjustments.temperature){adjustments.wbMultipliers=null;adjustments.wbMode='custom';adjustments.wbApproximate=true;}
- const recognized=new Set(['Exposure2012','Temperature',...Object.values(curves),'Version','ProcessVersion','Name','Group','UUID','PresetType','SupportsAmount','HasSettings']);
+ if(adjustments.wbMultipliers){const anchor=readExtension(properties,'ARTWhiteBalanceCoordinates');if(!Array.isArray(anchor)||anchor[0]!==adjustments.temperature||anchor[1]!==adjustments.tint){adjustments.wbMultipliers=null;adjustments.wbMode='custom';adjustments.wbApproximate=false;}}
+ const recognized=new Set(['Exposure2012','Temperature','Tint',...Object.values(curves),'Version','ProcessVersion','Name','Group','UUID','PresetType','SupportsAmount','HasSettings']);
+ const wb=lookup(properties,CRS,'WhiteBalance')?.value,hasWB=adjustments.temperature!==undefined||adjustments.tint!==undefined;
+ if(wb==='Custom'||hasWB)recognized.add('WhiteBalance');
  const unsupported=properties.filter(p=>p.ns===CRS&&!recognized.has(p.name)).map(p=>p.name);
  const warnings:string[]=[];
  if(!readExtension(properties,'EngineVersion'))warnings.push('Adobe 参数按当前 ART 管线显影；尚未验证与 ACR 的像素等效。');
+ if(!readExtension(properties,'EngineVersion')&&(adjustments.temperature!==undefined||adjustments.tint!==undefined))warnings.push('色温 / 色调按当前相机 DCP 或矩阵转换；未导入 Adobe 相机配置，颜色仍可能不同。');
+ if(hasWB&&wb&&wb!=='Custom')warnings.push(`WhiteBalance=${wb} 采用文件中已记录的色温 / 色调，未按 Adobe 模式重新计算；保存为固定的自定义白平衡。`);
  if(unsupported.length)warnings.push('以下 Adobe 字段已保留，尚未参与显影：'+unsupported.join('、'));
  return {adjustments,warnings};
 }

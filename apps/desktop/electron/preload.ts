@@ -5,6 +5,7 @@ const invoke=async(channel:string,...args:unknown[])=>{
   catch(error){const message=error instanceof Error?error.message:String(error);throw new Error(message.replace(/^Error invoking remote method '[^']+': (?:Error(?: \[[^\]]+\])?: )?/,''));}
 };
 const api: CaptRAWAPI = {
+  importInputProfile:sessionId=>invoke('profiles:import',sessionId),listInputProfiles:()=>invoke('profiles:list'),inspectInputProfile:reference=>invoke('profiles:inspect',reference),
   listPresets:()=>invoke('presets:list'),createPreset:input=>invoke('presets:create',input),
   updatePreset:(id,input)=>invoke('presets:update',{id,input}),renamePreset:(id,name,group)=>invoke('presets:rename',{id,name,group}),
   deletePreset:id=>invoke('presets:delete',id),importPreset:()=>invoke('presets:import'),exportPreset:id=>invoke('presets:export',id),
@@ -19,7 +20,7 @@ const api: CaptRAWAPI = {
   parametricCurve: settings=>invoke('curve:parametric',settings),
   chooseFiles: () => invoke('files:choose'),
   droppedFiles: files => files.map(file => webUtils.getPathForFile(file)),
-  open: (path,baselineVersion) => invoke('image:open', path,baselineVersion),
+  open: path => invoke('image:open', path),
   update: (sessionId, revision, adjustments, artProfile, maskId, luminance, colorSampling) => invoke('image:update', { sessionId, revision, adjustments, artProfile, maskId, luminance, colorSampling }),
   viewport: (sessionId, revision, x, y, width, height) => invoke('image:viewport', { sessionId, revision, x, y, width, height }),
   sampleColor:(sessionId,revision,start,end)=>invoke('image:color-sample',{sessionId,revision,start,end}),

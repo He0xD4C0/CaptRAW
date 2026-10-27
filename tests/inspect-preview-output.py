@@ -1,9 +1,12 @@
 from pathlib import Path
+import subprocess
 import io,json
 import numpy as np
 import tifffile
 from PIL import Image,ImageCms
 root=Path(__file__).resolve().parents[1]
+def read_document(path):
+    return json.loads(subprocess.check_output(["node", "--input-type=module", "-e", "import {readDocument} from './tests/xmp-test.mjs'; console.log(JSON.stringify(await readDocument(process.argv[1])));", str(path.resolve())],cwd=root,text=True))
 out=root/'artifacts/preview-output-acceptance'
 report=json.loads((out/'report.json').read_text())
 assert len(report['results'])==14 and report['sourceHashesUnchanged']
@@ -39,7 +42,7 @@ for entry in gui_report['frames']:
     name=entry['name'].replace('-detail','')
     if name=='restarted':continue
     f=entry['frame']
-    recipe=json.loads((gui/('migrated.captraw.json' if name=='legacy' else name+'.captraw.json')).read_text())
+    recipe=read_document(gui/('restored-input.xmp' if name=='input' else name+'.xmp'))
     crop=recipe['adjustments']['crop']
     x=f['x']-round(crop['x']*f['fullWidth']);y=f['y']-round(crop['y']*f['fullHeight'])
     preview=np.asarray(Image.open(gui/(entry['name']+'.png')).convert('RGB')).astype(np.int32)

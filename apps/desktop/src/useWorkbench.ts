@@ -82,7 +82,7 @@ export function useWorkbench() {
     const entry = docs.current.find(d => d.image.id === id); if (!entry) return;
     loading.current = true;setOpening(true); clearTimeout(timer.current); setBusy(true);setError('');
     try {
-      const reopened = await window.captraw.open(entry.image.path,entry.image.baselineVersion);
+      const reopened = await window.captraw.open(entry.image.path);
       const updated = { ...entry, image: { ...reopened, adjustments: entry.adjustments } };
       setDocuments(old => old.map(d => d.image.id === id ? updated : d));
       idRef.current = reopened.id; setActiveId(reopened.id);setFrame(undefined);await renderDocument(updated);return updated;

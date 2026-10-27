@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 import io, json, os
 import numpy as np
 import tifffile
@@ -7,7 +8,9 @@ from PIL import Image, ImageCms
 out = Path(os.environ.get('CAPTRAW_GRADING_E2E_OUT', 'artifacts/color-grading-gui'))
 report = json.loads((out / 'report.json').read_text())
 assert len(report['checks']) == 13 and not report['errors'] and report['backgroundWindow']
-recipe = json.loads((out / '真实 RAW 分级.captraw.json').read_text())
+root = Path(__file__).resolve().parents[1]
+path = out / '真实 RAW 分级.xmp'
+recipe = json.loads(subprocess.check_output(["node", "--input-type=module", "-e", "import {readDocument} from './tests/xmp-test.mjs'; console.log(JSON.stringify(await readDocument(process.argv[1])));", str(path.resolve())], cwd=root, text=True))
 frame = report['frames'][0]
 crop = recipe['adjustments']['crop']
 x = frame['x'] - round(crop['x'] * frame['fullWidth'])

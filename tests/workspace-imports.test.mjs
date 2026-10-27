@@ -81,7 +81,7 @@ test('XMP typed state and Documents serialize through their public interfaces',a
 test('mask asset save and restore keep an ordinary recipe independent',async t=>{
  const directory=await mkdtemp(join(tmpdir(),'captraw-import-masks-'));t.after(()=>rm(directory,{recursive:true,force:true}));
  const recipe={artProfile:'[ART]',adjustments:structuredClone(presetValidationBase)};
- const core={call:async method=>{assert.equal(method,'maskAssets');return {paths:[]};}};
+ const core={call:async method=>{if(method==='inputProfileAsset')return {path:''};assert.equal(method,'maskAssets');return {paths:[]};}};
  const path=join(directory,'recipe.xmp');
  await saveRecipeWithMasks(core,path,recipe,async copy=>{assert.notEqual(copy,recipe);return '<xmp/>';});
  assert.equal(await readFile(path,'utf8'),'<xmp/>');

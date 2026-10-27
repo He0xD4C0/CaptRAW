@@ -6,7 +6,7 @@ stdin / stdout 每行一个 JSON 对象；ART 自身 stdout 重定向到 stderr�
 
 | 操作 | 参数 | 结果 |
 |---|---|---|
-| `open` | 绝对 `path`、不重复的 `sessionId`、可选 `baselineVersion: 2/3/4`、迁移用完整 `artProfile` | 可用图像尺寸、相机、ISO、实际 `inputProfiles` 能力、默认控件投影、完整 `artProfile` 、可选相机构图 `cameraCrop` 及旧修复点 `recipeSpots` |
+| `open` | 绝对 `path`、不重复的 `sessionId`；`baselineVersion` 如提供只能为 4 | 可用图像尺寸、相机、ISO、实际 `inputProfiles` 能力、默认控件投影、完整 `artProfile`、相机构图 `cameraCrop` 及固定基线 4 |
 | `whiteBalance` | `mode: camera/auto/preset/sample`；可选 preset ID 或原始图像归一化坐标、奇数像素窗口 | 返回精确相机通道系数、色温 / 色调投影和显示状态，不直接更改当前配方 |
 | `maskAssets` | 完整 `artProfile`、可选控件投影 `adjustments`、精确路径 `replacements`、`validate` | 递归枚举 / 重绑定四种工具中全部外部蒙版路径，包含停用工具与组件；可解码核验。同时处理投影中的栅格引用（含停用组件）；返回完整配置及传入的投影，不修改当前图像 |
 | `validate` | 完整 `artProfile` 和 `adjustments` | 无图像解码的配方参数检查和输入配置文件投影，不改变已打开图片 |
@@ -22,7 +22,7 @@ stdin / stdout 每行一个 JSON 对象；ART 自身 stdout 重定向到 stderr�
 
 预览帧包括 revision、会话、完整尺寸、区域坐标、三通道 256 档真实输出直方图、私有 PNG 文件路径及耗时；可选 `mask` 包含组 ID、覆盖图及其图像坐标范围。每帧文件名唯一，PNG 写入 sRGB chunk。宿主只将自己的缓存路径映射成 `captraw://preview/` URL，保留有限帧；没有 Base64 图像控制消息。前端丢弃过期会话和 revision，连续调整延迟 90 ms 合并。Canvas2D 按 sRGB 解码，1:1 使用 `1/devicePixelRatio` 的 CSS 缩放；不重复执行后端色彩变换。
 
-`RecipeV1` 包含 schema、固定引擎版本、源路径 / 大小 / SHA-256、完整 ART 配置，以及供控件恢复的投影。`adjustments` 是由同一 C++ 适配器映射的有限字段，不另建 Web 显影算法；最终渲染与输出读取完整 ART `ProcParams`。0.28 的处理引擎标识为 `CaptRAW-19_ART-1.26.10_LibRaw-3b20539`，兼容引擎 2–18 及初版 `ART-1.26.10-1e0e12c` 配方，补齐新增可选字段。未知引擎版本拒绝恢复，保留原文件。显式保存先写旁侧临时文件，再原子 rename；导出成功后才替换目标。
+`EditDocument` 是 XMP 的内存投影，包含固定引擎版本、源路径 / 大小 / SHA-256、完整 ART 配置和控件值。当前仅接受 `CaptRAW-19_ART-1.26.10_LibRaw-3b20539` 的 ART 扩展，初始基线为 4；不推断或迁移旧引擎。`adjustments` 由 C++ 适配器映射，渲染与输出读取完整 ART `ProcParams`。XMP 保存先写旁侧临时文件，再原子 rename；导出成功后才替换目标。以下带历史版本的实现记录不构成旧文件格式兼容承诺；当前文件协议见末尾 XMP 章节。
 
 引擎 14 的颜色分级使用 `adjustments.colorGrading`：`shadows/midtones/highlights/global` 各有 `hue:0..360`、`saturation:0..100`、`luminance:-100..100`，外加 `blending:0..100`、`balance:-100..100`。`validate` 返回同名投影；完整原生参数保存在 `[CaptRAW Color Grading]` 的 `Version=1` / `Values`，顺序为四组三值、混合、平衡。缺省可继承完整配置，显式初始值清除该组；原生加载拒绝版本、长度、范围和有限值错误。共享 Stage 3 在黑白之后处理，全中性旁路，继承参数变化同样刷新预览缓存。详见 [接入与限制](COLOR-GRADING.md)。0.17 已接入 Web 色轮；数值不等于 Adobe 参数。
 
@@ -34,11 +34,11 @@ stdin / stdout 每行一个 JSON 对象；ART 自身 stdout 重定向到 stderr�
 
 0.4 的白平衡处理版本为 3。新照片基线使用相机原始系数，经 ART `wbMul2Camera` / `wbCamera2Mul` 坐标系转换后以 `WBParams::CUSTOM_MULT` 渲染，避免把系数压缩成色温再还原。`wbMultipliers`、`wbMode` 和投影警告由核心返回；手动色温 / 色调清空系数并使用原有 CUSTOM_TEMP。自动白平衡取 ART 估计，预设来自随包 `wbpresets.json`，只按相机内部完整型号匹配；采样调用 ART 原生 RAW / 图像取样，处理旋转和几何坐标。
 
-`RecipeV1.baselineVersion` 保存 2、3 或 4：引擎 2 和初版配方以基线 2 读取，保留原有色温基线；引擎 3 / 4 / 5 / 6 / 7 保存的基线继续保留。重新打开、胶片切换和初始状态对比均使用同一个版本；单独修改白平衡不会偷偷更换文档初始状态。旧版宿主拒绝新引擎配方，避免忽略新增处理字段后静默改变输出。
+`EditDocument.baselineVersion` 仅表示当前基线 4；宿主不再选择旧基线，核心拒绝 2 / 3 等不受支持的值。重新打开、胶片切换、重置和初始对比均使用相机白平衡及有效相机构图。
 
 0.5 接入输入配置文件，处理版本为 4，初始显影基线仍为 3。核心在 `open.inputProfiles` 返回实际相机匹配结果及 DCP 能力：自动选择按 ART 原有顺序优先 DCP、其次 ICC，再回退相机矩阵；显式矩阵不使用 DCP / ICC。嵌入选项仅在检测到 ICC 或 DNG 配置文件时提供；普通图像没有 RAW 相机矩阵选项。`adjustments.colorProfile` 映射选择、双光源插值及 DCP 内部曲线 / 表 / 基准曝光字段；控制是否显示取决于真实数据。切换触发 ART 原有颜色处理，Web 不实施配置文件变换。
 
-旧配方缺少 `colorProfile` 时，预检查从其完整 ART 参数提取对应控件状态，避免新默认值覆盖旧引用。`inherited` 保留外部或特殊输入引用，供历史和保存恢复使用；尚无外部文件导入器，引用文件必须仍在原位置。预检查、更新及导出拒绝缺失 / 无效的外部配置文件，避免 ART 静默回退到矩阵。随包相机配置按固定 ART 版本解析；DCP / ICC 不等于 Adobe 风格、配置文件数量或显影效果对齐。
+旧配方缺少 `colorProfile` 时，预检查从其完整 ART 参数提取对应控件状态，避免新默认值覆盖旧引用。`inherited` 保留外部或特殊输入引用，供历史和保存恢复使用；0.34 已提供导入器和 XMP 随附资产，见文末接口。直接读入绝对路径引用时仍须提供对应文件。预检查、更新及导出拒绝缺失 / 无效的外部配置文件，避免 ART 静默回退到矩阵。随包相机配置按固定 ART 版本解析；DCP / ICC 不等于 Adobe 风格、配置文件数量或显影效果对齐。
 
 打开配方先验证参数与基线版本，再替换当前核心图像。若显式打开的配方指向已打开且有未保存编辑的原片，则保留当前编辑并提示先保存或关闭；直接切换会话图片不触发此保护，也不会丢失未保存配方。白平衡异步计算期间若文档或调整已改变，丢弃旧计算结果。
 
@@ -52,7 +52,7 @@ ART 兼容性修正：白平衡 Multipliers 的保存类型和字段为 double�
 
 `adjustments.spots` 顺序保存 ID、名称、开关、原始可用图像归一化来源 / 目标，以及 method、radius、feather、opacity、detail、retainTexture。radius 为原图像素，范围 2–200；羽化 / 不透明度为 0–100，映射 ART 的 0–1；羽化外半径为 radius × (1 + feather / 100)。clone 对应 ART detail 0，保留目标细节对应 1；heal 对应 2–5（界面精细度 0–3）。这些是 ART 语义。
 
-C++ 将坐标旋转到 ART 完整图像像素坐标，再写入原生 Spot Removal；局部裁切不改变来源 / 目标关联，来源可以位于详细预览之外。停用点保留在编辑文档中，处理列表只包含启用点。旧文档没有 spots 时，从完整 ARP 反投影原生点；初始显影仍保持无修复。超出当前可用区域的旧几何拒绝恢复；解码后初始化失败会释放新图像，宿主可用原配方重新载入。
+C++ 将坐标旋转到 ART 完整图像像素坐标，再写入原生 Spot Removal；局部裁切不改变来源 / 目标关联，来源可以位于详细预览之外。停用点保留在编辑文档中，处理列表只包含启用点。XMP 直接恢复完整 spots 参数；旧 ARP 修复点反投影和 `recipeSpots` 返回值已移除。初始显影保持无修复，更新和导出继续验证现有修复参数。
 
 ART 的 Laplace 修复迭代原来以 OpenMP 同时更新相邻行，造成读写竞争。补丁仅移除该迭代内的行并行，保留原有更新顺序和其他独立计算的并行；因此与旧单线程结果一致，而旧多线程修复像素可能改变。测试比较 1 / 2 / 8 线程、独立进程及带相同补丁的 ART CLI。连续修复画笔和自动选源未实现。
 
@@ -66,14 +66,14 @@ ART 的 Laplace 修复迭代原来以 OpenMP 同时更新相邻行，造成读�
 
 0.9 的处理版本为 8，新的初始基线为 4。`RawImage` 在 LibRaw 解码缓冲释放前复制 Nikon `raw_inset_crops[0]`，随后按实际活动区边距、ART 去马赛克边界及 EXIF 方向映射为 `cameraCrop`。只保存四个整数，不延长解码缓冲生命周期。核心仍返回原有可用图像坐标和尺寸；默认裁切是同一 ART 配方里的 crop，并非改写解码结果。其他品牌及无有效裁切标签的输入不新增默认裁切。
 
-旧基线 2 / 3 保留无相机默认裁切的行为；引擎 3–7 缺失 baselineVersion 时推断为 3，引擎 2 / 初版推断为 2；引擎 8 新建文档使用 4。切换照片、重置、初始对比、保存和重新打开都保持文档的基线。相机构图按钮仅在核心提供有效数据时显示，裁切、局部蒙版及修复仍使用原有坐标空间。
+当前文档统一使用基线 4，相机构图按钮仅在核心提供有效数据时显示；裁切、局部蒙版及修复仍使用原有坐标空间。
 
 `CAPTRAW_E2E_BACKGROUND=1` 只用于后台测试：BrowserWindow 从创建时隐藏且不可聚焦，关闭后台节流以继续绘图；macOS 使用 accessory 激活策略。生产正常启动不设置该环境变量。E2E 共享启动器验证 `isVisible=false`、`isFocused=false`、`isFocusable=false`，旧包没有该开关则在启动前拒绝测试，避免闪现窗口。
 
 
 ## 蒙版局部白平衡
 
-0.10 的处理版本为 9，初始基线仍为 4；引擎 8 / 9 缺失 baselineVersion 时推断为 4，显式旧基线继续保留。`LocalMask.whiteBalance` 可选，包含 -100–100 的 temperature / tint；未设置或均为零时不保存矩阵，也不进入新处理分支。
+0.10 引入此处理，当前初始基线为 4。`LocalMask.whiteBalance` 可选，包含 -100–100 的 temperature / tint；未设置或均为零时不保存矩阵，也不进入新处理分支。
 
 温度映射 `6504 × 2^(temperature/100)`，绿通道参数映射 `exp(-tint/200)`。ART ColorTemp 估计光源，LittleCMS `cmsAdaptToIlluminant` 在 XYZ 中执行 Bradford 适应；通过当前工作 RGB 的正逆矩阵形成完整 3×3 变换。正色温趋暖，正色调趋洋红。矩阵在原有 ColorCorrection RGB 区域处理前作用于线性像素，同一组覆盖率只应用一次。它不改变全局 RAW 白平衡、不进行第二次去马赛克，不声称与 Adobe 参数等效。
 
@@ -289,3 +289,32 @@ RAW 暗角位于 `RawImageSource::preprocess`，镜头设置变化必须刷新 `
 `https://captraw.org/ns/develop/1.0/` 存放 ART 参数语义、原生处理配置、源文件指纹、基线 4、蒙版和资产清单；结构使用 RDF struct / Seq 与类型限定符，不使用 JSON 字符串。当前可保存全套 CaptRAW 编辑，但尚未将 ART 局部蒙版转换为 Adobe 蒙版。未知 Adobe / 其他命名空间保留在原始 XMP 元数据图中，未接入的 Adobe 字段在工作台与预设列表提示。
 
 保存先发布不可变内容寻址资产，再通过 SDK 序列化、重解析核对，最后原子替换旁车。失败保持原有文件。直接打开 XMP 优先使用源关联和 SHA-256；外部 XMP 根据同目录唯一同名照片关联。默认自动发现同名 `.xmp`；不修改 RAW、ARP 或旧 JSON。当前桌面输入限定 UTF-8 XMP；宽字符输入与完整 Adobe 配置文件、蒙版、修复、自动 / 自适应设置的映射仍待实现。
+
+## XMP 白平衡坐标（0.33）
+
+全局 `temperature` / `tint` 改为 Robertson 色温与 Adobe -3000 缩放的 uv 偏移，范围 2000–50000 K / -150–150，按 CRS 整数类型直接存入 `crs:Temperature` / `crs:Tint`；原照及取样的精确系数不因显示取整而改变。处理版本升为 CaptRAW-20；基线仍为 4。旧 CaptRAW 显影版本明确拒绝，不将旧 ART green 对数值误解释为 Tint，也不恢复 JSON 兼容层。原文件不删除。
+
+`native/white-balance.cc` 复用固定 ART 的 Robertson 表和逆投影，保留 325 mired 的历史 0.24702 项；不是套用 ART 的 daylight / blackbody SPD 数值。存在 DCP 时，通过同一配置文件、光源选择和双光源逆色温插值得到 XYZ→相机矩阵，再把白点转成相机通道系数。没有 DCP 时，使用 ART 的线性 sRGB / 相机矩阵接口。`patchWhiteBalanceAccess` 只公开既有 DCP 转换接口，不改其显影算法。
+
+预览和 `compose` 均在进入 ART 前解析为 `CustomMult`，全分辨率导出直接消费已解析的 ARP。无活动会话的 `compose` 为手动白平衡读取原片以取得相机矩阵；这一读取有额外成本。原照、自动、取样及机身预设仍保存精确系数；显示坐标从当前 DCP / 矩阵反算，超出控件范围时提示近似。切换输入配置或 DCP 光源时，固定系数保持不变，仅重新投影显示坐标；手动白平衡保留坐标并按新矩阵解析。嵌入 ICC 优先于同文件 DCP，转换分支与实际渲染一致。
+
+`ct:ARTWhiteBalanceCoordinates` 记录精确系数对应的两项标准数值。外部修改任一数值会清除旧系数，避免保存的原照系数遮住 XMP 修改。仅含 Temperature 或 Tint 的预设只覆盖该项。保存数值白平衡使用 `crs:WhiteBalance=Custom`；外部其他模式若已有数值，则使用其数值快照并明确提示未重算模式。缺少数值的其他模式保留并报告未接入。
+
+独立参考为 Colour Science 0.4.6，显式调整其已修正的 325 mired 表项后比较 50 组正反投影。自产双光源 DNG 验证相机系数、真实中性灰输出和独立进程 TIFF16。来源：[Adobe CRS 命名空间](https://developer.adobe.com/xmp/docs/xmp-namespaces/crs/)、[Colour Robertson 实现](https://github.com/colour-science/colour/blob/v0.4.6/colour/temperature/robertson1968.py)。
+
+这完成全局白平衡坐标接入，不代表 Adobe 画质等效：尚未导入 Adobe 相机配置或补齐 ART 不支持的 CameraCalibration / AnalogBalance 组合，完整 ACR 色彩管线仍不同。极端色温 / Tint 在某些相机矩阵上产生无效系数时明确报错，不静默裁剪。局部白平衡继续使用已有 ART 相对模型。
+
+
+## 输入配置文件导入与随附资产（0.34）
+
+桌面“配置文件 → 导入 DCP / ICC”接受独立 DCP 或 RGB 输入、显示、颜色空间类 ICC / ICM。原生 `inspectInputProfile` 使用 ART 的 DCP 解析器及 Little CMS 读取名称、机型限制、嵌入规则和真实处理能力；ICC 须能建立 RGB→XYZ 转换。文件最多 64 MiB。DCP 只用于 RAW，并按声明的机型限制检查；DNG 使用 `UniqueCameraModel`，其余照片使用 ART 提供的相机名称。未声明机型的 DCP 和 ICC 显示适用性提示，不推断不存在的机型约束。
+
+导入先校验复制后的准确字节，再按 SHA-256 存入用户数据目录 `input-profiles`，重复导入复用同一内容。原文件可移走；读取已有绝对路径引用时也先固定到私有内容快照。原生预检查和导出核对内容寻址文件名与实际哈希，避免路径缓存掩盖文件变化。本地库不属于应用安装包，用户导入的配置不进入发行资源。配置名称不作为唯一身份。同名项通过内容标识区分，不自动匹配 Adobe 名称或 digest。
+
+保存 XMP 时，独立配置与蒙版一起放入 `<文件名>.xmp.assets`。`ct:InputProfileAsset` 记录 SHA-256、相对路径及字节数；ART 参数和控件状态使用 `captraw-profile:<sha256>` 引用。读取时先核对旁车资产，即使私有缓存已有文件也不能绕过校验；再恢复为当前进程私有路径。缺失、篡改、越界路径、链接和不一致引用均拒绝。资产先发布，XMP 最后原子替换；不会删除已有资产或替换原片。移动或重命名 XMP 时须保留配套资产文件夹。
+
+`ProfileEmbedPolicy=2` 的 DCP 可用于当前编辑，但拒绝随配方复制；界面说明保存前需改选配置。其他取值仍须遵守配置自身许可，不能把字段值当作第三方资产再分发授权。切换配置沿用当前精确白平衡系数并更新 Temperature / Tint 投影，形成一个可撤销操作。导入回调使用当前控件状态，面板卸载或切换照片后丢弃迟到结果；处理版本仍为 20，基线 4，没有改变已支持配方的显影算法。
+
+Adobe `crs:CameraProfile` 是设置名称，`CameraProfileDigest` 尚未完成与真实 Adobe 输出的成对验证。当前不会把文件 MD5 / SHA-256、ICC ID 或同名 DCP 冒充 Adobe digest；这些字段及增强 Look 原样保留并列为未生效。DCP / ICC 导入、XMP 结构保留和 ACR 像素等效是独立验收项。
+
+依据：[DNG 1.7.1 ProfileName / UniqueCameraModel / ProfileEmbedPolicy](https://helpx.adobe.com/content/dam/help/en/photoshop/pdf/DNG_Spec_1_7_1_0.pdf)、[Adobe Camera Raw XMP](https://developer.adobe.com/xmp/docs/xmp-namespaces/crs/)。
