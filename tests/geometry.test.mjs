@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { transform } from 'esbuild';
 import { readFileSync } from 'node:fs';
 const source=await transform(readFileSync('apps/desktop/src/geometry.ts','utf8'),{loader:'ts',format:'esm'});
-const {rotatePoint,rotateCrop,imageTransform,canvasPoint,imagePoint,drawCrop,resizeCrop,moveCrop,fitCropAspect,cropHandles}=await import(`data:text/javascript;base64,${Buffer.from(source.code).toString('base64')}`);
+const {rotatePoint,rotateCrop,imageTransform,visibleImageRegion,canvasPoint,imagePoint,drawCrop,resizeCrop,moveCrop,fitCropAspect,cropHandles}=await import(`data:text/javascript;base64,${Buffer.from(source.code).toString('base64')}`);
 test('image coordinates survive rotation and HiDPI canvas transforms',()=>{
  for(const rotation of [0,90,180,270]){
   const point={x:.234,y:.678};const rotated=rotatePoint(point,rotation),restored=rotatePoint(rotated,-rotation);
@@ -35,4 +35,19 @@ test('locked crop gestures preserve ratio, bounds and opposite anchor through ro
  const original={x:.2,y:.3,width:.4,height:.2},moved=moveCrop(original,10,-10);assert.deepEqual(moved,{x:.6,y:0,width:.4,height:.2});
  const resized=resizeCrop(original,'nw',{x:.1,y:.2});assert(Math.abs(resized.x+resized.width-.6)<1e-12);assert(Math.abs(resized.y+resized.height-.5)<1e-12);
  const a=fitCropAspect(original,2),b=fitCropAspect(a,.5),back=fitCropAspect(b,2);for(const k of ['x','y','width','height'])assert(Math.abs(back[k]-a[k])<1e-12);
+});
+
+test('detail requests cover every visible source pixel, including fractional pans and large HiDPI windows',()=>{
+ const t={x:-50.25,y:32.5,scale:.5,width:8256,height:5504};
+ assert.deepEqual(visibleImageRegion(t,1500.25,1024.25),{x:100,y:0,width:3001,height:1984});
+ assert.equal(visibleImageRegion({...t,x:2000},1500,1000),null);
+ assert.equal(visibleImageRegion({...t,x:-5000},1500,1000),null);
+ for(const dpr of [1,1.5,2,3])for(const pan of [{x:0,y:0},{x:23.25,y:-41.5},{x:-4500,y:2500}])for(const rotation of [0,90,180,270]){
+  const [w,h]=rotation%180?[5504,8256]:[8256,5504],crop=rotateCrop({x:.1,y:.2,width:.6,height:.5},rotation),t=imageTransform(w,h,1900.25,1300.5,crop,1,pan,true,dpr),r=visibleImageRegion(t,1900.25,1300.5);
+  const left=Math.max(0,-t.x/t.scale),right=Math.min(w,(1900.25-t.x)/t.scale),top=Math.max(0,-t.y/t.scale),bottom=Math.min(h,(1300.5-t.y)/t.scale);
+  if(right<=left||bottom<=top){assert.equal(r,null);continue;}
+  assert(r.x>=0&&r.y>=0&&r.x+r.width<=w&&r.y+r.height<=h);
+  assert(r.x<=left&&r.y<=top&&r.x+r.width>=right&&r.y+r.height>=bottom);
+  assert(left-r.x<1&&top-r.y<1&&r.x+r.width-right<1&&r.y+r.height-bottom<1);
+ }
 });

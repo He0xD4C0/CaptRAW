@@ -103,6 +103,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         fullDetailImage.reset();fullDetailCoverage.reset();fullDetailLuminance.reset();sampleLuminanceCache.reset();sampleColorCache.reset();colorEnabled=false;luminanceEnabled=false;fitLuminance=nullptr;detailLuminance=nullptr;luminanceFingerprint.clear();
     }
     bool wantsColorSample()const override{return samplingColor;}
+    bool wantsMask(int region)const override{return !selectedMask.empty()&&region>=0&&region<int(maskIds.size())&&maskIds[region]==selectedMask;}
     void colorSampleReady(const ae::Imagefloat &image,int x,int y,double scale,bool detailRegion)override{
         if(samplingColor&&detailRegion&&scale==1){sampleColorCache=std::make_unique<ae::Imagefloat>(image.getWidth(),image.getHeight());image.copyTo(sampleColorCache.get());colorX=x;colorY=y;}
     }
@@ -408,7 +409,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         validateExternalMasks(showingBefore?baseline:params);
         if(maskFailure)throw std::runtime_error("蒙版处理失败，请恢复文件并重新调整照片后重试。");
         dx=std::clamp(a.value("x",0),0,processor->getFullWidth()-1);dy=std::clamp(a.value("y",0),0,processor->getFullHeight()-1);
-        dw=std::clamp(a.value("width",1024),1,std::min(2048,processor->getFullWidth()-dx));dh=std::clamp(a.value("height",1024),1,std::min(2048,processor->getFullHeight()-dy));
+        dw=std::clamp(a.value("width",1024),1,processor->getFullWidth()-dx);dh=std::clamp(a.value("height",1024),1,processor->getFullHeight()-dy);
         started=std::chrono::steady_clock::now();
         if(fullDetailContext()&&fullDetailImage){
             if(fullDetailCoverage){const auto it=std::find(maskIds.begin(),maskIds.end(),selectedMask);if(it!=maskIds.end())maskReady(int(it-maskIds.begin()),*fullDetailCoverage,coverageX,coverageY,coverageScale,true);}

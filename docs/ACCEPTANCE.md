@@ -1,5 +1,102 @@
 # CaptRAW 本机验收记录
 
+## 0.41 会话前状态与完整设置撤销
+
+从 `release/CaptRAW-0.41.0-arm64.dmg` 只读、隐藏挂载并安装至 `~/Applications/CaptRAW-0.41.app`。最终包全应用严格签名检查通过，ASAR 的 7 个构建文件与工作区一致；仍为 ad-hoc、未公证。显影核心与 XMP worker 逐字节等于 0.40，处理版本 20 / 基线 4、新 Logo 和原生输出管线不变。
+
+- 对比默认使用打开照片时的完整调整和 ART 配置，包括 XMP。底栏可保存当前设置为前状态、交换前后设置、还原打开时参考；交换保持当前裁切、锁定比例、旋转和镜头设置。前状态随会话照片保留，不写入 XMP。单图 P / 按住对比使用独立进程，保留 1:1；RGB 直方图跟随当前显示的参考。Option/Alt+P 保存前状态，Shift+P 打开预设。
+- 撤销记录保存完整 ART 配置与调整。交换一次可同时撤销两侧状态；普通编辑撤销不撤回对比参考。保存状态按调整及配置身份检查，避免交换 / 预设 / 同步后漏记未保存设置；对比参考本身不标记未保存。
+- **96 项最终安装版隐藏 GUI 检查**通过：前状态 12、四种对比 12、宽区域 1:1 共 7、关闭 / 曲线 / 蒙版 19、批量保存 9、对象选区 7、预设 13、Nikon 相机构图 7、同步 10。页面错误 0。OS 窗口隐藏、不可聚焦，原生对话框使用明确响应。实际检查最小窗口截图，底栏三项操作均可见。
+- 新检查以 Nikon D850 RAW 加带隐藏 ART 第二曲线的 XMP 为夹具，验证打开参考、存储参考、真实像素交换、单步撤销 / 重做、保存标记、P / Option+P / Shift+P、1:1 和直方图、胶片切换、重启及构图保持。D850 桌面 TIFF 为 **8256×5504、RGB uint16、ICC 728 字节**；独立核心输出逐像素一致。跨机同步 Canon R5 TIFF 为 **8183×5455、RGB uint16、ICC 728 字节**，也与独立输出逐像素一致。
+- 预设专项重新通过真实对象选择生成 XMP / 栅格资产，不读取旧 JSON 夹具；跨相机应用及删除预设后保存资产均通过。同步取消使用显示实际处理进度的 RAW 场景，确认目标保持先前值；移除无法可靠点击取消的小 PNG 重复场景。Nikon 相机构图专项验证已有 Z5 II HE 样本及 P 的同步构图语义，本轮没有重跑全部 HE / HE★ 矩阵。
+- 构建、类型检查、**12 项单测**通过。测试脚本补齐独立对比事件等待、隐藏退出响应、XMP 夹具前置检查及失败诊断；早期失败日志和首次候选证据保留于 `artifacts/comparison-state/*-pre-histogram.log`、`synchronize-*.log` 及相应目录，未计入通过结果。
+
+证据：`artifacts/release-0.41-evidence.json`、`install-0.41.json`、`asar-0.41.json`、各 `*-installed-0.41/report.json`、`comparison-state-installed-0.41/pixels.json`、`synchronize-installed-0.41/pixels.json` 和 `comparison-state/{ci,package}.log`。界面截图为 `artifacts/comparison-state-installed-0.41/saved-before.png`。
+
+此批只补齐会话对比和完整配置历史。持久快照、独立参考图、反斜杠交换默认全部设置、ACR 操作耗时 / 盲评、HDR、非生成式 AI 全集、全机型压缩模式和三平台验收仍未完成，不宣称完整 ACR 同级。源码未 commit / push。
+
+## 0.40 裁切与局部明暗的处理边界
+
+从 `release/CaptRAW-0.40.0-arm64.dmg` 只读、隐藏挂载并安装至 `~/Applications/CaptRAW-0.40.app`。全应用严格签名验证通过，仍为 ad-hoc、未公证；ASAR 的 7 个构建文件与工作区一致。处理版本 20 / 基线 4、现有 XMP 参数和新 Logo 不变。
+
+- 修复 0.39 发现的裁切局部明暗差异。预览的 Stage 1/2/3 在裁切内使用与导出相同的坐标、边界及顺序，裁切外继续显示用于构图的图像；链接蒙版缓存独立，覆盖率和范围取样按同一范围合并。输出管线没有改变。
+- **10 组安装版核心检查**在禁止网络及 Homebrew / `/usr/local` 读取下通过：受控线性蒙版、双重叠蒙版的 0/90/180/270° 旋转、右下贴边裁切与反选、全局明暗 / 纹理叠加局部明暗，以及 Nikon D850 NEF、Canon R5 CR3、Fujifilm X-T4 RAF。每组详细 PNG 与 TIFF16 量化至 8 位后的像素完全一致；合成图适屏图的裁切范围也一致，缓存平移无错位。每组新旧核心 TIFF16 像素相同，原片校验值未变。
+- 同一 D850 配方重新调用 **0.39 安装版**，旧预览仍复现最大差 **5/255**；0.40 的 **3101×2207** 对应区域最大差 **0**、差异样本 **0**。这是修复前后实际处理对照，不是仅比较同一条新路径。旧失败证据继续保留，最新对照为 `cropped-tone-offline-0.40/nikon-d850.NEF-pixels.json`。
+- **44 项安装版隐藏 GUI 检查**通过：新增裁切明暗 6、关闭 / 曲线 / 蒙版 19、大窗口详细区域 7、前后对比 12，页面错误 0。实际鼠标缩小裁切框、绘制线性蒙版、调整亮度 / 高光、单步撤销重做、1:1、保存 XMP、关闭进程并重开均通过。检查实际截图，局部参数、覆盖层与文件关闭入口可见。原生对话框注入选择，OS 窗口始终隐藏、不可聚焦。
+- 经 GUI 导出的 D850 为 **7017×4781、RGB uint16、ICC 728 字节**，与独立安装版核心输出逐像素相同；实际显示的原生详细区域与桌面 TIFF 对应区域最大差 0，Canvas 中心 16×16 像素直接绘制对照差 0。XMP 重开后适屏 PNG 字节一致。
+- 既有 **6 组宽区域原生检查**也在离线安装版核心通过，补充验证未裁切局部明暗、旋转及 NEF / CR3 / RAF。大窗口 Canvas **4040×3016** 的单图、四种布局及平移仍与原生详细图完全一致。构建、类型检查、**12 项单测**通过；从固定 ART 原始压缩包重新应用补丁，与构建树的四个接口 / 调度文件一致，补丁重复执行不改文件。
+
+证据：`artifacts/cropped-tone-offline-0.40/report.json` 及逐项 `*-pixels.json`、`cropped-tone-installed-0.40/{report,pixels}.json`、`revision-installed-0.40/report.json`、`wide-detail-installed-0.40/report.json`、`comparison-installed-0.40/report.json`、`wide-detail-offline-0.40/{report,pixels}.json`、`cropped-tone/{ci,package}.log`、`cropped-tone/fresh-patch.json`、`install-0.40.json`、`asar-0.40.json`、`release-0.40-evidence.json`。实际截图为 `artifacts/cropped-tone-installed-0.40/cropped-tone.png`。
+
+此修复针对启用局部明暗的裁切处理，不构成全部滤镜、全部 ARP 组合或 ACR 像素等效验收。新增裁切内计算及浮点缓冲的 P95 / 峰值内存尚未测定；本轮未重新验证全部 Nikon HE 模式、HDR、非生成式 AI 或跨平台。完整非生成式 ACR 替代目标仍未完成，未提交、未推送。
+
+## 0.39 大窗口原生 1:1 覆盖
+
+从 `release/CaptRAW-0.39.0-arm64.dmg` 只读、隐藏挂载并安装至 `~/Applications/CaptRAW-0.39.app`。严格全应用签名验证通过，仍为 ad-hoc、未公证。ASAR 的 7 个构建文件与工作区一致；处理版本 20 / 基线 4 和新 Logo 不变。
+
+- 移除前后端详细预览的 2048 像素上限，按实际可见区域请求原图像素，分别向下 / 向上取整两端，覆盖小数平移后的边缘。修复高质量适屏帧晚到时清除有效详细图、对比侧适屏图尚在解码时已有详细图却不绘制的问题；位图与对应区域 URL 一致后才绘制。
+- **38 项安装版隐藏 GUI 检查**通过：大窗口 7、对比 12、关闭 / 蒙版 / 曲线 19，页面错误 0。2400×1800 窗口中的实际 Canvas 为 **4040×3016**；单图、四种对比布局、平移后全部 RGBA 样本与直接绘制原生详细 PNG 的参考一致，最大差 0。返回适屏清除详细层；实际查看安装版截图，控件和图像正常显示。此检查证明前端完整显示原生详细图，不代表所有配方的预览与导出均一致。
+- **6 组独立安装版核心检查**在禁止网络及 Homebrew / `/usr/local` 读取下通过：Nikon D850 NEF、Canon R5 CR3、Fujifilm X-T4 RAF、90° 旋转、右下越界请求钳制，以及未裁切的局部明暗蒙版。详细图最大为 3101×2207（另有 3001×2503）；蒙版 / 亮度平面尺寸正确。各 PNG 与 TIFF16 量化至 8 位后的对应区域最大差 0，原片校验值未变。局部明暗案例使用完整未裁切导出作为参考，不包含下述裁切缺陷。
+- 对比状态下的桌面导出为 **4184×5946、RGB uint16、ICC 728 字节**，与禁止网络和 Homebrew 读取的独立安装版核心输出逐像素相同。主流程另通过真实 RAW、全局 / 蒙版、XMP 保存恢复、TIFF16 和 1:1，页面及控制台错误 0；首帧约 **858 ms**，仅为单次实测，不是冷启动或 P95 验收。
+- 构建、类型检查及 **12 项单测**通过，本次 `pnpm ci:check` 命中当前内容的本地缓存。新 Logo 的安装版标题栏、favicon、源 SVG 和 ICNS 一致，隐藏窗口验证通过。
+
+**尚未解决：裁切＋局部明暗的预览 / 导出不一致。** 固定 D850 线性蒙版案例在 3101×2207 区域有 12,603,003 个通道样本不同，最大差 **5 / 255**。0.38 详细图与 0.39 对应重叠区域相同，问题早于本次覆盖修复。ART 导出在空间局部处理前裁切，详细预览则使用完整图像上下文；需要统一处理边界，不能用前端 Canvas 对照通过掩盖这一差异。失败图片、TIFF 和旧版重叠对照保留在 `artifacts/wide-detail/cropped-tone*`。
+
+证据：`artifacts/wide-detail-installed-0.39/report.json`、`wide-detail-offline-0.39/{report,pixels}.json`、`comparison-installed-0.39/{report,detail-pixels,pixels}.json`、`revision-installed-0.39/report.json`、`main-installed-0.39/e2e-report.json`、`wide-detail-ci.log`、`install-0.39.json`、`asar-0.39.json`、`release-0.39-evidence.json`。大窗口截图为 `artifacts/wide-detail-installed-0.39/large-comparison.png`。OS 窗口全程隐藏、不可聚焦，文件对话框注入选择；不代替用户人工验收。本轮未重新验证全部 Nikon HE 模式、HDR、AI 或 Adobe 画质等效，完整非生成式 ACR 替代尚未完成。
+
+## 0.38 前后对比视图
+
+从 `release/CaptRAW-0.38.0-arm64.dmg` 只读、隐藏挂载并安装至 `~/Applications/CaptRAW-0.38.app`。全应用严格签名验证通过，仍为 ad-hoc、未公证。ASAR 的 7 个构建文件与工作区一致；显影与 XMP 程序逐字节等于 0.37，处理版本 20 / 基线 4 和新 Logo 不变。
+
+- 新增左右、上下、左右分割、上下分割；底栏选择，Q 正向、Shift+Q 反向循环。使用独立显影进程生成初始侧，共用当前已接入的裁切、旋转、镜头校正及视图位置。当前侧仍可调参数、保存和导出，图像上的手形操作同步平移两侧。空画布禁用缩放 / 对比，百分比显示“—”；适屏百分比按物理像素计算，与 1:1 定义一致。
+- **31 项安装版隐藏 GUI 检查**通过：新增对比 12，既有关闭 / 蒙版 / 曲线 19，页面错误 0。在 1100×760 窗口验证控件可见、四种布局、快捷键、真实 D850 初始与编辑图像、自定义裁切缩小、90° 旋转、撤销、保存与切换 Canon CR3。文件选择由测试注入，OS 窗口始终隐藏且不可聚焦。
+- 四种适屏布局按原生图片、原图尺寸与保存的裁切边界独立合成参考，Canvas 最大像素差均为 **0**。1:1 两个原生详细区域的原图坐标 / 尺寸相同；平移后两侧各取 16×16 像素，共 **512 像素**，与原生详细预览直接绘制最大差 **0**。此项只证明实测区域，不是所有缩放率、超大窗口或所有显示器验收。
+- 对比前后相同编辑的 XMP 调整与完整 ART 配置保持一致，撤销仍撤回调色操作；普通调色不替换初始侧。测试仅终止本次应用的对比核心，错误可见、返回单图后重试恢复，当前编辑仍可保存和导出；切换照片后确认旧对比进程退出。
+- 对比中保存并导出的裁切旋转 D850 TIFF 为 **4184×5946、RGB uint16、ICC 728 字节**；与禁止网络、Homebrew / `/usr/local` 读取的独立安装版核心输出最大差 0、差异样本 0。源 NEF / CR3 校验值未变。
+- 构建、类型检查及 **11 项单测**通过。安装版主流程另通过真实 RAW、全局 / 蒙版、保存、TIFF16、1:1 与重开，页面及控制台错误 0；首帧约 **1265 ms**，仅为单次实测，不代表冷启动或 P95 门槛验收。
+
+证据：`artifacts/comparison-installed-0.38/{report,detail-pixels,pixels}.json`、`revision-installed-0.38/report.json`、`main-installed-0.38/e2e-report.json`、`comparison-ci.log`、`install-0.38.json`、`asar-0.38.json`、`release-0.38-evidence.json`。实际截图为 `artifacts/comparison-installed-0.38/{split,detail}.png`。
+
+初始侧沿用当前镜头校正（含其暗角选项），不是打开 XMP 时的快照；未暴露的 ART 几何字段不保证对齐。没有自定义前状态、前后交换或独立参考图。1:1 沿用每次最多 2048×2048 的详细区域请求，超大窗口的完整覆盖仍需补齐。本轮没有重新验证全部 Nikon HE 模式、HDR、AI 或 ACR 画质等效；完整非生成式替代尚未完成。
+
+## 0.37 所选照片批量保存 XMP
+
+从 `release/CaptRAW-0.37.0-arm64.dmg` 只读、隐藏挂载并安装至 `~/Applications/CaptRAW-0.37.app`。严格全应用签名检查通过，仍为 ad-hoc、未公证。处理版本 20 / 基线 4 不变，安装包 ASAR 的 7 个构建文件与工作区 dist 逐字节一致；标题栏、favicon 和 ICNS 沿用新 Logo。
+
+- **28 项安装版隐藏 GUI 检查**通过：批量保存 9，关闭 / 蒙版 / 曲线回归 19，页面错误 0。1100×760 窗口内，“保存所选…”入口、逐图失败原因和完成按钮均可见可操作。文件对话框注入选择，系统窗口始终隐藏且不可聚焦。
+- 保存只使用点击时的所选照片快照，同名文件自动编号保留；取消文件夹选择不修改未保存状态。中间一张原片暂时移走时，其他照片仍能保存，失败项可恢复原片后单独重试；只有成功照片清除未保存标记，撤销历史保留。停止或保存中退出时完成当前原子文档后停止，剩余编辑仍在应用中。
+- 修复重开已存在照片的 XMP 时胶片被移动至末尾的问题；现在保持原顺序和 Shift 连选锚点。重开后实际 Canvas 像素相同，真实 Nikon D850 经 GUI 导出 **8256×5504、RGB uint16、ICC 728 字节**，与离线独立安装版核心导出最大像素差 0、差异样本 0。
+- **30 项宿主 / 安装版核心检查**在禁止网络及 Homebrew / `/usr/local` 读取下通过：批量保存 8，既有 XMP 22。真实 NEF / CR3 / RAF 验证当前参数覆盖旧 ART 配置、原片哈希和未知元数据保留；同名中文路径、并发占用目标文件、核心启动失败、取消和临时文件清理均通过。
+- 栅格蒙版与 ICC 随附资产移动 / 重命名、删除原资产后恢复，**1016×760 RGB uint16** 输出像素一致；Nikon 裁切旋转快照的 **717×994 RGB uint16** 保存前后输出也一致。构建、类型检查和 **11 项单测**通过。
+
+证据：`artifacts/batch-save-installed-0.37/{report,pixels}.json`、`revision-installed-0.37/report.json`、`batch-save-offline-0.37/{report,pixels}.json`、`xmp-offline-0.37/report.json`、`batch-save-ci.log`、`install-0.37.json`、`asar-0.37.json`、`release-0.37-evidence.json`。实际界面为 `artifacts/batch-save-installed-0.37/partial-save.png`，错误原因和重试方式已检查。
+
+本批实现批量另存 XMP，不自动覆盖原旁车，也不是整批事务。随附资产须与 XMP 一起移动；只有当前格式可恢复，未恢复旧 JSON 兼容。本轮没有重新验证性能 P95、全部 Nikon HE 模式或 Adobe 像素等效。任意角度 / 透视、完整 Adobe 参数与资产语义、HDR、非生成式 AI、跨平台和完整 ACR 画质 / 效率对照仍未完成，完整替代目标继续保留。
+
+## 0.36 镜头校正后的吸管定位
+
+从 `release/CaptRAW-0.36.0-arm64.dmg` 只读、隐藏挂载并安装至 `~/Applications/CaptRAW-0.36.app`。严格全应用签名检查通过，仍为 ad-hoc、未公证。处理版本 20 / 基线 4 和新 Logo 不变，ASAR 的 7 个构建文件与工作区一致。
+
+- 修复前，受控蓝色色块开启 10mm 镜头校正后从显示坐标约 `(79.5,79.5)` 移至 `(71.7,74.5)`，吸管误采背景，得到 2984 K；修复后与未校正时均为 11566 K，精确通道系数相同。原始复现记录保存在 `artifacts/wb-optics/{before-fix,after-fix}.json`。
+- **48 组独立核心回归**在安装版、禁止网络及 Homebrew / `/usr/local` 读取条件下通过。RGB 和人工 Bayer DNG、自动 / 手动 Lensfun、四方向旋转、裁切及色差开关的实际预览目标取样均保持系数一致；同配方 PNG 与修复前 0.35 完全相同。修复前核心在对应开启校正的样本中仍能复现错采，测试不是只验证新代码自洽。
+- **24 项安装版隐藏 GUI 检查**通过：新定位检查 10，既有白平衡检查 14，页面错误 0。实际点击目标，验证适屏、已经绘制的 1:1 detail、裁切、旋转、撤销与 XMP 重开；同时复查真实 D850 的自动 / 预设 / 手动白平衡、未保存保护、无效输入保护和 TIFF16 导出。
+- 真实 Nikon D850 桌面与离线独立核心输出均为 **8256×5504、RGB uint16、ICC 728 字节**，最大像素差 0、差异样本 0。开发核心的 D850 / X-T4 预设和自动白平衡有实际像素变化，已有旋转取样与独立输出检查通过；构建、类型检查及 11 项单测通过。
+
+证据：`artifacts/wb-optics-offline-0.36/report.json`、`wb-optics-installed-0.36/report.json`、`wb-installed-0.36/{report,pixels}.json`、`white-balance/{report,pixel-report}.json`、`wb-optics/ci.log`、`install-0.36.json`、`asar-0.36.json`。本轮没有重新验证性能 P95、全部 Nikon HE 模式或 Adobe 像素等效。受控 DNG 不是真实 Nikon 样本；更多实拍镜头、EXIF / LCP 定位、任意角度拉直与 Adobe 裁切坐标互操作仍待验收，完整 ACR 替代尚未完成。
+
+## 0.35 点曲线输入与 XMP 一致性
+
+从 `release/CaptRAW-0.35.0-arm64.dmg` 只读、隐藏挂载并安装至 `~/Applications/CaptRAW-0.35.app`。全应用严格签名检查通过，仍为 ad-hoc，未公证。处理版本 20 / 基线 4 不变，已有 XMP 不取整或迁移。新 Logo 沿用用户原 SVG，其源校验值和安装版 ICNS 校验值与 0.34 一致。
+
+- 构建、类型检查、**11 项单测**通过。**41 项安装版隐藏 GUI 检查**通过：点曲线 13、关闭 / 蒙版 / 曲线回归 19、XMP 9，页面错误 0。所有操作都经实际可见且可用的控件完成，OS 窗口隐藏且不可聚焦；原生文件对话框注入选择。
+- 点曲线的新操作采用 0–255 整数坐标，支持多点、端点输入与拖动、方向键 / Shift、删除。输入框清空不改成零，Escape 恢复；输入和多次拖动均可单步撤销 / 重做。选择、聚焦、保存已有小数点不改变坐标和像素；新进程恢复相同预览。
+- 当前 GUI 的 513 个样条采样与真实 ART 采样对应，最大 SVG 坐标差 `2.842170943040401e-14`。既有四组常规 / 极端曲线的独立核心采样对照也通过 `<1e-12` 门槛。不是以光滑图形替代实际像素处理。
+- 安装版 Nikon D850 总曲线及 R 通道曲线输出为 **8256×5504、RGB uint16、带 ICC**，桌面与独立无界面导出最大像素差 0、差异样本 0。
+- **22 项 XMP / 核心检查**在禁止网络、禁止 Homebrew 与 `/usr/local` 读取下通过。新增覆盖曲线名称同步、仅 R 通道预设、无曲线预设、名称缺点或冲突的提示、非法空坐标拒绝、小数及接近整数坐标三次往返。外部标准曲线编辑改变真实 TIFF 像素；未知元数据与原片保护仍通过。
+- 安装包 ASAR 的 **7 个构建文件**与当前工作区 dist 逐字节相同。没有重新宣称性能 P95、Adobe 往返或 ACR 画质等效；完整替代目标继续保留。
+
+证据：`artifacts/point-curve-installed-0.35/{report,spline,pixels}.json`、`revision-installed-0.35/report.json`、`xmp-installed-0.35/report.json`、`xmp-offline-0.35/report.json`、`curve-conformance.json`、`curve-ci.log`、`install-0.35.json`、`asar-0.35.json`、`release-0.35-evidence.json`。实际安装版截图为 `artifacts/point-curve-installed-0.35/raw-point-curve.png`。用户人工体验及 Adobe 对小数坐标 / 冲突名称的处理仍未验收。
+
 ## 0.34 输入配置资产与新标识
 
 从 `release/CaptRAW-0.34.0-arm64.dmg` 只读挂载并安装至 `~/Applications/CaptRAW-0.34.app`。处理版本仍为 20、基线 4；旧安装版和用户原片保留。完整应用 `codesign --verify --deep --strict` 通过，签名为 ad-hoc，没有 Developer ID 或公证。

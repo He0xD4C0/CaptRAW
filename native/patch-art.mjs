@@ -1,5 +1,20 @@
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+export function patchPreviewCrop(upstream){
+ const patch=(file,marker,edit)=>{
+  const path=join(upstream,'src/engine',file),source=readFileSync(path,'utf8');
+  if(source.includes(marker))return;
+  const changed=edit(source);
+  if(changed===source||!changed.includes(marker))throw new Error('ART preview crop anchor mismatch: '+file);
+  writeFileSync(path,changed);
+ };
+ patch('rtengine.h','virtual bool wantsMask(int region)',s=>s.replace('    virtual bool wantsColorSample() const', '    virtual bool wantsMask(int region) const { return true; }\n    virtual bool wantsColorSample() const'));
+ patch('improcfun.h','bool processPreview(Stage',s=>s.replace('    bool process(Stage stage, Imagefloat *img);','    bool process(Stage stage, Imagefloat *img);\n    bool processPreview(Stage stage, Imagefloat *img);').replace('    LinkedMaskManager linked_mask_mgr_;','    LinkedMaskManager linked_mask_mgr_;\n    LinkedMaskManager preview_crop_masks_;'));
+ for(const file of ['dcrop.cc','improccoordinator.cc'])patch(file,'ipf.processPreview(',s=>{
+  for(const stage of [1,2,3])s=s.replaceAll(`ipf.process(ImProcFunctions::Stage::STAGE_${stage},`, `ipf.processPreview(ImProcFunctions::Stage::STAGE_${stage},`);
+  return s;
+ });
+}
 export function patchInputProfileMetadata(upstream){
  const patch=(file,marker,edits)=>{
   const path=join(upstream,'src/engine',file);let source=readFileSync(path,'utf8');
@@ -133,6 +148,49 @@ export function patchWhiteBalanceAccess(upstream){
  const changed=s.replace('    Matrix findXyztoCamera(', 'public: // CaptRAW: DCP white-point conversion.\n    Matrix findXyztoCamera(').replace('    Matrix makeXyzCam(', 'private:\n    Matrix makeXyzCam(');
  if(changed===s||!changed.includes('private:\n    Matrix makeXyzCam('))throw new Error('DCP white balance access anchor mismatch');
  writeFileSync(path,changed);
+}
+export function patchWhiteBalanceGeometry(upstream){
+ const patch=(file,marker,edit)=>{
+  const path=join(upstream,'src/engine',file),source=readFileSync(path,'utf8');
+  if(source.includes(marker))return;
+  const changed=edit(source);
+  if(changed===source||!changed.includes(marker))throw new Error('ART white balance geometry patch anchor mismatch: '+file);
+  writeFileSync(path,changed);
+ };
+ patch('improcfun.h','getLensCorrection(',s=>s.replace('    void transform(Imagefloat *original,',`    std::unique_ptr<const LensCorrection> getLensCorrection(
+        int width, int height, const FramesMetaData *metadata, int rawRotationDeg);
+    void transform(Imagefloat *original,`));
+ patch('iptransform.cc','ImProcFunctions::getLensCorrection(',s=>{
+  const start=s.indexOf('void ImProcFunctions::transform('),begin=s.indexOf('    double focalLen =',start),end=s.indexOf('    // CaptRAW: apply selected lens CA',begin);
+  if(start<0||begin<start||end<begin)throw new Error('ART lens factory anchor mismatch');
+  const factory=`std::unique_ptr<const LensCorrection> ImProcFunctions::getLensCorrection(
+    int oW, int oH, const FramesMetaData *metadata, int rawRotationDeg)
+{
+${s.slice(begin,end)}    return pLCPMap;
+}
+
+`;
+  return s.slice(0,start)+factory+s.slice(start,begin)+'    auto pLCPMap = getLensCorrection(oW, oH, metadata, rawRotationDeg);\n\n'+s.slice(end);
+ });
+ patch('improccoordinator.cc','// CaptRAW: invert the same lens stages used by the rendered preview.',s=>s.replace('        ipf.transCoord(fw, fh, points, red, green, blue);',`        // CaptRAW: invert the same lens stages used by the rendered preview.
+        const auto lens = ipf.getLensCorrection(
+            fw, fh, imgsrc->getMetaData(), imgsrc->getRotateDegree());
+        if (lens && params.lensProf.useCA && lens->isCACorrectionAvailable()) {
+            std::vector<Coord2D> channels[3];
+            for (int c = 0; c < 3; ++c) {
+                auto mapped = points;
+                for (auto &point : mapped) {
+                    lens->correctCA(point.x, point.y, 0, 0, c);
+                }
+                ipf.transCoord(fw, fh, mapped, red, green, blue, -1, lens.get());
+                channels[c] = c == 0 ? red : c == 1 ? green : blue;
+            }
+            red = std::move(channels[0]);
+            green = std::move(channels[1]);
+            blue = std::move(channels[2]);
+        } else {
+            ipf.transCoord(fw, fh, points, red, green, blue, -1, lens.get());
+        }`));
 }
 export function patchMaskGroups(upstream){
  const patch=(file,marker,edit)=>{const path=join(upstream,'src/engine',file),source=readFileSync(path,'utf8');if(source.includes(marker))return;const changed=edit(source);if(changed===source||!changed.includes(marker))throw new Error('ART mask patch anchor mismatch: '+file);writeFileSync(path,changed);};

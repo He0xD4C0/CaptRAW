@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Aperture, FolderOpen, Maximize, Scan } from 'lucide-react';
-import type { Adjustments, LocalMask, Point, PreviewFrame, ObjectPrompt, ObjectBox } from '@captraw/contracts';
-import { canvasPoint, imagePoint, imageTransform, rotatePoint, rotateCrop, cropHandles, cropHandlePoint, drawCrop,resizeCrop,moveCrop,type CropHandle,type CropRect } from './geometry';
+import type { Adjustments, LocalMask, Point, PreviewFrame, ObjectPrompt, ObjectBox, ComparisonLayout } from '@captraw/contracts';
+import { canvasPoint, imagePoint, imageTransform, visibleImageRegion, rotatePoint, rotateCrop, cropHandles, cropHandlePoint, drawCrop,resizeCrop,moveCrop,type CropHandle,type CropRect } from './geometry';
 export type Tool = 'object' | 'hand' | 'brush' | 'eraser' | 'linear' | 'radial' | 'crop' | 'white-balance' | 'repair' | 'luminance' | 'color';
 interface Props {
+  sessionId?:string;beforeLabel?:string;
+  comparison?:{label:string;layout:ComparisonLayout;frame?:PreviewFrame;detail?:PreviewFrame;viewport:(x:number,y:number,w:number,h:number)=>void};
+  comparisonControl?:React.ReactNode;
   object?:{mode:'point'|'box';ready:boolean;box?:ObjectBox;pickBox:(start:Point,end:Point)=>void;url?:string;prompts:ObjectPrompt[];pick:(point:Point,exclude:boolean)=>void};
   frame?: PreviewFrame; detailFrame?: PreviewFrame; adjustments?: Adjustments; tool: Tool;
   selectedMask?: LocalMask; brushSize: number; overlay: boolean; busy: boolean;
@@ -19,6 +22,9 @@ export function Viewport(p: Props) {
   const [size,setSize] = useState({ width: 900,height: 700 });
   const [image,setImage] = useState<HTMLImageElement>(), [detail,setDetail] = useState<HTMLImageElement>();
   const [luminanceImage,setLuminanceImage]=useState<HTMLImageElement>(),[luminanceDetail,setLuminanceDetail]=useState<HTMLImageElement>();
+  const [beforeImage,setBeforeImage]=useState<HTMLImageElement>(),[beforeDetail,setBeforeDetail]=useState<HTMLImageElement>();
+  useEffect(()=>{setBeforeImage(undefined);const frame=p.comparison?.frame;if(!frame)return;let valid=true;const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{if(valid)setBeforeImage(img);};img.src=frame.url;return()=>{valid=false;};},[p.comparison?.frame?.url]);
+  useEffect(()=>{setBeforeDetail(undefined);const frame=p.comparison?.detail;if(!frame)return;let valid=true;const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{if(valid)setBeforeDetail(img);};img.src=frame.url;return()=>{valid=false;};},[p.comparison?.detail?.url]);
   const [sampleBox,setSampleBox]=useState<{start:Point;end:Point}>();
   const [zoom,setZoom] = useState(1), [actual,setActual] = useState(false), [pan,setPan] = useState<Point>({x:0,y:0});
   const drag = useRef<{ start: Point; previous: Point; pan: Point; hand:boolean; rangePick?:boolean;objectBox?:boolean;appendColor?:boolean; shape?:{start:Point;end:Point}; handle?:'start'|'end'|'move';spot?:{id:string;part:'source'|'target'};crop?:{rect:CropRect;handle:CropHandle|'move'} } | undefined>(undefined);
@@ -34,7 +40,7 @@ export function Viewport(p: Props) {
   useEffect(() => {
     if (!p.frame) { setImage(undefined);return; }
     let valid=true;const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{if(valid)setImage(img);};img.src=p.frame.url;
-    setDetail(undefined);return()=>{valid=false;};
+    return()=>{valid=false;};
   }, [p.frame?.url]);
   useEffect(() => {
     if(!p.detailFrame){setDetail(undefined);return;}
@@ -49,35 +55,46 @@ export function Viewport(p: Props) {
     setLuminanceDetail(undefined);if(!p.luminanceMap||!p.detailFrame?.luminance)return;
     let valid=true;const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{if(valid)setLuminanceDetail(img);};img.src=p.detailFrame.luminance.url;return()=>{valid=false;};
   },[p.luminanceMap,p.detailFrame?.luminance?.url]);
-  useEffect(()=>{setZoom(1);setActual(false);setPan({x:0,y:0});},[p.frame?.sessionId]);
+  useEffect(()=>{setZoom(1);setActual(false);setPan({x:0,y:0});},[p.sessionId]);
   const fw=p.frame?.fullWidth||1,fh=p.frame?.fullHeight||1;
   const rotation=p.adjustments?.rotation||0;
   const crop=p.tool==='crop'?null:rotateCrop(p.adjustments?.crop||null,rotation);
   const displayPoint=(point:Point)=>canvasPoint(rotatePoint(point,rotation),t);
-  const t=imageTransform(fw,fh,size.width,size.height,crop,zoom,pan,actual,devicePixelRatio);
+  const mode=p.comparison?.layout||'off',dual=mode!=='off',horizontal=mode==='top-bottom'||mode==='split-horizontal';
+  const paneWidth=mode==='left-right'?size.width/2:size.width,paneHeight=mode==='top-bottom'?size.height/2:size.height;
+  const t=imageTransform(fw,fh,paneWidth,paneHeight,crop,zoom,pan,actual,devicePixelRatio);
   useEffect(()=>{
     const c=canvas.current;if(!c)return;
     const dpr=devicePixelRatio;c.width=Math.round(size.width*dpr);c.height=Math.round(size.height*dpr);
     const ctx=c.getContext('2d',{colorSpace:'srgb'})!;ctx.scale(dpr,dpr);ctx.clearRect(0,0,size.width,size.height);
     if(!image)return;
-    ctx.save();
-    if(crop){ctx.beginPath();ctx.rect(t.x+crop.x*fw*t.scale,t.y+crop.y*fh*t.scale,crop.width*fw*t.scale,crop.height*fh*t.scale);ctx.clip();}
-    ctx.imageSmoothingEnabled=!actual;
-    const gray=p.luminanceMap&&luminanceImage?.src===p.frame?.luminance?.url?luminanceImage:undefined;
-    ctx.drawImage(gray||image,t.x,t.y,fw*t.scale,fh*t.scale);
-    if(gray){if(actual&&luminanceDetail&&p.detailFrame?.luminance){const f=p.detailFrame.luminance;ctx.drawImage(luminanceDetail,t.x+f.x*t.scale,t.y+f.y*t.scale,f.width*t.scale,f.height*t.scale);}}
-    else if(detail && p.detailFrame){const f=p.detailFrame;ctx.drawImage(detail,t.x+(f.x||0)*t.scale,t.y+(f.y||0)*t.scale,f.width*t.scale,f.height*t.scale);}
-    c.dataset.luminance=gray?.src||'';
-    ctx.restore();
-    c.dataset.frame=image.src;c.dataset.detail=detail?.src||'';
-  },[image,detail,p.detailFrame,p.frame,luminanceImage,luminanceDetail,p.luminanceMap,size,zoom,pan,actual,p.adjustments?.crop,p.tool]);
+    const gray=!dual&&p.luminanceMap&&luminanceImage?.src===p.frame?.luminance?.url?luminanceImage:undefined;
+    const currentDetail=detail?.src===p.detailFrame?.url?detail:undefined;
+    const currentBeforeDetail=beforeDetail?.src===p.comparison?.detail?.url?beforeDetail:undefined;
+    const currentLuminanceDetail=luminanceDetail?.src===p.detailFrame?.luminance?.url?luminanceDetail:undefined;
+    function draw(img:HTMLImageElement|undefined,region:HTMLImageElement|undefined,f:PreviewFrame|undefined,second:boolean){
+      if(!img&&!region)return;ctx.save();
+      if(dual){ctx.beginPath();if(horizontal)ctx.rect(0,second?size.height/2:0,size.width,size.height/2);else ctx.rect(second?size.width/2:0,0,size.width/2,size.height);ctx.clip();}
+      if(second){if(mode==='left-right')ctx.translate(size.width/2,0);if(mode==='top-bottom')ctx.translate(0,size.height/2);}
+      if(crop){ctx.beginPath();ctx.rect(t.x+crop.x*fw*t.scale,t.y+crop.y*fh*t.scale,crop.width*fw*t.scale,crop.height*fh*t.scale);ctx.clip();}
+      ctx.imageSmoothingEnabled=!actual;if(img)ctx.drawImage(img,t.x,t.y,fw*t.scale,fh*t.scale);
+      if(actual&&region&&f)ctx.drawImage(region,t.x+(f.x||0)*t.scale,t.y+(f.y||0)*t.scale,f.width*t.scale,f.height*t.scale);
+      ctx.restore();
+    }
+    if(dual&&p.comparison?.frame?.fullWidth===fw&&p.comparison.frame.fullHeight===fh)draw(beforeImage,currentBeforeDetail,p.comparison.detail,false);
+    draw(gray||image,gray?currentLuminanceDetail:currentDetail,gray&&p.detailFrame?.luminance?{...p.detailFrame,...p.detailFrame.luminance}:p.detailFrame,dual);
+    c.dataset.luminance=gray?.src||'';c.dataset.frame=image.src;c.dataset.detail=actual?currentDetail?.src||'':'';
+    c.dataset.before=dual?beforeImage?.src||'':'';c.dataset.beforeDetail=dual&&actual?currentBeforeDetail?.src||'':'';c.dataset.layout=mode;
+  },[image,detail,p.detailFrame,p.frame,luminanceImage,luminanceDetail,p.luminanceMap,size,zoom,pan,actual,p.adjustments?.crop,p.tool,mode,beforeImage,beforeDetail,p.comparison?.frame,p.comparison?.detail]);
   useEffect(()=>{
     if(!actual||!p.frame)return;
     const timer=setTimeout(()=>{
-      const x=Math.max(0,Math.floor(-t.x/t.scale)),y=Math.max(0,Math.floor(-t.y/t.scale));
-      p.viewport(x,y,Math.min(2048,fw-x,Math.ceil(size.width/t.scale)),Math.min(2048,fh-y,Math.ceil(size.height/t.scale)));
+      const region=visibleImageRegion(t,paneWidth,paneHeight);if(!region)return;
+      const {x,y,width,height}=region;
+      p.viewport(x,y,width,height);
+      if(p.comparison?.frame)p.comparison.viewport(x,y,width,height);
     },160);return()=>clearTimeout(timer);
-  },[actual,pan,p.frame?.revision,size]);
+  },[actual,pan,p.frame?.url,size,mode,p.comparison?.frame?.url]);
   function point(event: React.PointerEvent): Point {
     const bounds=container.current!.getBoundingClientRect();return rotatePoint(imagePoint(event.clientX-bounds.left,event.clientY-bounds.top,t),-rotation);
   }
@@ -180,6 +197,8 @@ export function Viewport(p: Props) {
       onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)}
       onDrop={e=>{e.preventDefault();setDragOver(false);p.drop(window.captraw.droppedFiles(Array.from(e.dataTransfer.files)));}}>
       <canvas ref={canvas} aria-label="显影预览" />
+      {p.beforeLabel&&image&&<div className="before-state-label" role="status">{p.beforeLabel} · 同步构图</div>}
+      {dual&&image&&<div className={`comparison-labels ${horizontal?'horizontal':''}`} aria-label="前后对比"><span title="前状态沿用当前裁切、旋转和镜头校正">{p.comparison?.label} · 同步构图</span><span>当前编辑</span></div>}
       {!image&&!p.busy&&<div className="welcome"><div className="welcome-mark"><Aperture size={48} strokeWidth={1}/></div><span className="eyebrow">A BETTER START FOR EVERY RAW</span><h1>从光线，开始。</h1><p>让原片的每一份细节，都有表达的空间。</p><button className="primary" onClick={p.open}><FolderOpen size={16}/>打开照片<span>⌘ O</span></button><small>或将 RAW 文件拖到这里<br/>所有显影均在本机完成，原片保持不变。</small></div>}
       {p.busy&&<div className="rendering"><i/>正在显影</div>}
       <svg className="mask-overlay" width={size.width} height={size.height} aria-hidden="true">
@@ -219,6 +238,6 @@ export function Viewport(p: Props) {
         </g>;})()}
       </svg>
     </div>
-    <div className="view-controls"><button onClick={()=>{setActual(false);setZoom(1);setPan({x:0,y:0});}} className={!actual&&zoom===1?'active':''} title="适应窗口"><Maximize size={14}/>适屏</button><button onClick={()=>{setActual(true);setPan({x:0,y:0});}} className={actual?'active':''} title="原始像素预览"><Scan size={14}/>1:1</button><span>{actual?'100%':`${Math.round(t.scale*100)}%`}</span><span className="view-hint">{p.tool==='object'?(p.object?.mode==='box'?'拖动框住对象 · 空格平移':'单击添加 · Option 单击排除 · 空格平移'):p.tool==='white-balance'?'单击照片中的中性灰色 · I 选择吸管 · Esc 退出':p.tool==='repair'?(p.repair?.selectingSource?'单击选择取样来源':'单击目标修复 · ⌥ 单击重新取样 · 空格平移'):p.tool==='crop'?'拖动设置裁切范围':p.tool==='hand'?'滚轮缩放 · 拖动平移':p.tool==='eraser'?'在选中画笔蒙版中擦除':'拖动绘制 · 拖动中心移动 · 拖动端点调整范围'}</span></div>
+    <div className="view-controls"><button disabled={!p.frame} onClick={()=>{setActual(false);setZoom(1);setPan({x:0,y:0});}} className={!actual&&zoom===1?'active':''} title="适应窗口"><Maximize size={14}/>适屏</button><button disabled={!p.frame} onClick={()=>{setActual(true);setPan({x:0,y:0});}} className={actual?'active':''} title="原始像素预览"><Scan size={14}/>1:1</button><span aria-label="缩放比例">{!p.frame?'—':actual?'100%':`${Math.round(t.scale*devicePixelRatio*100)}%`}</span>{p.comparisonControl}<span className="view-hint">{p.tool==='object'?(p.object?.mode==='box'?'拖动框住对象 · 空格平移':'单击添加 · Option 单击排除 · 空格平移'):p.tool==='white-balance'?'单击照片中的中性灰色 · I 选择吸管 · Esc 退出':p.tool==='repair'?(p.repair?.selectingSource?'单击选择取样来源':'单击目标修复 · ⌥ 单击重新取样 · 空格平移'):p.tool==='crop'?'拖动设置裁切范围':p.tool==='hand'?'滚轮缩放 · 拖动平移':p.tool==='eraser'?'在选中画笔蒙版中擦除':'拖动绘制 · 拖动中心移动 · 拖动端点调整范围'}</span></div>
   </section>;
 }

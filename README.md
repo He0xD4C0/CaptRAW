@@ -7,14 +7,17 @@
 
 ## 安装与使用
 
-构建产物为 `release/CaptRAW-0.34.0-arm64.dmg`，将应用拖入 Applications，也可直接运行 `release/mac-arm64/CaptRAW.app`。本次依赖瓶装库的最低系统为 **macOS 26.0，ARM64**；其他版本未验收。原型使用 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证，本机验收不等于跨机器 Gatekeeper 验收。
+构建产物为 `release/CaptRAW-0.41.0-arm64.dmg`，将应用拖入 Applications，也可直接运行 `release/mac-arm64/CaptRAW.app`。本次依赖瓶装库的最低系统为 **macOS 26.0，ARM64**；其他版本未验收。原型使用 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证，本机验收不等于跨机器 Gatekeeper 验收。
 
-打开照片后在右侧折叠面板调整；“曲线 → 参数”控制四个区域，图下三个分界支持鼠标、方向键和数值输入；最右工具栏切换编辑、裁切、修复和蒙版。蒙版面板创建组、添加组件或减去 / 相交，拖动中心移动、端点改变范围；画笔和橡皮擦仅在蒙版模式出现。文件名旁、胶片缩略图和底栏都有关闭入口，未保存时选择保存 / 放弃 / 取消；底栏“完成”保存后关闭。裁切区域内的“完成”结束裁切。1:1 按物理屏幕像素显示，并从核心请求全分辨率区域；拖动可平移。
+打开照片后在右侧折叠面板调整；“曲线 → 参数”控制四个区域，图下三个分界支持鼠标、方向键和数值输入；最右工具栏切换编辑、裁切、修复和蒙版。蒙版面板创建组、添加组件或减去 / 相交，拖动中心移动、端点改变范围；画笔和橡皮擦仅在蒙版模式出现。文件名旁、胶片缩略图和底栏都有关闭入口，未保存时选择保存 / 放弃 / 取消；底栏“完成”保存后关闭。裁切区域内的“完成”结束裁切。1:1 按物理屏幕像素显示，并从核心请求完整可见区域，不再截断到 2048×2048；拖动可平移。高质量适屏图刷新不会清除同一处理版本的详细区域。
 
+- 预览底栏可选择左右、上下、左右分割、上下分割；Q 正向、Shift+Q 反向切换。前状态沿用当前裁切、旋转和镜头校正，两侧共用缩放 / 平移并支持真实 1:1。对比视图只用手形交互，返回单图后继续在图像上编辑；数值调节可在对比中使用。
+- 点曲线支持多点、端点移动、输入 / 输出数值和方向键微调；Shift 每次调整 10，Esc 撤回当前输入或拖动。新操作采用 0–255 整数网格，读取和保存已有小数坐标不取整。
 - `⌘O` 打开；`⌘S` 保存；`⌘W` 关闭；`⌘Z` / `⇧⌘Z` 撤销 / 重做。
 - 裁切模式：`X` 切换横竖，`Enter` 完成；拖动边角缩放、框内移动、框外新建。
-- `P` 或 `\` 切换初始显影；按住“按住对比”按钮临时查看。
+- `P` 切换前状态；按住“按住对比”按钮临时查看。默认使用打开照片时的设置（包括 XMP）。底栏“保存前状态”或 `Option/Alt+P` 保存当前设置为对比参考，“交换前后设置”可一步撤销，“还原打开时状态”恢复默认参考。参考只保留于当前会话，切换照片保留，关闭后不写入 XMP。`Shift+P` 打开预设。
 - `I` 白平衡吸管；可选 5×5 / 11×11 / 25×25 原图像素，在中性灰处单击；`Esc` 退出。自动与预设结果保存为固定的通道系数；手动改色温 / 色调转为自定义。
+- 0.36 修正镜头校正后的吸管错位：取样跟随预览中的畸变、色差、90° 旋转和裁切位置，已有固定白平衡系数及配方渲染不变。
 - “配置文件 → 导入 DCP / ICC”将文件复制到本地库；保存 XMP 时随附可校验资产。移动编辑文件须保留 `.xmp.assets` 文件夹。DCP 检查机型限制，控件按实际能力显示；Adobe 名称 / digest 自动匹配仍待验证。
 - 全局白平衡使用 Adobe Temperature / Tint 坐标（2000–50000 K，-150–150），由当前相机 DCP / 矩阵转换。XMP 只含其中一项时保留另一项；Adobe 相机配置、自动模式重算与完整像素等效仍待验证，见 [白平衡接口](docs/ENGINE.md#xmp-白平衡坐标033)。
 - `⇧L` 新建亮度范围，直接单击或拖框取样；“显示亮度图”切换灰度视图，“亮度取样”重新启用吸管。
@@ -22,6 +25,7 @@
 - `E` 编辑，`M` 蒙版，`K` 新画笔，`⇧K` 添加画笔组件，`G` 线性，`J` 径向，`C` 裁切，`H` 平移，空格临时平移，`R/L` 右 / 左旋转，`Y` 覆盖层，`X` 反选蒙版。
 - `[` / `]` 改画笔大小，`⇧[` / `⇧]` 改羽化，按住 Option 临时擦除。实际参数及颜色使用 ART 语义，不能按相同数值复现 ACR。
 - 编辑和预设使用 `.xmp`；默认识别原片旁的同名 XMP。当前初始显影基线固定为 4，旧 JSON 格式不读取、不迁移。撤销历史仅存在于当前会话；关闭文件与退出应用均提示未保存更改。Adobe 参数支持范围见 [XMP 接口说明](docs/ENGINE.md#xmp-编辑文档与预设032替代旧文件格式)。
+- 胶片条“保存所选…”将选中的编辑批量另存至所选文件夹，包含所需蒙版和配置资产；同名文件自动编号，不覆盖原有 XMP。失败项保留未保存标记，可单独重试。取消或保存中退出会完成当前文件后停止，已保存文件保留。
 - 默认导出新文件；保存对话框中的覆盖选择才允许替换已有输出。取消或失败保留已有目标文件。
 
 ## 构建
@@ -47,6 +51,8 @@ pnpm package
 
 ## 验证
 
+生成受控 EXIF 测试图需要 `exiftool`（`brew install exiftool`）。白平衡光学校正回归使用 `~/Applications/CaptRAW-0.35.app`，裁切局部明暗回归使用 `~/Applications/CaptRAW-0.39.app` 作为修复前参考；产品运行不依赖这些版本。
+
 ```sh
 pnpm ci:check
 node scripts/fetch-samples.mjs
@@ -55,20 +61,31 @@ uv pip install --python build/qa-venv/bin/python -r tests/requirements.txt
 build/qa-venv/bin/python tests/synthetic.py
 node tests/xmp-sdk.mjs
 node tests/xmp-documents.mjs
+node tests/batch-save.mjs
+node tests/batch-save-e2e.mjs
+node tests/cropped-tone.mjs
+node tests/cropped-tone-e2e.mjs
+node tests/comparison-e2e.mjs
+node tests/comparison-state-e2e.mjs
+node tests/wide-detail.mjs
+node tests/wide-detail-e2e.mjs
 pnpm test:e2e
 node tests/xmp-e2e.mjs
 node tests/revision-e2e.mjs
+node tests/point-curve-e2e.mjs
 node tests/workbench-e2e.mjs
 node tests/restart-e2e.mjs
 node tests/white-balance.mjs
 build/qa-venv/bin/python tests/inspect-white-balance.py
 node tests/white-balance-e2e.mjs
+node tests/white-balance-optics.mjs
+node tests/white-balance-optics-e2e.mjs
 node tests/desktop-consistency.mjs artifacts/white-balance-gui/switched.xmp artifacts/white-balance-gui/independent.tiff
 ```
 
 原生和桌面测试需先执行 `pnpm build`；`xmp-e2e` 使用 `xmp-documents` 生成的 Adobe 样本。设定 `CAPTRAW_APP=/绝对路径/CaptRAW.app/Contents/MacOS/CaptRAW` 可测试安装包；`CAPTRAW_ENGINE`、`CAPTRAW_RESOURCES` 和 `CAPTRAW_XMP_BINARY` 指向同一候选包内对应程序与资源。默认入口测试本地构建，不代表已安装应用通过验收。
 
-Nikon 相机构图还需 ExifTool 和 `tests/nikon-he.mjs` 固定样本。`tests/camera-crop.mjs` 使用固定 ART CLI 作为同配方 TIFF 像素对照。历史 GUI 与文档专项已迁移至 XMP、当前处理版本和基线 4，移除旧 JSON 迁移验收；各专项仍需先生成对应夹具。语法迁移通过不表示这些专项已全部在新安装包重跑；旧版验收保留于 [验收记录](docs/ACCEPTANCE.md)。
+Nikon 相机构图还需 ExifTool 和 `tests/nikon-he.mjs` 固定样本。`tests/camera-crop.mjs` 使用固定 ART CLI 作为同配方 TIFF 像素对照。历史 GUI 与文档专项已迁移至 XMP、当前处理版本和基线 4，移除旧 JSON 迁移验收；各专项仍需先生成对应夹具；预设 GUI 测试依赖 `tests/object-selection-e2e.mjs` 生成的 `committed.xmp`，两者需使用相同 `CAPTRAW_OBJECT_E2E_OUT`。旧 JSON 夹具不能替代。语法迁移通过不表示这些专项已全部在新安装包重跑；旧版验收保留于 [验收记录](docs/ACCEPTANCE.md)。
 
 白平衡独立数值与双光源 DNG 验证（Colour Science 仅作为 QA 参考，不进入产品）：
 

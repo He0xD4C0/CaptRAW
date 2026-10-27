@@ -5,7 +5,7 @@ import {electron} from './electron-background.mjs';
 import {resolve,join} from 'node:path';
 import {readFileSync,writeFileSync,mkdirSync,existsSync,rmSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-const out=resolve('artifacts/camera-crop-gui');mkdirSync(out,{recursive:true});const executablePath=process.env.CAPTRAW_APP,checks=[],errors=[];
+const out=resolve(process.env.CAPTRAW_CAMERA_CROP_OUT||'artifacts/camera-crop-gui');mkdirSync(out,{recursive:true});const executablePath=process.env.CAPTRAW_APP,checks=[],errors=[];
 const source=resolve('build/samples/nikon-he/Z5_2_3x2_HE_196971ea.NEF'),hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex'),sourceHash=hash(source);
 let app,page;
 const pass=s=>{checks.push(s);console.log('PASS',s);};
@@ -18,7 +18,7 @@ try{
  await launch();await open(source);await size('3984 × 2656');const original=await save('initial');expect(original.baselineVersion).toBe(4);expect(original.engineVersion).toBe(ENGINE_VERSION);const initial=await pixels();
  await expect(page.getByRole('button',{name:'相机原始构图',exact:true})).toHaveCount(0);await page.getByRole('button',{name:'裁切 C',exact:true}).click();await expect(page.getByRole('button',{name:'相机原始构图',exact:true})).toBeVisible();
  await settle(()=>page.getByRole('button',{name:'清除裁切',exact:true}).click());await page.locator('.crop-actions').getByRole('button',{name:'完成',exact:true}).click();await size('3992 × 2664');const full=await pixels();expect(full).not.toBe(initial);pass('fresh Nikon uses camera dimensions; visible crop controls can recover the full ART area');
- await settle(()=>page.keyboard.press('p'));await size('3984 × 2656');expect(await pixels()).toBe(initial);await settle(()=>page.keyboard.press('p'));await size('3992 × 2664');expect(await pixels()).toBe(full);pass('before/after compares both actual pixels and the initial camera framing');
+ await page.keyboard.press('p');await page.locator('.rendering').waitFor({state:'hidden'});await expect(page.locator('.before-state-label')).toBeVisible();await size('3992 × 2664');expect(await pixels()).toBe(full);await page.keyboard.press('p');await expect(page.locator('.before-state-label')).toHaveCount(0);await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__frames.filter(f=>f.kind!=='detail').at(-1)?.url);await size('3992 × 2664');expect(await pixels()).toBe(full);pass('before/after preserves the current camera framing and restores the same current pixels');
  await settle(()=>page.getByRole('button',{name:'撤销',exact:true}).click());await size('3984 × 2656');expect(await pixels()).toBe(initial);await settle(()=>page.getByRole('button',{name:'重做',exact:true}).click());await size('3992 × 2664');pass('clear crop is one undoable operation');
  await page.getByRole('button',{name:'裁切 C',exact:true}).click();await settle(()=>page.getByRole('button',{name:'相机原始构图',exact:true}).click());await page.locator('.crop-actions').getByRole('button',{name:'完成',exact:true}).click();await size('3984 × 2656');expect(await pixels()).toBe(initial);
  await settle(()=>page.getByRole('button',{name:'顺时针旋转 90 度',exact:true}).click());await size('2656 × 3984');const rotated=await save('rotated');expect(rotated.adjustments.crop).toEqual(original.adjustments.crop);expect(rotated.adjustments.rotation).toBe(90);pass('restore camera framing and rotate preserve sensor coordinates');

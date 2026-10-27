@@ -82,6 +82,9 @@ export interface ImageSession {
 export interface LuminancePreview {url:string;x:number;y:number;width:number;height:number}
 export interface LuminanceSample {minimum:number;maximum:number;pixels:number;revision:number}
 export interface MaskPreview {id:string;url:string;x:number;y:number;width:number;height:number}
+export type ComparisonLayout = 'off'|'left-right'|'top-bottom'|'split-vertical'|'split-horizontal';
+export type ComparisonGeometry = Pick<Adjustments,'rotation'|'crop'|'lensCorrections'|'lensProfile'>;
+export interface ComparisonSettings {adjustments:Adjustments;artProfile:string;geometry:ComparisonGeometry}
 export interface PreviewFrame {
   sessionId: string; revision: number; url: string; width: number; height: number;
   fullWidth: number; fullHeight: number; kind: 'fit' | 'detail' | 'before';
@@ -89,9 +92,11 @@ export interface PreviewFrame {
   histogram?:number[][];curveHistogram?:number[]|null;mask?:MaskPreview|null;luminance?:LuminancePreview|null;
 }
 export interface ExportResult {source:string;output?:string;error?:string}
+export interface BatchSaveRequest {documents:{path:string;width:number;height:number;artProfile:string;adjustments:Adjustments;xmpPacket?:string}[]}
+export interface BatchSaveResult {results:ExportResult[];cancelled:boolean}
 export interface BatchExportRequest {documents:{path:string;width:number;height:number;artProfile:string;adjustments:Adjustments}[];format:'jpeg'|'tiff';colorSpace:OutputColorSpace;options?:ExportOptions}
 export interface JobStatus { id: string; state: 'running' | 'done' | 'cancelled' | 'error'; progress: number; message: string; total?:number;results?:ExportResult[] }
-export type EngineEvent = {event:'object-progress';id:string;message:string} | { event: 'preview'; frame: PreviewFrame } | { event: 'job'; job: JobStatus } | { event: 'error'; message: string } | {event:'synchronize-progress';message:string} | {event:'command';command:'open'|'save'|'close'};
+export type EngineEvent = {event:'comparison-preview';frame:PreviewFrame} | {event:'comparison-error';sessionId:string;revision:number;message:string} | {event:'save-progress';message:string} | {event:'object-progress';id:string;message:string} | { event: 'preview'; frame: PreviewFrame } | { event: 'job'; job: JobStatus } | { event: 'error'; message: string } | {event:'synchronize-progress';message:string} | {event:'command';command:'open'|'save'|'close'};
 export interface WhiteBalanceRequest {mode:'camera'|'auto'|'sample'|'preset'|'profile';preset?:string;x?:number;y?:number;size?:number;colorProfile?:ColorProfileSettings}
 export interface WhiteBalanceResult {temperature:number;tint:number;wbMode:string;wbMultipliers:number[];wbApproximate:boolean;colorProfile?:ColorProfileSettings}
 export const OUTPUT_COLOR_SPACES={'srgb':'sRGB','adobe-rgb':'Adobe RGB (1998)','prophoto-rgb':'ProPhoto RGB','display-p3':'Display P3','rec2020':'Rec. 2020'} as const;
@@ -123,12 +128,15 @@ export interface CaptRAWAPI {
   droppedFiles(files: File[]): string[];
   open(path: string): Promise<ImageSession>;
   update(sessionId: string, revision: number, adjustments: Adjustments, artProfile?: string, maskId?:string, luminance?:boolean,colorSampling?:boolean): Promise<{ artProfile: string; lensStatus:LensProfileStatus }>;
+  comparison(sessionId:string,revision:number,settings:ComparisonSettings|null):Promise<void>;
+  comparisonViewport(sessionId:string,revision:number,x:number,y:number,width:number,height:number):Promise<void>;
   viewport(sessionId: string, revision: number, x: number, y: number, width: number, height: number): Promise<void>;
   sampleColor(sessionId:string,revision:number,start:Point,end?:Point):Promise<{l:number;c:number;h:number;pixels:number;revision:number}>;
   sampleLuminance(sessionId:string,revision:number,start:Point,end?:Point):Promise<LuminanceSample>;
   whiteBalance(sessionId:string,request:WhiteBalanceRequest):Promise<WhiteBalanceResult>;
-  before(sessionId: string, revision: number): Promise<void>;
   save(session: ImageSession, artProfile: string): Promise<string>;
+  saveSelected(request:BatchSaveRequest):Promise<BatchSaveResult|null>;
+  cancelSave():Promise<void>;
   export(sessionId: string, artProfile: string, format: 'jpeg' | 'tiff', colorSpace?:OutputColorSpace,options?:ExportOptions): Promise<string | null>;
   cancel(): Promise<void>;
   close(): Promise<void>;

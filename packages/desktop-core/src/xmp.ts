@@ -44,12 +44,15 @@ export const text=(value:unknown):XMPNode=>({value:String(value)});
 export function lookup(properties:XMPProperty[],ns:string,name:string){return properties.find(p=>p.ns===ns&&p.name===name)?.node??undefined;}
 export function readExtension(properties:XMPProperty[],name:string){const value=lookup(properties,CT,name);return value?decode(value):undefined;}
 const curves={curve:'ToneCurvePV2012',redCurve:'ToneCurvePV2012Red',greenCurve:'ToneCurvePV2012Green',blueCurve:'ToneCurvePV2012Blue'} as const;
+const endpointIdentity=(points?:Adjustments['curve'])=>points?.length===2&&points[0].x===0&&points[0].y===0&&points[1].x===1&&points[1].y===1;
 export const standardKeys=['exposure','temperature','tint',...Object.keys(curves)] as (keyof Adjustments)[];
 export function encodeAdjustments(adjustments:Partial<Adjustments>):XMPProperty[]{
  const fields: XMPProperty[]=[];
  for(const [key,name] of [['exposure','Exposure2012'],['temperature','Temperature'],['tint','Tint']] as const){if(key!=='exposure'&&adjustments[key]!==undefined&&!Number.isInteger(adjustments[key]))throw new Error(`XMP ${name} 必须为整数。`);fields.push(property(CRS,name,adjustments[key]===undefined?null:text(adjustments[key])));}
  if(adjustments.temperature!==undefined||adjustments.tint!==undefined)fields.push(property(CRS,'WhiteBalance',text('Custom')));
  for(const [key,name] of Object.entries(curves) as [keyof typeof curves,string][]){const points=adjustments[key];fields.push(property(CRS,name,points?{items:points.map(p=>text(`${p.x*255}, ${p.y*255}`)),options:0x600}:null));}
+ const curvePoints=(Object.keys(curves) as (keyof typeof curves)[]).map(key=>adjustments[key]);
+ if(curvePoints.some(points=>points!==undefined))fields.push(property(CRS,'ToneCurveName2012',text(curvePoints.every(endpointIdentity)?'Linear':'Custom')));
  const native=structuredClone(adjustments);for(const key of standardKeys)delete native[key];
  fields.push(property(CT,'ARTAdjustments',encode(native)),property(CT,'ARTWhiteBalanceCoordinates',adjustments.wbMultipliers?encode([adjustments.temperature,adjustments.tint]):null));
  return fields;
@@ -63,14 +66,24 @@ export function decodeAdjustments(properties:XMPProperty[]){
  for(const [key,name] of [['temperature','Temperature'],['tint','Tint']] as const)if(adjustments[key]!==undefined&&!Number.isInteger(adjustments[key]))throw new Error(`XMP ${name} 必须为整数。`);
  for(const [key,name] of Object.entries(curves) as [keyof typeof curves,string][]){const node=lookup(properties,CRS,name);if(!node)continue;
   if(!node.items||node.items.length<2||node.items.length>128)throw new Error('XMP 曲线点数量无效。');
-  let previous=-1;adjustments[key]=node.items.map(item=>{const parts=item.value?.split(',').map(v=>Number(v.trim()));if(!parts||parts.length!==2||parts.some(v=>!Number.isFinite(v)||v<0||v>255)||parts[0]<=previous)throw new Error('XMP 曲线点无效。');previous=parts[0];return {x:parts[0]/255,y:parts[1]/255};});
+  let previous=-1;adjustments[key]=node.items.map(item=>{
+   const tokens=item.value?.split(',').map(v=>v.trim());
+   if(!tokens||tokens.length!==2||tokens.some(v=>!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(v)))throw new Error('XMP 曲线点无效。');
+   const parts=tokens.map(Number);if(parts.some(v=>!Number.isFinite(v)||v<0||v>255)||parts[0]<=previous)throw new Error('XMP 曲线点无效。');previous=parts[0];return {x:parts[0]/255,y:parts[1]/255};
+  });
  }
  if(adjustments.wbMultipliers){const anchor=readExtension(properties,'ARTWhiteBalanceCoordinates');if(!Array.isArray(anchor)||anchor[0]!==adjustments.temperature||anchor[1]!==adjustments.tint){adjustments.wbMultipliers=null;adjustments.wbMode='custom';adjustments.wbApproximate=false;}}
- const recognized=new Set(['Exposure2012','Temperature','Tint',...Object.values(curves),'Version','ProcessVersion','Name','Group','UUID','PresetType','SupportsAmount','HasSettings']);
+ const recognized=new Set(['Exposure2012','Temperature','Tint','ToneCurveName2012',...Object.values(curves),'Version','ProcessVersion','Name','Group','UUID','PresetType','SupportsAmount','HasSettings']);
  const wb=lookup(properties,CRS,'WhiteBalance')?.value,hasWB=adjustments.temperature!==undefined||adjustments.tint!==undefined;
  if(wb==='Custom'||hasWB)recognized.add('WhiteBalance');
  const unsupported=properties.filter(p=>p.ns===CRS&&!recognized.has(p.name)).map(p=>p.name);
  const warnings:string[]=[];
+ const curveName=lookup(properties,CRS,'ToneCurveName2012'),curvePoints=(Object.keys(curves) as (keyof typeof curves)[]).map(key=>adjustments[key]).filter(points=>points!==undefined);
+ if(curveName){
+  if(!curvePoints.length)warnings.push(`ToneCurveName2012=${curveName.value||'（空）'} 仅有名称，没有 PV2012 曲线坐标，尚未应用；未按名称推断或生成曲线。`);
+  else if(curveName.value==='Linear'&&curvePoints.some(points=>points[0].x!==0||points.at(-1)!.x!==1||points.some(p=>p.x!==p.y)))warnings.push('ToneCurveName2012=Linear 与记录的曲线坐标不一致；CaptRAW 使用记录的坐标，保存时同步为 Custom。Adobe 对名称与坐标的处理优先级尚未验证。');
+  else if(curveName.value!=='Linear'&&curveName.value!=='Custom')warnings.push(`ToneCurveName2012=${curveName.value||'（空）'} 与曲线坐标的对应关系尚未验证；CaptRAW 使用记录的坐标，未按名称生成曲线。Adobe 对名称与坐标的处理优先级尚未验证。`);
+ }
  if(!readExtension(properties,'EngineVersion'))warnings.push('Adobe 参数按当前 ART 管线显影；尚未验证与 ACR 的像素等效。');
  if(!readExtension(properties,'EngineVersion')&&(adjustments.temperature!==undefined||adjustments.tint!==undefined))warnings.push('色温 / 色调按当前相机 DCP 或矩阵转换；未导入 Adobe 相机配置，颜色仍可能不同。');
  if(hasWB&&wb&&wb!=='Custom')warnings.push(`WhiteBalance=${wb} 采用文件中已记录的色温 / 色调，未按 Adobe 模式重新计算；保存为固定的自定义白平衡。`);

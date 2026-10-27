@@ -1,9 +1,13 @@
 import type {ExportOptions} from '@captraw/contracts/export-options';
 import { useEffect, useRef, useState } from 'react';
 import type {SyncGroup} from '@captraw/contracts/synchronize';
-import type { Adjustments, EngineEvent, ImageSession, JobStatus, LocalMask, MaskType, PreviewFrame, WhiteBalanceRequest, OutputColorSpace, Point } from '@captraw/contracts';
-export interface DocumentState { image: ImageSession; adjustments: Adjustments; initial: Adjustments; profile: string; dirty: boolean; saved:Adjustments; past: Adjustments[]; future: Adjustments[]; thumbnail?: string;previewToken?:string;thumbnailFrame?:string; }
+import type { Adjustments, EngineEvent, ImageSession, JobStatus, LocalMask, MaskType, PreviewFrame, WhiteBalanceRequest, OutputColorSpace, Point, BatchSaveResult } from '@captraw/contracts';
+export interface EditingState {adjustments:Adjustments;profile:string;profileId:number}
+type HistoryState=EditingState&{before?:EditingState|null};
+export interface DocumentState extends EditingState { image: ImageSession; initial: Adjustments; dirty: boolean; saved:Adjustments;savedProfileId:number;opened?:EditingState;before?:EditingState; past: HistoryState[]; future: HistoryState[]; thumbnail?: string;previewToken?:string;thumbnailFrame?:string; }
 const copy = <T,>(value: T): T => structuredClone(value);
+const snapshot=(d:EditingState):EditingState=>copy({adjustments:d.adjustments,profile:d.profile,profileId:d.profileId});
+const dirty=(d:DocumentState,a:Adjustments=d.adjustments,profileId=d.profileId)=>profileId!==d.savedProfileId||JSON.stringify(a)!==JSON.stringify(d.saved);
 export function useWorkbench() {
   const [documents, setDocuments] = useState<DocumentState[]>([]);
   const [activeId, setActiveId] = useState('');
@@ -15,13 +19,14 @@ export function useWorkbench() {
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [status, setStatus] = useState('本地处理 · 原片保持不变');
   const [opening,setOpening]=useState(false),[wbPending,setWbPending]=useState(false);
   const [job, setJob] = useState<JobStatus>();
+  const [saveOpen,setSaveOpen]=useState(false),[saveBusy,setSaveBusy]=useState(false),[saveProgress,setSaveProgress]=useState(''),[saveResult,setSaveResult]=useState<BatchSaveResult|null>(null),[saveError,setSaveError]=useState('');
   const [presetBusy,setPresetBusy]=useState(false);const presetCancelled=useRef(false);
   const [syncOpen,setSyncOpen]=useState(false),[syncBusy,setSyncBusy]=useState(false),[syncProgress,setSyncProgress]=useState(''),[syncError,setSyncError]=useState('');
   const syncStatusRevision=useRef(-1);const syncCancelled=useRef(false);const syncOpenRef=useRef(syncOpen);syncOpenRef.current=syncOpen;
   const docs = useRef(documents); docs.current = documents;
   const idRef = useRef(activeId); idRef.current = activeId;
-  const editEpoch=useRef(0);
-  const revision = useRef(0), lastApplied = useRef(0), gesture = useRef<Adjustments | undefined>(undefined);
+  const editEpoch=useRef(0),profileEpoch=useRef(0);
+  const revision = useRef(0), lastApplied = useRef(0), gesture = useRef<EditingState | undefined>(undefined);
   const loading = useRef(false), timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const active = documents.find(d => d.image.id === activeId);
   const updateDocument = (id: string, change: (d: DocumentState) => DocumentState) => setDocuments(old => old.map(d => d.image.id === id ? change(d) : d));
@@ -31,7 +36,7 @@ export function useWorkbench() {
     try {
       const result = await window.captraw.update(doc.image.id, rev, doc.adjustments, doc.profile,maskRef.current,luminanceRef.current,colorRef.current);
       if (idRef.current === doc.image.id && rev >= lastApplied.current) {
-        lastApplied.current = rev; updateDocument(doc.image.id, d => ({ ...d, profile: result.artProfile,image:{...d.image,lensStatus:result.lensStatus} }));
+        lastApplied.current = rev; updateDocument(doc.image.id, d => d.adjustments!==doc.adjustments||d.profileId!==doc.profileId?d:({ ...d, profile: result.artProfile,opened:d.opened||snapshot({...d,profile:result.artProfile}),image:{...d.image,lensStatus:result.lensStatus} }));
       }
       return result.artProfile;
     } catch (e) { setError(String(e)); setBusy(false); throw e; }
@@ -44,6 +49,7 @@ export function useWorkbench() {
         updateDocument(event.frame.sessionId,d=>({...d,previewToken:event.frame.url}));
         const image=new Image();image.crossOrigin='anonymous';image.onload=()=>{const c=document.createElement('canvas');c.width=180;c.height=Math.round(180*image.height/image.width);c.getContext('2d')!.drawImage(image,0,0,c.width,c.height);updateDocument(event.frame.sessionId,d=>d.previewToken===event.frame.url?{...d,thumbnail:c.toDataURL('image/jpeg',.75),thumbnailFrame:event.frame.url}:d);};image.src=event.frame.url;
       }
+    } else if(event.event==='save-progress'){setSaveProgress(event.message);
     } else if(event.event==='synchronize-progress'){setSyncProgress(event.message);
     } else if(event.event==='command'){
       if(syncOpenRef.current||loading.current||document.querySelector('dialog[open]'))return;
@@ -58,7 +64,7 @@ export function useWorkbench() {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => { void renderDocument(active).catch(() => {}); }, 90);
     return () => clearTimeout(timer.current);
-  }, [activeId, active?.adjustments,maskId,luminance,colorSampling]);
+  }, [activeId, active?.adjustments,active?.profileId,maskId,luminance,colorSampling]);
   async function openPaths(paths: string[]) {
     if (!paths.length || loading.current) return;
     const fresh=paths.filter(path=>!docs.current.some(d=>d.image.path===path));
@@ -69,8 +75,8 @@ export function useWorkbench() {
       // Each file is decoded to establish its own defaults and source identity.
       for (const path of paths) {
         const image = await window.captraw.open(path);
-        const entry: DocumentState = { image, adjustments: copy(image.adjustments), initial: copy(image.initialAdjustments || image.adjustments), profile: image.recipe?.artProfile || '', dirty: false, saved:copy(image.adjustments), past: [], future: [] };
-        setDocuments(old => [...old.filter(d => d.image.path !== image.path), entry]);
+        const entry: DocumentState = { image, adjustments: copy(image.adjustments), initial: copy(image.initialAdjustments || image.adjustments), profile: image.recipe?.artProfile || '',profileId:0,savedProfileId:0, dirty: false, saved:copy(image.adjustments), past: [], future: [] };
+        setDocuments(old => old.some(d=>d.image.path===image.path)?old.map(d=>d.image.path===image.path?entry:d):[...old,entry]);
         setActiveId(image.id); idRef.current = image.id; setFrame(undefined);
         await renderDocument(entry);
       }
@@ -92,21 +98,36 @@ export function useWorkbench() {
     if(loading.current)return;
     ++editEpoch.current;const id = idRef.current;
     const current = docs.current.find(d => d.image.id === id); if (!current) return;
-    if (transient && !gesture.current) gesture.current = copy(current.adjustments);
-    updateDocument(id, d => {const next=change(copy(d.adjustments));return { ...d, adjustments:next, dirty: JSON.stringify(next)!==JSON.stringify(d.saved), past: transient ? d.past : [...d.past, copy(d.adjustments)], future: [] };});
+    if (transient && !gesture.current) gesture.current = snapshot(current);
+    updateDocument(id, d => {const next=change(copy(d.adjustments));return { ...d, adjustments:next, dirty: dirty(d,next), past: transient ? d.past : [...d.past, snapshot(d)], future: [] };});
   }
   function commit() {
     if (!gesture.current) return;
     const previous = gesture.current;gesture.current = undefined;
-    updateDocument(idRef.current, d => JSON.stringify(d.adjustments)===JSON.stringify(previous)?d:({ ...d, past: [...d.past, previous], future: [], dirty: JSON.stringify(d.adjustments)!==JSON.stringify(d.saved) }));
+    updateDocument(idRef.current, d => JSON.stringify(d.adjustments)===JSON.stringify(previous.adjustments)?d:({ ...d, past: [...d.past, previous], future: [], dirty: dirty(d) }));
   }
   function undo(redo = false) {
     if(loading.current)return;
     ++editEpoch.current;gesture.current = undefined;
     updateDocument(idRef.current, d => {
       const stack = redo ? d.future : d.past;if (!stack.length) return d;
-      return { ...d, adjustments: copy(stack.at(-1)!), past: redo ? [...d.past, d.adjustments] : d.past.slice(0,-1), future: redo ? d.future.slice(0,-1) : [...d.future,d.adjustments], dirty: JSON.stringify(stack.at(-1))!==JSON.stringify(d.saved) };
+      const target=stack.at(-1)!,inverse:HistoryState={...snapshot(d),...('before' in target?{before:d.before?copy(d.before):null}:{})};
+      return { ...d,...snapshot(target),...('before' in target?{before:target.before?copy(target.before):undefined}:{}),past: redo ? [...d.past,inverse] : d.past.slice(0,-1), future: redo ? d.future.slice(0,-1) : [...d.future,inverse], dirty: dirty(d,target.adjustments,target.profileId) };
     });
+  }
+  function comparisonState(action:'capture'|'reset'|'swap'){
+    if(loading.current)return;
+    commit();if(action==='swap')++editEpoch.current;
+    updateDocument(idRef.current,d=>{
+      if(action==='capture')return {...d,before:snapshot(d)};
+      if(action==='reset')return {...d,before:undefined};
+      const before=d.before||d.opened;if(!before)return d;
+      const {rotation,crop,cropAspect,lensCorrections,lensProfile}=d.adjustments;
+      const next={...snapshot(before),adjustments:{...copy(before.adjustments),rotation,crop:copy(crop),cropAspect,lensCorrections:copy(lensCorrections),lensProfile:copy(lensProfile)}};
+      if(next.profileId===d.profileId&&JSON.stringify(next.adjustments)===JSON.stringify(d.adjustments))return d;
+      return {...d,...next,before:snapshot(d),past:[...d.past,{...snapshot(d),before:d.before?copy(d.before):null}],future:[],dirty:dirty(d,next.adjustments,next.profileId)};
+    });
+    setStatus(action==='capture'?'已保存对比前状态 · 仅当前会话':action==='reset'?'已还原打开时的对比状态':'已交换前后设置 · 可撤销');
   }
   function addMask(type: Exclude<MaskType,'raster'>) {
     const name=`${type === 'brush' ? '画笔' : type === 'linear' ? '线性渐变' : type === 'luminance' ? '亮度范围' : type==='color'?'颜色范围':'径向蒙版'} ${(active?.adjustments.masks.length || 0) + 1}`;
@@ -119,8 +140,26 @@ export function useWorkbench() {
     const profile = await renderDocument(d); return { doc: d, profile };
   }
   async function save() {
-    try { const f = await flush();if (!f) return false;const path = await window.captraw.save({ ...f.doc.image, adjustments: f.doc.adjustments }, f.profile);if (path) { updateDocument(f.doc.image.id, d => ({ ...d, saved:copy(f.doc.adjustments), dirty: JSON.stringify(d.adjustments)!==JSON.stringify(f.doc.adjustments) })); setStatus('编辑配方已保存');return true; } } catch (e) { setError(String(e)); }return false;
+    try { const f = await flush();if (!f) return false;const path = await window.captraw.save({ ...f.doc.image, adjustments: f.doc.adjustments }, f.profile);if (path) { updateDocument(f.doc.image.id, d => ({ ...d, saved:copy(f.doc.adjustments),savedProfileId:f.doc.profileId, dirty: d.profileId!==f.doc.profileId||JSON.stringify(d.adjustments)!==JSON.stringify(f.doc.adjustments) })); setStatus('编辑配方已保存');return true; } } catch (e) { setError(String(e)); }return false;
   }
+  async function saveSelected(paths:string[]){
+    if(loading.current)return;
+    commit();const selected=docs.current.filter(d=>paths.includes(d.image.path)).map(d=>copy(d));if(!selected.length)return;
+    clearTimeout(timer.current);loading.current=true;setOpening(true);setSaveOpen(true);setSaveBusy(true);setSaveResult(null);setSaveError('');setSaveProgress('选择保存文件夹…');
+    try{
+      const result=await window.captraw.saveSelected({documents:selected.map(d=>({path:d.image.path,width:d.image.width,height:d.image.height,artProfile:d.profile,adjustments:d.adjustments,xmpPacket:d.image.recipe?.xmpPacket}))});
+      if(!result){setSaveOpen(false);return;}
+      setSaveResult(result);
+      setDocuments(old=>old.map(d=>{
+        const saved=selected.find(s=>s.image.path===d.image.path);
+        if(!saved||!result.results.some(r=>r.source===d.image.path&&r.output))return d;
+        return {...d,saved:copy(saved.adjustments),savedProfileId:saved.profileId,dirty:d.profileId!==saved.profileId||JSON.stringify(d.adjustments)!==JSON.stringify(saved.adjustments)};
+      }));
+      setStatus(`已保存 ${result.results.filter(r=>r.output).length}/${selected.length} 张照片的 XMP${result.cancelled?' · 已停止后续保存':''}`);
+    }catch(error){setSaveError(error instanceof Error?error.message:String(error));}
+    finally{loading.current=false;setOpening(false);setSaveBusy(false);}
+  }
+  async function cancelSave(){setSaveProgress('正在完成当前文件，随后停止…');await window.captraw.cancelSave();}
   async function closeDocument(id:string,saved=false){
     if(loading.current)return;const target=docs.current.find(d=>d.image.id===id);if(!target)return;
     if(target.dirty&&!saved){
@@ -144,7 +183,7 @@ export function useWorkbench() {
     const doc=docs.current.find(d=>d.image.id===idRef.current);if(!doc)return;
     if(!await save())return;
     const current=docs.current.find(d=>d.image.path===doc.image.path);
-    if(current&&JSON.stringify(current.adjustments)===JSON.stringify(doc.adjustments))await closeDocument(current.image.id,true);
+    if(current&&current.profileId===doc.profileId&&JSON.stringify(current.adjustments)===JSON.stringify(doc.adjustments))await closeDocument(current.image.id,true);
   }
   function openSynchronize(){if(loading.current||samplingRef.current||busy||wbPending)return;commit();setSyncError('');setSyncOpen(true);}
   async function cancelSynchronize(){if(loading.current){syncCancelled.current=true;setSyncProgress('正在取消同步…');await window.captraw.cancelSynchronize();}else setSyncOpen(false);}
@@ -165,7 +204,8 @@ export function useWorkbench() {
       }
       if(syncCancelled.current){setSyncOpen(false);syncStatusRevision.current=revision.current;setStatus('已取消同步，照片编辑未改变');return;}
       if(epoch!==editEpoch.current)throw new Error('编辑已变化，请重新同步。');
-      setDocuments(old=>old.map(d=>{const result=results.find(r=>r.path===d.image.path);return result?{...d,adjustments:result.adjustments,profile:result.profile,dirty:JSON.stringify(result.adjustments)!==JSON.stringify(d.saved),past:[...d.past,copy(d.adjustments)],future:[],thumbnail:thumbnails.get(result.path),thumbnailFrame:result.preview,previewToken:result.preview}:d;}));
+      const profileIds=new Map(results.map(r=>[r.path,++profileEpoch.current]));
+      setDocuments(old=>old.map(d=>{const result=results.find(r=>r.path===d.image.path);return result?{...d,adjustments:result.adjustments,profile:result.profile,profileId:profileIds.get(result.path)!,dirty:true,past:[...d.past,snapshot(d)],future:[],thumbnail:thumbnails.get(result.path),thumbnailFrame:result.preview,previewToken:result.preview}:d;}));
       setSyncOpen(false);syncStatusRevision.current=revision.current;setStatus(results.length?`已同步 ${results.length} 张照片 · 可分别撤销和保存`:'所选调整已相同，无需同步');
     }catch(error){setSyncError(error instanceof Error?error.message:String(error));}
     finally{loading.current=false;setSyncBusy(false);}
@@ -180,7 +220,8 @@ export function useWorkbench() {
       const results=await window.captraw.applyPreset(id,{image:doc.image,adjustments:copy(doc.adjustments),profile});
       if(results===null||presetCancelled.current)return false;
       const result=results[0];if(!result){setStatus('预设调整已相同');return true;}
-      updateDocument(doc.image.id,d=>({...d,adjustments:result.adjustments,profile:result.profile,dirty:JSON.stringify(result.adjustments)!==JSON.stringify(d.saved),past:[...d.past,copy(d.adjustments)],future:[]}));
+      const profileId=++profileEpoch.current;
+      updateDocument(doc.image.id,d=>({...d,adjustments:result.adjustments,profile:result.profile,profileId,dirty:true,past:[...d.past,snapshot(d)],future:[]}));
       setStatus('已应用预设 · 可撤销');return true;
     }catch(e){setError(String(e));return false;}
     finally{loading.current=false;setOpening(false);setPresetBusy(false);}
@@ -243,17 +284,11 @@ export function useWorkbench() {
       })};if(JSON.stringify(next)!==JSON.stringify(f.doc.adjustments))edit(()=>next);setStatus('已按照片亮度更新范围');
     }catch(e){if(token===sampleEpoch.current)setError(String(e));}finally{samplingRef.current=false;setSampling(false);}
   }
-  async function compare(before: boolean) {
-    if(loading.current)return;
-    const d = docs.current.find(d => d.image.id === idRef.current);if (!d) return;
-    clearTimeout(timer.current);setBusy(true);
-    try { if (before) await window.captraw.before(d.image.id, ++revision.current);else await renderDocument(d); } catch (e) { setError(String(e)); }
-  }
   async function viewport(x: number,y: number,width: number,height: number) {
     if(loading.current)return;
     const d = docs.current.find(d => d.image.id === idRef.current);if (!d) return;
     try { await window.captraw.viewport(d.image.id, revision.current, x,y,width,height); } catch (e) { setError(String(e)); }
   }
-  return { applyPreset,cancelPreset,presetBusy,flush,exportPending,dismissJob:()=>setJob(undefined),syncOpen,syncBusy,syncProgress,syncError,openSynchronize,cancelSynchronize,synchronize,documents, active, frame, detailFrame, busy:busy||opening||wbPending||sampling,opening,wbPending,sampling,error,status,job,revision, setError,setMaskPreview,setLuminance,setColorSampling,sampleColor,sampleLuminance,cancelLuminanceSample:()=>{++sampleEpoch.current;},openPaths,switchDocument,closeDocument,finish,whiteBalance,edit,commit,undo,addMask,save,exportImage,compare,viewport,
+  return {saveSelected,cancelSave,saveOpen,saveBusy,saveProgress,saveResult,saveError,closeSave:()=>setSaveOpen(false), applyPreset,cancelPreset,presetBusy,flush,exportPending,dismissJob:()=>setJob(undefined),syncOpen,syncBusy,syncProgress,syncError,openSynchronize,cancelSynchronize,synchronize,documents, active, frame, detailFrame, busy:busy||opening||wbPending||sampling,opening,wbPending,sampling,error,status,job,revision, setError,setMaskPreview,setLuminance,setColorSampling,sampleColor,sampleLuminance,cancelLuminanceSample:()=>{++sampleEpoch.current;},openPaths,switchDocument,closeDocument,finish,whiteBalance,edit,commit,undo,addMask,save,exportImage,comparisonState,viewport,
     reset: () => { if (active) edit(() => copy(active.initial)); } };
 }

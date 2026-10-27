@@ -1,5 +1,5 @@
 find_package(nlohmann_json REQUIRED)
-target_sources(art_engine PRIVATE "${CAPTRAW_SOURCE_DIR}/grading.cc")
+target_sources(art_engine PRIVATE "${CAPTRAW_SOURCE_DIR}/grading.cc" "${CAPTRAW_SOURCE_DIR}/preview-crop.cc")
 target_include_directories(art_engine PRIVATE "${CMAKE_SOURCE_DIR}/src")
 include_directories(${GTKMM_INCLUDE_DIRS} ${GTK_INCLUDE_DIRS} ${CAIROMM_INCLUDE_DIRS}
   ${GIOMM_INCLUDE_DIRS} ${GIO_INCLUDE_DIRS} ${GLIBMM_INCLUDE_DIRS} ${GLIB2_INCLUDE_DIRS}

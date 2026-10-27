@@ -11,7 +11,7 @@ stdin / stdout 每行一个 JSON 对象；ART 自身 stdout 重定向到 stderr�
 | `maskAssets` | 完整 `artProfile`、可选控件投影 `adjustments`、精确路径 `replacements`、`validate` | 递归枚举 / 重绑定四种工具中全部外部蒙版路径，包含停用工具与组件；可解码核验。同时处理投影中的栅格引用（含停用组件）；返回完整配置及传入的投影，不修改当前图像 |
 | `validate` | 完整 `artProfile` 和 `adjustments` | 无图像解码的配方参数检查和输入配置文件投影，不改变已打开图片 |
 | `update` | 递增 `revision`、`adjustments`、可选 `artProfile` 和仅控制显示的 `maskId` | 更新后的完整 ART 配置文本；异步输出 fit 帧 |
-| `viewport` | `revision`、`x/y/width/height`（已旋转图像像素坐标） | 真正 skip=1 的 detail 帧，每边最多 2048 像素 |
+| `viewport` | `revision`、`x/y/width/height`（已旋转图像像素坐标） | 真正 skip=1 的 detail 帧，按原图边界限制请求范围 |
 | `before` | `revision` | 初始显影 before 帧，不更改保存配方 |
 | `curve` | 有序 `points` | ART 实际样条采样，用于前后端一致性检查 |
 | `save` | 无 | 核心当前完整 ART 配置文本，文件事务由宿主负责 |
@@ -22,7 +22,7 @@ stdin / stdout 每行一个 JSON 对象；ART 自身 stdout 重定向到 stderr�
 
 预览帧包括 revision、会话、完整尺寸、区域坐标、三通道 256 档真实输出直方图、私有 PNG 文件路径及耗时；可选 `mask` 包含组 ID、覆盖图及其图像坐标范围。每帧文件名唯一，PNG 写入 sRGB chunk。宿主只将自己的缓存路径映射成 `captraw://preview/` URL，保留有限帧；没有 Base64 图像控制消息。前端丢弃过期会话和 revision，连续调整延迟 90 ms 合并。Canvas2D 按 sRGB 解码，1:1 使用 `1/devicePixelRatio` 的 CSS 缩放；不重复执行后端色彩变换。
 
-`EditDocument` 是 XMP 的内存投影，包含固定引擎版本、源路径 / 大小 / SHA-256、完整 ART 配置和控件值。当前仅接受 `CaptRAW-19_ART-1.26.10_LibRaw-3b20539` 的 ART 扩展，初始基线为 4；不推断或迁移旧引擎。`adjustments` 由 C++ 适配器映射，渲染与输出读取完整 ART `ProcParams`。XMP 保存先写旁侧临时文件，再原子 rename；导出成功后才替换目标。以下带历史版本的实现记录不构成旧文件格式兼容承诺；当前文件协议见末尾 XMP 章节。
+`EditDocument` 是 XMP 的内存投影，包含固定引擎版本、源路径 / 大小 / SHA-256、完整 ART 配置和控件值。当前仅接受 `CaptRAW-20_ART-1.26.10_LibRaw-3b20539` 的 ART 扩展，初始基线为 4；不推断或迁移旧引擎。`adjustments` 由 C++ 适配器映射，渲染与输出读取完整 ART `ProcParams`。XMP 保存先写旁侧临时文件，再原子 rename；导出成功后才替换目标。以下带历史版本的实现记录不构成旧文件格式兼容承诺；当前文件协议见末尾 XMP 章节。
 
 引擎 14 的颜色分级使用 `adjustments.colorGrading`：`shadows/midtones/highlights/global` 各有 `hue:0..360`、`saturation:0..100`、`luminance:-100..100`，外加 `blending:0..100`、`balance:-100..100`。`validate` 返回同名投影；完整原生参数保存在 `[CaptRAW Color Grading]` 的 `Version=1` / `Values`，顺序为四组三值、混合、平衡。缺省可继承完整配置，显式初始值清除该组；原生加载拒绝版本、长度、范围和有限值错误。共享 Stage 3 在黑白之后处理，全中性旁路，继承参数变化同样刷新预览缓存。详见 [接入与限制](COLOR-GRADING.md)。0.17 已接入 Web 色轮；数值不等于 Adobe 参数。
 
@@ -34,7 +34,7 @@ stdin / stdout 每行一个 JSON 对象；ART 自身 stdout 重定向到 stderr�
 
 0.4 的白平衡处理版本为 3。新照片基线使用相机原始系数，经 ART `wbMul2Camera` / `wbCamera2Mul` 坐标系转换后以 `WBParams::CUSTOM_MULT` 渲染，避免把系数压缩成色温再还原。`wbMultipliers`、`wbMode` 和投影警告由核心返回；手动色温 / 色调清空系数并使用原有 CUSTOM_TEMP。自动白平衡取 ART 估计，预设来自随包 `wbpresets.json`，只按相机内部完整型号匹配；采样调用 ART 原生 RAW / 图像取样，处理旋转和几何坐标。
 
-`EditDocument.baselineVersion` 仅表示当前基线 4；宿主不再选择旧基线，核心拒绝 2 / 3 等不受支持的值。重新打开、胶片切换、重置和初始对比均使用相机白平衡及有效相机构图。
+`EditDocument.baselineVersion` 仅表示当前基线 4；宿主不再选择旧基线，核心拒绝 2 / 3 等不受支持的值。新照片默认值和重置使用相机白平衡及有效相机构图；XMP 打开与胶片切换保留各自编辑，对比前状态规则见文末。
 
 0.5 接入输入配置文件，处理版本为 4，初始显影基线仍为 3。核心在 `open.inputProfiles` 返回实际相机匹配结果及 DCP 能力：自动选择按 ART 原有顺序优先 DCP、其次 ICC，再回退相机矩阵；显式矩阵不使用 DCP / ICC。嵌入选项仅在检测到 ICC 或 DNG 配置文件时提供；普通图像没有 RAW 相机矩阵选项。`adjustments.colorProfile` 映射选择、双光源插值及 DCP 内部曲线 / 表 / 基准曝光字段；控制是否显示取决于真实数据。切换触发 ART 原有颜色处理，Web 不实施配置文件变换。
 
@@ -318,3 +318,58 @@ RAW 暗角位于 `RawImageSource::preprocess`，镜头设置变化必须刷新 `
 Adobe `crs:CameraProfile` 是设置名称，`CameraProfileDigest` 尚未完成与真实 Adobe 输出的成对验证。当前不会把文件 MD5 / SHA-256、ICC ID 或同名 DCP 冒充 Adobe digest；这些字段及增强 Look 原样保留并列为未生效。DCP / ICC 导入、XMP 结构保留和 ACR 像素等效是独立验收项。
 
 依据：[DNG 1.7.1 ProfileName / UniqueCameraModel / ProfileEmbedPolicy](https://helpx.adobe.com/content/dam/help/en/photoshop/pdf/DNG_Spec_1_7_1_0.pdf)、[Adobe Camera Raw XMP](https://developer.adobe.com/xmp/docs/xmp-namespaces/crs/)。
+
+## 点曲线交互与 XMP 名称（0.35）
+
+新绘制和编辑的点采用 0–255 整数坐标，除以 255 后交给现有 ART 自然三次样条；没有更换插值或像素处理算法，处理版本仍为 20、初始基线 4。已有 XMP 的小数点坐标保留，聚焦、选择和保存不触发取整。输入框允许临时留空，Enter / 失焦提交，Esc 恢复编辑前坐标；拖动和方向键手势分别形成一步历史。端点也可修改输入值，邻点约束始终保持 X 严格递增。
+
+保存包含点曲线的文档 / 预设时同步 `crs:ToneCurveName2012`：完整四条曲线均为两个恒等端点时写 `Linear`，其他写 `Custom`。部分曲线预设不补齐未给出的通道；没有曲线的预设不新增名称。读取仅名称而无坐标的输入不生成曲线；名称冲突或未确认的名称关系给出提示，实际采用记录的点。非法空坐标、非十进制或非有限数字明确拒绝。
+
+本机 Adobe 随附 Settings 中 1,370 条 PV2012 序列、4,576 对坐标均为整数，作为写法参考。它们跨多个 Adobe 版本，不是 ACR 18.7 往返验收。[Adobe CRS 文档](https://developer.adobe.com/xmp/docs/xmp-namespaces/crs/) 的 Integer 定义仅针对旧 `ToneCurve`，不能据此声称 PV2012 拒绝小数。Adobe 对冲突名称的优先级、小数处理、插值与最终像素等效仍未验证。
+
+## 镜头校正后的白平衡取样（0.36）
+
+ART 的 `getSpotWB` 原先调用 `transCoord` 时没有传入镜头映射，开启校正后会采到显示位置之外的原片像素。渲染与吸管现在共用 `getLensCorrection`，沿用原有 EXIF / Lensfun / LCP 选择、焦距和旋转参数。色差校正在畸变处理之后渲染，因此吸管先逐通道逆映射色差，再交给原有 `transCoord` 反算畸变、旋转和自动填充。
+
+此修正改变新取样结果，不改变已有系数、配方格式或渲染算法；处理版本 20、基线 4 不变。`tests/white-balance-optics.mjs` 对 RGB 和人工 Bayer DNG 的 48 组实际预览目标取样，覆盖自动 / 手动镜头、四方向旋转、裁切、畸变和色差；同配方预览与 0.35 逐字节一致。测试 DNG 使用人工 CFA 数据和已知镜头 EXIF，不冒充实拍 Nikon RAW。`tests/white-balance-optics-e2e.mjs` 经界面点击验证适屏 / 1:1、裁切、撤销和 XMP 恢复。透视和任意角度拉直尚未接入；不能由此推断 Adobe CropAngle 或 Orientation 的完整互操作。
+
+## 批量 XMP 保存（0.37）
+
+`BatchDocumentSaver` 接收选定照片的不可变快照；每张通过独立核心 `compose` 将当前调整覆盖到已有完整 ART 配置，随后记录原片 SHA-256、使用官方 XMP SDK 序列化并保存资产。它不切换正在显示的会话，不需要重新生成全分辨率图像。未知 XMP 属性从各自的原始包保留。
+
+保存到用户选择的文件夹，以原片名生成 `.xmp`。已有文件或资产文件夹会触发编号；最终发布使用核心的原子“不替换”操作，检查后出现同名文件也不覆盖。`saveRecipeWithMasks` 默认覆盖行为保持不变，只有批量新文件显式使用不替换模式。蒙版和输入配置的内容寻址、许可策略和完整性检查沿用现有链路。
+
+每张成功或失败单独返回，只有成功快照更新对应的已保存状态，不清除撤销历史。取消及保存中退出均等待当前文件完成，随后跳过剩余照片；已发布文件保留，未保存照片继续保持脏标记。此操作是批量另存，不宣称整批文件系统事务，也不会自动更新已有原片旁车。重开当前照片的 XMP 保留胶片位置，避免 Shift 连选范围改变。
+
+### 后续任意角度接入的已核实边界（未实现）
+
+固定 ART 中，修复点在 `transform` 前消费，颜色 / 亮度范围和局部覆盖在其后消费；不能将 fine angle 简单加入 `recipe.cc` 的共用 coarse `rotate`。`transCoord` 是目标到源的逆映射且带边界裁剪；`getTransformAutoFill` 必须与照片使用同一参数。径向需要保留轴长并使用 `AreaMask::Rectangle::angle`，画笔需同时处理中心、半径及羽化尺度，栅格需扩展逐像素逆映射；关联覆盖不能再次变换。对象分割输入、详细预览的邻域和所有取样坐标也必须一致。
+
+这些结论来自 `improccoordinator.cc`、`dcrop.cc`、`simpleprocess.cc`、`improcfun.cc` 和 `masks.cc` 的阶段核对，不是运行验收。含非线性镜头畸变时，仅旋转中心和端点不足以表达完整覆盖形变；Adobe 非零 CropAngle / Orientation 的独立参考仍缺失。没有加入会破坏既有选区的角度控件。
+
+
+## 前后对比预览（0.38 / 0.41）
+
+四种布局共享图像坐标、裁切、缩放和平移。主显影进程继续输出当前编辑及其详细区域；独立对比进程读取同一原片。0.41 默认参考改为打开照片时的完整调整及 ART 配置，包括导入 XMP；可将当前编辑存为前状态、交换前后设置、还原打开时参考。前状态渲染继承当前已接入的裁切、90° 旋转和镜头校正（含镜头暗角）；交换也保留这些几何设置及裁切比例。未暴露的 ART 几何参数不在此次对齐保证内。
+
+对比使用独立 revision、事件和私有预览 URL，参数更新合并于 React 状态。开启对比、替换参考或改变上述几何状态时重新渲染前状态；普通调色不重算参考。1:1 两侧请求相同原图区域，并按物理屏幕像素绘制。P 和按住对比也使用这个独立进程，不替换主预览、缩略图或主核心参数，保留当前缩放 / 平移；单图查看前状态时，RGB 直方图同步显示该参考的实际统计。退出对比、成功切换文件及退出应用时终止参考进程并清理缓存；失败打开文件保留当前对比。错误按会话 / revision 过滤。
+
+会话文档分别持有打开状态和可选自定义前状态；胶片切换保留，关闭文档后释放，不写入 XMP。历史记录保存完整调整及 ART 配置，以保留未暴露参数；全配置替换携带会话内身份编号，保存和撤销同时检查编号与调整值。交换是一条同时恢复当前编辑和前状态的历史记录；保存 / 还原前状态不标记未保存，也不额外占用撤销历史。普通编辑撤销不撤回独立设置的对比参考。
+
+底栏选择布局，Q / Shift+Q 循环；P 切换预览、Option/Alt+P 保存前状态、Shift+P 打开预设，参照 [Adobe 官方快捷键](https://helpx.adobe.com/camera-raw/desktop/get-started/overview-and-setup/default-keyboard-shortcuts.html)。移除旧版将反斜杠当作 P 的映射；Adobe 的反斜杠“交换当前与默认全部设置”、独立参考图、持久快照及完整快捷键集合尚未完成，未宣称 ACR 全集一致。原生 CLI 的 `before` 仍提供 RAW 初始帧，桌面不再通过该命令实现对比。
+
+## 完整可见区域的 1:1 预览（0.39）
+
+前端将画布边界反变换到原图，与原图范围取交集，再向外取整得到整数区域；分别计算右 / 下边界，避免小数平移时漏掉边缘像素。主图和对比图请求同一矩形。核心只按原图剩余尺寸裁定范围，移除前后端 2048×2048 截断；不是将适屏图插值填补边缘。
+
+同一 revision 的适屏图刷新保留已解码的详细图。详细图仅在 URL 与对应帧元数据相符时绘制，避免旧位图按新位置绘制；对比侧的适屏位图尚在加载时，也可独立绘制有效详细图。退出 1:1 后不绘制详细层。
+
+0.39 额外发现局部明暗的裁切上下文差异：ART `simpleprocess.cc::stage_finish` 在 Stage 1/2/3 前裁切，详细预览的 `fullDetailContext()` 则对全图计算局部滤波。D850 线性蒙版 / 局部高光与裁切组合，RGB8 量化参考最大差 5；0.38 与 0.39 的重叠区域完全相同，表明不是扩大区域引入。原失败证据 `artifacts/wide-detail/cropped-tone-unresolved.json` 保留；0.40 修复见下节。宽区域测试中的局部明暗使用未裁切全图输出作参考，不能单凭该测试宣称裁切组合通过。
+
+## 裁切内局部明暗预览（0.40）
+
+启用局部明暗且裁切有效时，适屏 / 详细预览的 Stage 1/2/3 使用 `processPreview`：每阶段先保留裁切内输入，计算框外所需的原预览，再以导出相同的裁切取整、原图尺寸和坐标处理裁切内输入，合回同一全图坐标。下一阶段读取已经修正的裁切内结果。只修正明暗增益不足以得到一致结果，因为蒙版生成也有空间滤波；因此整个三阶段处理链共用裁切上下文。Stage 0 和导出路径不变，处理版本 20 / 基线 4 不变。
+
+两次计算的链接蒙版缓存独立保存。覆盖率、亮度及颜色取样通过同一裁切范围合并后再通知宿主；只保存宿主需要的蒙版，避免为每个隐藏蒙版复制全尺寸覆盖率。既有详细图缓存和平移继续使用完整图像坐标，框外像素可用于重新构图。关闭核心时这些缓存随处理器销毁。
+
+当前触发条件是启用且非中性的局部明暗；没有将所有空间滤镜、所有缩放率、全部原生 ARP 参数组合宣布为一致。完整区域之外的独立取样裁块仍沿用现有路径。增加了一次裁切内处理和临时浮点缓冲，尚未完成大图 / 多蒙版 P95 与峰值内存验收。测试 `cropped-tone.mjs` 对照 0.39 输出与旧预览，`cropped-tone-e2e.mjs` 验证实际 GUI 的裁切、蒙版、撤销、XMP 重开、详细预览和 TIFF16。

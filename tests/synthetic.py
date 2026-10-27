@@ -67,3 +67,24 @@ linear*=1+.02*np.sin(np.arange(h)[:,None]/3)*np.sin(np.arange(w)[None,:]/3)
 srgb=np.where(linear<=.0031308,12.92*linear,1.055*linear**(1/2.4)-.055)
 tone=np.repeat(np.clip(np.round(srgb*255),0,255).astype('uint8')[:,:,None],3,axis=2)
 Image.fromarray(tone).save(out/'local-tone.png')
+
+# Small blue targets reveal picker offsets after a calibrated wide-angle warp.
+optics = np.full((h, w, 3), [200, 80, 60], dtype=np.uint8)
+for cy in [80, 384, 688]:
+    for cx in [80, 256, 512, 768, 944]:
+        optics[cy-4:cy+4, cx-4:cx+4] = [100, 160, 220]
+exif = Image.Exif()
+exif[271], exif[272], exif[274] = 'NIKON CORPORATION', 'NIKON D500', 1
+exif[34665] = {33437: 3.5, 37386: 10., 41989: 15,
+               42036: 'AF-S DX Nikkor 10-24mm f/3.5-4.5G ED'}
+Image.fromarray(optics).save(out/'wb-optics.png', exif=exif)
+# Authored Bayer data, not a camera sample; EXIF selects the same known warp.
+channels = np.array([[0, 1], [1, 2]])[y % 2, x % 2]
+optics_raw = (512 + optics[y, x, channels].astype(float)/255*(16383-512)).astype(np.uint16)
+tifffile.imwrite(out/'wb-optics.dng', optics_raw, photometric=32803, metadata=None, extratags=tags)
+import subprocess
+subprocess.run(['exiftool', '-overwrite_original', '-Make=NIKON CORPORATION',
+                '-Model=NIKON D500', '-FNumber=3.5', '-FocalLength=10',
+                '-FocalLengthIn35mmFormat=15',
+                '-LensModel=AF-S DX Nikkor 10-24mm f/3.5-4.5G ED',
+                str(out/'wb-optics.dng')], check=True, capture_output=True)

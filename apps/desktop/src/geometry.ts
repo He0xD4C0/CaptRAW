@@ -8,6 +8,13 @@ export function imageTransform(width: number, height: number, canvasWidth: numbe
 export function imagePoint(x: number, y: number, t: Transform): Point {
   return { x: Math.max(0, Math.min(1, (x - t.x) / (t.width * t.scale))), y: Math.max(0, Math.min(1, (y - t.y) / (t.height * t.scale))) };
 }
+export function visibleImageRegion(t:Transform,canvasWidth:number,canvasHeight:number){
+  const left=Math.max(0,-t.x/t.scale),top=Math.max(0,-t.y/t.scale);
+  const right=Math.min(t.width,(canvasWidth-t.x)/t.scale),bottom=Math.min(t.height,(canvasHeight-t.y)/t.scale);
+  if(right<=left||bottom<=top)return null;
+  const x=Math.floor(left),y=Math.floor(top);
+  return {x,y,width:Math.ceil(right)-x,height:Math.ceil(bottom)-y};
+}
 export function canvasPoint(p: Point, t: Transform): Point { return { x: t.x + p.x * t.width * t.scale, y: t.y + p.y * t.height * t.scale }; }
 export function rotatePoint(p: Point, rotation: number): Point {
   switch((rotation%360+360)%360){case 90:return {...p,x:1-p.y,y:p.x};case 180:return {...p,x:1-p.x,y:1-p.y};case 270:return {...p,x:p.y,y:1-p.x};default:return p;}

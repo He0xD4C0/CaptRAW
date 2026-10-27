@@ -9,7 +9,7 @@ import {saveRecipeWithMasks,restoreRecipeMasks} from '@captraw/desktop-core/mask
 import {ObjectSelection} from '@captraw/desktop-core/object-selection';
 import {Presets} from '@captraw/desktop-core/presets';
 import {XMP} from '@captraw/desktop-core/xmp';
-import {Documents} from '@captraw/desktop-core/documents';
+import {Documents,BatchDocumentSaver,validateBatchSave} from '@captraw/desktop-core/documents';
 import {InputProfiles} from '@captraw/desktop-core/input-profiles';
 import {Synchronizer} from '@captraw/desktop-core/synchronize';
 import {validateExportOptions} from '@captraw/contracts/export-options';
@@ -22,6 +22,8 @@ if(backgroundTest&&process.env.CAPTRAW_E2E_USER_DATA)app.setPath('userData',reso
 if(backgroundTest&&process.platform==='darwin')app.setActivationPolicy('accessory');
 let presets:Presets;
 let documents:Documents;
+let batchSaver:BatchDocumentSaver;
+let savePending=false;
 let inputProfiles:InputProfiles;
 let objects:ObjectSelection;
 let synchronizer:Synchronizer;
@@ -30,6 +32,10 @@ let exportPending=false;
 let win: BrowserWindow;
 let engine: NativeEngine | undefined;
 let openingEngine:NativeEngine|undefined;
+let comparisonEngine:NativeEngine|undefined;
+let comparisonSequence=0;
+const comparisonFrames=new Map<string,string>();
+function stopComparison(){++comparisonSequence;comparisonEngine?.terminate();comparisonEngine=undefined;for(const file of comparisonFrames.values())void rm(file,{force:true}).catch(()=>{});comparisonFrames.clear();}
 let exporter: NativeEngine | undefined;
 let exportCancelled = false;
 let exportTemp:string|undefined;
@@ -110,13 +116,35 @@ async function openImage(path: string) {
     for(const key of ['colorProfile','blackWhite','colorGrading'] as const)if(checked[key])recipe.adjustments[key]=checked[key];
   }
   if(quitting)throw new Error('应用正在退出。');
-  const previous=engine;engine=candidate;previous?.terminate();
+  stopComparison();const previous=engine;engine=candidate;previous?.terminate();
   session={...image,initialAdjustments:image.adjustments,recipe,xmpWarnings:loaded?.warnings};
   if(recipe)session!.adjustments=recipe.adjustments;
   return session;
   }catch(error){candidate.terminate();throw error;}finally{if(openingEngine===candidate)openingEngine=undefined;}
 }
 function registerIPC() {
+  ipcMain.handle('comparison:update',async(_,p)=>{
+    const current=requireSession(p.sessionId);stopComparison();if(!p.settings)return;
+    const sequence=comparisonSequence,directory=join(cache,'comparison-'+randomUUID()),worker=new NativeEngine(binary,resources,directory);comparisonEngine=worker;
+    worker.child.once('close',()=>{void rm(directory,{recursive:true,force:true}).catch(()=>{});});
+    worker.on('engine-event',message=>{
+      if(worker!==comparisonEngine||current.id!==session?.id)return;
+      if(message.event==='preview'){
+        const frame=message.frame,file=resolve(frame.file);if(!file.startsWith(cache+'/'))return;
+        const key=`comparison/${sequence}/${basename(file)}`;comparisonFrames.set(key,file);
+        send({event:'comparison-preview',frame:{...frame,url:`captraw://preview/${key}`}});
+        for(const [key,path] of [...comparisonFrames].slice(0,-4)){comparisonFrames.delete(key);void rm(path,{force:true}).catch(()=>{});}
+      }else if(message.event==='error')send({event:'comparison-error',sessionId:current.id,revision:p.revision,message:message.message});
+    });
+    try{
+      await worker.call('open',{path:current.path,sessionId:current.id});
+      if(worker!==comparisonEngine)return;
+      const {rotation,crop,lensCorrections,lensProfile}=p.settings.geometry;
+      await worker.call('update',{revision:p.revision,artProfile:p.settings.artProfile,adjustments:{...p.settings.adjustments,rotation,crop,lensCorrections,lensProfile}});
+    }catch(error){if(worker===comparisonEngine){stopComparison();throw error;}}
+  });
+  ipcMain.handle('comparison:viewport',async(_,p)=>{requireSession(p.sessionId);const worker=comparisonEngine;if(worker)await worker.call('viewport',p);});
+
   ipcMain.handle('profiles:list',()=>inputProfiles.list());
   ipcMain.handle('profiles:inspect',(_,reference)=>inputProfiles.inspect(reference));
   ipcMain.handle('profiles:import',async(_,id)=>{
@@ -165,8 +193,17 @@ function registerIPC() {
   ipcMain.handle('image:color-sample',async(_,p)=>{requireSession(p.sessionId);return native().call('sampleColor',p);});
   ipcMain.handle('image:luminance-sample',async(_,p)=>{requireSession(p.sessionId);return native().call('sampleLuminance',p);});
   ipcMain.handle('image:white-balance',async(_,p)=>{requireSession(p.sessionId);return native().call('whiteBalance',p.request);});
-  ipcMain.handle('image:before', async (_, p) => { requireSession(p.sessionId); await native().call('before', p); });
-  ipcMain.handle('image:close', async () => { await objects.cancel();await engine?.call('close'); session = undefined; });
+  ipcMain.handle('image:close', async () => { stopComparison();await objects.cancel();await engine?.call('close'); session = undefined; });
+  ipcMain.handle('recipes:save',async(_,request)=>{
+    if(savePending)throw new Error('已有批量保存任务正在运行。');
+    validateBatchSave(request);savePending=true;
+    try{
+      const result=await dialog.showOpenDialog(win,{title:`保存 ${request.documents.length} 张照片的 XMP：选择文件夹`,message:'每张照片生成独立 XMP，包含蒙版和配置文件资产。同名文件保留，新文件自动编号。',properties:['openDirectory','createDirectory']});
+      if(result.canceled||!result.filePaths.length)return null;
+      return await batchSaver.run(request,result.filePaths[0]);
+    }finally{savePending=false;}
+  });
+  ipcMain.handle('recipes:cancel',()=>batchSaver.cancel());
   ipcMain.handle('recipe:save', async (_, { session: supplied, artProfile }: { session: ImageSession; artProfile: string }) => {
     const current = requireSession(supplied.id);
     const result = await dialog.showSaveDialog(win, { title: '保存无损编辑配方', message: '含外部蒙版或输入配置文件时会同时保存资产文件夹；移动配方时请保留配套文件夹。', defaultPath: join(dirname(current.path),basename(current.path,extname(current.path))+'.xmp'), filters: [{ name: 'XMP 编辑文件', extensions: ['xmp'] }] });
@@ -222,13 +259,14 @@ app.whenReady().then(async () => {
   synchronizer=new Synchronizer(binary,resources,cache,message=>send({event:'synchronize-progress',message}));
   const xmp=new XMP(app.isPackaged?join(root,'captraw-xmp'):resolve(__dirname,'../../../../build/xmp/captraw-xmp'));
   documents=new Documents(xmp);
+  batchSaver=new BatchDocumentSaver(binary,resources,cache,documents,message=>send({event:'save-progress',message}));
   inputProfiles=new InputProfiles(join(app.getPath('userData'),'input-profiles'),{call:(method,params)=>native().call(method,params)});
   presets=new Presets(join(app.getPath('userData'),'xmp-presets'),{call:(method,params)=>native().call(method,params)},cache,xmp);
   batchExporter=new BatchExporter(binary,resources,cache,job=>send({event:'job',job}));
   protocol.handle('captraw', async request => {
     const url = new URL(request.url);
     if (url.host === 'preview') {
-      const key=decodeURIComponent(url.pathname.slice(1));const file = frames.get(key)||synchronizer.previews.get(key)||objects.previews.get(key);
+      const key=decodeURIComponent(url.pathname.slice(1));const file = frames.get(key)||comparisonFrames.get(key)||synchronizer.previews.get(key)||objects.previews.get(key);
       if(!file)return new Response('Expired preview', { status: 404 });
       const response=await net.fetch(pathToFileURL(file).href);
       const headers=new Headers(response.headers);headers.set('Access-Control-Allow-Origin','*');
@@ -242,7 +280,7 @@ app.whenReady().then(async () => {
   registerIPC();
   win = new BrowserWindow({ show: !backgroundTest, focusable: !backgroundTest, width: 1480, height: 960, minWidth: 1080, minHeight: 720, backgroundColor: '#17191b', title: 'CaptRAW', titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 17 }, webPreferences: { backgroundThrottling: !backgroundTest, preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  win.on('close',event=>{if(dirtyCount&&!quitting){event.preventDefault();void confirmQuit();}});
+  win.on('close',event=>{if(batchSaver.active){event.preventDefault();batchSaver.cancel();send({event:'save-progress',message:'正在完成当前文件；保存结束后可退出。'});}else if(dirtyCount&&!quitting){event.preventDefault();void confirmQuit();}});
   win.webContents.on('will-navigate', (event, url) => { if (!url.startsWith('captraw://app/') && !url.startsWith('http://127.0.0.1:5173')) event.preventDefault(); });
   const command=(command:'open'|'save'|'close')=>send({event:'command',command});
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'CaptRAW', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'quit' }] },{label:'文件',submenu:[{label:'打开…',accelerator:'CommandOrControl+O',click:()=>command('open')},{label:'保存编辑…',accelerator:'CommandOrControl+S',click:()=>command('save')},{label:'关闭文件',accelerator:'CommandOrControl+W',click:()=>command('close')}]}, { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] }, { label: '窗口', submenu: [{ role: 'minimize' }, { role: 'zoom' }] }]));
@@ -254,4 +292,4 @@ async function confirmQuit(){
   try{const {response}=await dialog.showMessageBox(win,{type:'warning',message:`还有 ${dirtyCount} 张照片的编辑未保存`,detail:'返回工作台可保存编辑。放弃并退出不会修改原始照片或已保存的配方。',buttons:['继续编辑','放弃并退出'],defaultId:0,cancelId:0,noLink:true});if(response===1){quitting=true;app.quit();}}
   finally{checkingQuit=false;}
 }
-app.on('before-quit', event => {if(dirtyCount&&!quitting){event.preventDefault();void confirmQuit();return;} quitting = true; objects?.shutdown();synchronizer?.cancel();batchExporter?.shutdown();engine?.terminate();openingEngine?.terminate(); exporter?.terminate();if(exportTemp)rmSync(exportTemp,{force:true}); if (cache) rmSync(cache, { recursive: true, force: true }); });
+app.on('before-quit', event => {if(batchSaver?.active){event.preventDefault();batchSaver.cancel();send({event:'save-progress',message:'正在完成当前文件；保存结束后可退出。'});return;}if(dirtyCount&&!quitting){event.preventDefault();void confirmQuit();return;} quitting = true;stopComparison(); objects?.shutdown();synchronizer?.cancel();batchExporter?.shutdown();engine?.terminate();openingEngine?.terminate(); exporter?.terminate();if(exportTemp)rmSync(exportTemp,{force:true}); if (cache) rmSync(cache, { recursive: true, force: true }); });
