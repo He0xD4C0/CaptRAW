@@ -1,7 +1,7 @@
-import type {Adjustments,EditDocument} from './index.js';
-import {ENGINE_VERSION,READABLE_ENGINE_VERSIONS} from './index.js';
+import type {Adjustments,AdjustmentPatch,EditDocument} from './index.js';
+import {ENGINE_VERSION,READABLE_ENGINE_VERSIONS,mergeAdjustmentPatch} from './index.js';
 import {SYNC_GROUPS,type SyncGroup} from './synchronize.js';
-export interface PresetDocument {xmpPacket?:string;warnings?:string[];engineVersion:string;name:string;group:string;groups:SyncGroup[];artProfile:string;adjustments:Partial<Adjustments>;maskAssets?:EditDocument['maskAssets'];approximateWB?:boolean}
+export interface PresetDocument {xmpPacket?:string;warnings?:string[];engineVersion:string;name:string;group:string;groups:SyncGroup[];artProfile:string;adjustments:AdjustmentPatch;maskAssets?:EditDocument['maskAssets'];approximateWB?:boolean}
 export interface PresetSummary {id:string;name:string;group:string;groups:SyncGroup[];approximateWB:boolean;warnings?:string[]}
 export interface PresetInput {name:string;group:string;groups:SyncGroup[];adjustments:Adjustments;artProfile?:string}
 export function presetName(value:unknown){if(typeof value!=='string'||!value.trim()||value.trim().length>100||/[\x00-\x1f]/.test(value))throw new Error('名称须为 1–100 个字符。');return value.trim();}
@@ -18,3 +18,9 @@ export function validatePreset(value:PresetDocument){
 }
 // Required neutral fields only provide context for native validation; they are never saved or applied as selected values.
 export const presetValidationBase:Adjustments={exposure:0,contrast:0,temperature:6500,tint:0,saturation:0,vibrance:0,curve:[{x:0,y:0},{x:1,y:1}],crop:null,rotation:0,masks:[]};
+export function presetValidationAdjustments(adjustments:AdjustmentPatch){
+ const patch=structuredClone(adjustments),splits=patch.parametricCurve?.splits;
+ // Partial split positions can only be checked against the eventual target.
+ if(patch.parametricCurve&&(!splits||splits[0]===undefined||splits[1]===undefined||splits[2]===undefined))delete patch.parametricCurve;
+ return mergeAdjustmentPatch(presetValidationBase,patch);
+}

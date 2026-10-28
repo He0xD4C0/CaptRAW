@@ -4,19 +4,19 @@ import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createRequire} from 'node:module';
-import {ENGINE_VERSION,OUTPUT_COLOR_SPACES} from '@captraw/contracts';
+import {ENGINE_VERSION,OUTPUT_COLOR_SPACES,autoTone,mergeAdjustmentPatch,partialAdjustmentGroups,validRating} from '@captraw/contracts';
 import {DEFAULT_EXPORT_OPTIONS,validateExportOptions,outputDimensions} from '@captraw/contracts/export-options';
 import {capturePreset,validatePreset,presetValidationBase} from '@captraw/contracts/presets';
-import {SYNC_GROUPS,synchronizedAdjustments} from '@captraw/contracts/synchronize';
+import {SYNC_GROUPS,cameraExposureValue,matchExposureByCameraSettings,synchronizedAdjustments} from '@captraw/contracts/synchronize';
 import {NativeEngine} from '@captraw/desktop-core/engine';
 import {BatchExporter,validateBatch} from '@captraw/desktop-core/batch-export';
-import {Documents} from '@captraw/desktop-core/documents';
+import {Documents,validateBatchSave} from '@captraw/desktop-core/documents';
 import {saveRecipeWithMasks,restoreRecipeMasks} from '@captraw/desktop-core/mask-assets';
 import {ObjectSelection} from '@captraw/desktop-core/object-selection';
 import {Presets} from '@captraw/desktop-core/presets';
 import {Segmenter} from '@captraw/desktop-core/segmentation';
 import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {XMP,CT,encode,decode,encodeAdjustments,decodeAdjustments,readExtension} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,property,text,encode,decode,encodeAdjustments,decodeAdjustments,readExtension} from '@captraw/desktop-core/xmp';
 
 test('all 13 public entries resolve to compiled JavaScript in plain Node',()=>{
  const entries=['@captraw/contracts',...['export-options','presets','synchronize'].map(name=>'@captraw/contracts/'+name),...['engine','batch-export','documents','mask-assets','object-selection','presets','segmentation','synchronize','xmp'].map(name=>'@captraw/desktop-core/'+name)];
@@ -25,6 +25,14 @@ test('all 13 public entries resolve to compiled JavaScript in plain Node',()=>{
  assert.equal(process.versions.electron,undefined);
  assert(!Object.keys(createRequire(import.meta.url).cache).some(path=>/\/node_modules\/electron\//.test(path)));
  assert.equal(typeof ENGINE_VERSION,'string');assert.equal(OUTPUT_COLOR_SPACES.srgb,'sRGB');
+});
+
+test('XMP rating keeps rejection distinct from unrated and accepts the standard real-number range',()=>{
+ for(const value of [-1,0,1,2.5,5])assert(validRating(value));
+ for(const value of [-2,-.5,5.1,NaN,Infinity,'3',null,undefined])assert(!validRating(value));
+ const document={path:'/photo.nef',width:100,height:100,artProfile:'',adjustments:structuredClone(presetValidationBase),rating:3};
+ assert.doesNotThrow(()=>validateBatchSave({documents:[document]}));
+ assert.throws(()=>validateBatchSave({documents:[{...document,rating:6}]}),/评分/);
 });
 
 test('export options validate input types and compute output dimensions',()=>{
@@ -58,6 +66,36 @@ test('preset and synchronization contracts select fields and isolate snapshots',
  const partial={...from,adjustments:{...target.adjustments,crop:{x:0,y:0,width:.5,height:.5}}};
  assert.equal(synchronizedAdjustments(partial,target,['crop']).fineRotation,-17);
  assert.throws(()=>synchronizedAdjustments(from,target,['unknown']));
+});
+
+test('camera exposure matching uses ISO, aperture, shutter and exposure compensation atomically',()=>{
+ const document=(path,iso,aperture,shutter,exposureCompensation,exposure)=>({
+  image:{path,name:path.split('/').at(-1),iso,aperture,shutter,exposureCompensation},
+  adjustments:{...structuredClone(presetValidationBase),exposure},
+  profile:'',
+ });
+ const source=document('/source.nef',100,2,1/100,0,.7);
+ assert.equal(cameraExposureValue(source.image),Math.log2(400));
+ const darker=document('/darker.nef',100,4,1/100,0,.5);
+ const biased=document('/biased.nef',100,2,1/100,1,-1.5);
+ const matches=matchExposureByCameraSettings(source,[darker,biased]);
+ assert.deepEqual(matches.map(match=>match.exposure),[-1.5,-.5]);
+ assert.deepEqual(matches.map(match=>match.delta),[-2,1]);
+ assert.throws(()=>matchExposureByCameraSettings(source,[{...darker,image:{...darker.image,shutter:0}}]),/缺少可用/);
+ assert.throws(()=>matchExposureByCameraSettings(source,[{...darker,adjustments:{...darker.adjustments,exposure:-4.5}}]),/超出当前显影范围/);
+ assert.throws(()=>matchExposureByCameraSettings(source,[source]),/来源照片不能/);
+ assert.throws(()=>matchExposureByCameraSettings(source,[darker,darker]),/重复照片/);
+});
+
+test('auto tone derives bounded base tone edits from a real RGB histogram without mutating the recipe',()=>{
+ const source=structuredClone(presetValidationBase),snapshot=structuredClone(source);
+ const histogram=Array.from({length:3},()=>Array(256).fill(0));
+ for(let index=10;index<80;index++)for(const channel of histogram)channel[index]=100;
+ const adjusted=autoTone(source,histogram);
+ assert.deepEqual(source,snapshot);assert(adjusted.exposure>0);assert(adjusted.exposure<=5);assert(adjusted.shadows>0);assert(adjusted.contrast>=source.contrast);assert.deepEqual(adjusted.masks,source.masks);assert.notEqual(adjusted,source);
+ const clipped=Array.from({length:3},()=>Array(256).fill(0));for(const channel of clipped){channel[0]=200;channel[255]=800;}
+ const recovered=autoTone(source,clipped);assert(recovered.highlights<0);assert(recovered.whites<0);
+ assert.deepEqual(autoTone(source,[]),source);assert.deepEqual(autoTone(source,null),source);
 });
 
 test('batch export validates snapshots before starting a native worker',async()=>{
@@ -136,4 +174,32 @@ createInterface({input:process.stdin}).on('line',line=>{const {method}=JSON.pars
  while(Date.now()<deadline){if(await readFile(marker,'utf8').catch(()=>null)==='started'){started=true;break;}await new Promise(resolve=>setTimeout(resolve,20));}
  assert(started,'Worker must have entered source-reference validation before cancellation');
  sync.cancel();assert.equal(await pending,null);assert.equal(sync.running,false);
+});
+
+
+test('sparse adjustment merging preserves every unselected channel, wheel, split and calibration value',()=>{
+ const base={...structuredClone(presetValidationBase),hsl:{hue:[1,2,3,4,5,6,7,8],saturation:[9,10,11,12,13,14,15,16],luminance:[-1,-2,-3,-4,-5,-6,-7,-8]},parametricCurve:{highlights:5,lights:6,darks:7,shadows:8,splits:[21,58,83]},colorGrading:{shadows:{hue:210,saturation:20,luminance:-4},midtones:{hue:40,saturation:21,luminance:3},highlights:{hue:50,saturation:22,luminance:5},global:{hue:190,saturation:9,luminance:-2},blending:72,balance:-8},calibration:{redHue:10,greenSaturation:9}};
+ const original=structuredClone(base),patch={hsl:{hue:{4:0},saturation:{7:-35}},parametricCurve:{highlights:-18,splits:{2:88}},colorGrading:{midtones:{saturation:0},balance:7},calibration:{redHue:-5}};
+ const result=mergeAdjustmentPatch(base,patch),expected=structuredClone(base);
+ expected.hsl.hue[4]=0;expected.hsl.saturation[7]=-35;expected.parametricCurve.highlights=-18;expected.parametricCurve.splits[2]=88;expected.colorGrading.midtones.saturation=0;expected.colorGrading.balance=7;expected.calibration.redHue=-5;
+ assert.deepEqual(result,expected);assert.deepEqual(base,original);result.hsl.hue[0]=99;assert.equal(base.hsl.hue[0],1);
+ assert.deepEqual(partialAdjustmentGroups(patch),['hsl','parametricCurve','colorGrading','calibration']);assert.deepEqual(partialAdjustmentGroups(base),['calibration']);assert.deepEqual(partialAdjustmentGroups({...base,calibration:{redHue:10,redSaturation:0,greenHue:0,greenSaturation:9,blueHue:0,blueSaturation:0}}),[]);
+});
+
+test('sparse XMP serialization retains only supplied standard fields across JSON transport',()=>{
+ const fields={HueAdjustmentBlue:0,SaturationAdjustmentRed:-9,ParametricHighlightSplit:80,ColorGradeMidtoneSat:0,SplitToningBalance:7};
+ const decoded=decodeAdjustments(Object.entries(fields).map(([name,value])=>property(CRS,name,text(value)))).adjustments;
+ assert.deepEqual(decoded,{hsl:{hue:{5:0},saturation:{0:-9}},parametricCurve:{splits:{2:80}},colorGrading:{midtones:{saturation:0},balance:7}});
+ const transported=JSON.parse(JSON.stringify(decoded)),encoded=encodeAdjustments(transported);
+ assert.deepEqual(Object.fromEntries(encoded.filter(p=>p.ns===CRS&&p.node!==null).map(p=>[p.name,Number(p.node.value)])),fields);
+ assert.deepEqual(decodeAdjustments(encoded).adjustments,decoded);
+});
+
+test('legacy complete Split Toning resets modern controls while modern sparse grading preserves them',()=>{
+ const fields={SplitToningShadowHue:220,SplitToningShadowSaturation:20,SplitToningHighlightHue:40,SplitToningHighlightSaturation:10,SplitToningBalance:-5};
+ const properties=Object.entries(fields).map(([name,value])=>property(CRS,name,text(value))),classic=decodeAdjustments(properties);
+ assert.deepEqual(classic.adjustments.colorGrading,{shadows:{hue:220,saturation:20,luminance:0},highlights:{hue:40,saturation:10,luminance:0},balance:-5,midtones:{hue:0,saturation:0,luminance:0},global:{hue:0,saturation:0,luminance:0},blending:100});
+ assert(classic.warnings.some(message=>message.includes('旧式分离色调')));
+ const modern=decodeAdjustments([...properties,property(CRS,'ColorGradeMidtoneSat',text(0))]);
+ assert.equal(modern.adjustments.colorGrading.blending,undefined);assert.equal(modern.adjustments.colorGrading.global,undefined);assert(!modern.warnings.some(message=>message.includes('旧式分离色调')));
 });

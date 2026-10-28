@@ -28,6 +28,8 @@ add_executable(captraw-wb-probe EXCLUDE_FROM_ALL "${CAPTRAW_SOURCE_DIR}/../tests
 target_link_libraries(captraw-wb-probe PRIVATE captraw-core)
 add_executable(captraw-geometry-probe EXCLUDE_FROM_ALL "${CAPTRAW_SOURCE_DIR}/../tests/geometry-probe.cc")
 target_link_libraries(captraw-geometry-probe PRIVATE captraw-core)
+add_executable(captraw-auto-crop-probe EXCLUDE_FROM_ALL "${CAPTRAW_SOURCE_DIR}/../tests/auto-crop-probe.cc")
+target_link_libraries(captraw-auto-crop-probe PRIVATE captraw-core)
 add_executable(captraw-mask-geometry-probe EXCLUDE_FROM_ALL "${CAPTRAW_SOURCE_DIR}/../tests/mask-geometry-probe.cc")
 target_link_libraries(captraw-mask-geometry-probe PRIVATE captraw-core)
 add_executable(captraw-art-reference ${CAPTRAW_SUPPORT}
@@ -40,6 +42,7 @@ target_link_libraries(captraw-art-reference PRIVATE art_engine art_utils
 if(APPLE)
   target_link_libraries(captraw-wb-probe PRIVATE "-framework Foundation")
   target_link_libraries(captraw-geometry-probe PRIVATE "-framework Foundation")
+  target_link_libraries(captraw-auto-crop-probe PRIVATE "-framework Foundation")
   target_link_libraries(captraw-mask-geometry-probe PRIVATE "-framework Foundation")
   target_link_libraries(captraw-engine PRIVATE "-framework Foundation")
   target_link_libraries(captraw-art-reference PRIVATE "-framework Foundation")

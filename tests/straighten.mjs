@@ -52,8 +52,20 @@ r,g,b=a[:,:,0],a[:,:,1],a[:,:,2]
 weights=[r-np.maximum(g,b),b-np.maximum(r,g),g-np.maximum(r,b),np.minimum(r,b)-g]
 points=[]
 for w in weights:
- w=np.where(w>35,w,0);y,x=np.nonzero(w);assert len(x)>12,(sys.argv[1],len(x))
- points.append(dict(x=float(np.sum(x*w[y,x])/w.sum()),y=float(np.sum(y*w[y,x])/w.sum())))
+ # CA can leave small colored fringes around the other markers. Measure the
+ # largest connected marker, not the centroid of unrelated fringe pixels.
+ w=np.where(w>35,w,0);remaining=set(zip(*np.nonzero(w)));largest=[]
+ while remaining:
+  component=[remaining.pop()];stack=component.copy()
+  while stack:
+   y,x=stack.pop()
+   for dy,dx in [(0,1),(0,-1),(1,0),(-1,0)]:
+    q=(y+dy,x+dx)
+    if q in remaining:remaining.remove(q);component.append(q);stack.append(q)
+  if len(component)>len(largest):largest=component
+ assert len(largest)>12,(sys.argv[1],len(largest))
+ y,x=np.asarray(largest).T;mass=w[y,x].sum()
+ points.append(dict(x=float(np.sum(x*w[y,x])/mass),y=float(np.sum(y*w[y,x])/mass)))
 print(json.dumps(dict(width=a.shape[1],height=a.shape[0],points=points)))
 `,file],{encoding:'utf8'}));
 }
@@ -102,7 +114,7 @@ im.save(sys.argv[1],exif=exif)
  const referenceImage=await reference.call('open',{path:source,sessionId:'oracle'});
  assert.equal(image.artProfile,referenceImage.artProfile,'Same installed baseline is required');
  assert.equal(referenceImage.adjustments.fineRotation,0,'Installed 0.48 must support fineRotation');
- const base={...image.adjustments,crop:null};
+ const base={...image.adjustments,crop:null};delete base.perspective;
  const optics={mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true};
  for(const rotation of [0,90,180,270])for(const angle of [-17,23])for(const fill of [false,true])for(const geometry of ['none','lens','perspective']){
   const name=`r${rotation}-a${angle}-fill${fill}-${geometry}`;

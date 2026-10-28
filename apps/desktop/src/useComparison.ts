@@ -6,7 +6,7 @@ export const comparisonNames:Record<ComparisonLayout,string>={off:'单图', 'lef
 export function useComparison(active:DocumentState|undefined){
  const [layout,setLayout]=useState<ComparisonLayout>('off'),[showBefore,setShowBefore]=useState(false),[frame,setFrame]=useState<PreviewFrame>(),[detail,setDetail]=useState<PreviewFrame>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const token=useRef(0),session=useRef('');
- const a=active?.adjustments,geometry=JSON.stringify(a?{rotation:a.rotation,fineRotation:a.fineRotation,crop:a.crop,lensCorrections:a.lensCorrections,lensProfile:a.lensProfile}:null);
+ const a=active?.adjustments,geometry=JSON.stringify(a?{rotation:a.rotation,fineRotation:a.fineRotation,perspective:a.perspective,crop:a.crop,lensCorrections:a.lensCorrections,lensProfile:a.lensProfile}:null);
  const before=active?.before||active?.opened,enabled=layout!=='off'||showBefore;
  useEffect(()=>window.captraw.onEvent(e=>{
   if(e.event==='comparison-preview'&&e.frame.sessionId===session.current&&e.frame.revision===token.current){

@@ -51,6 +51,15 @@ async function releaseError(index){
  await waitRecord(index,'delivered');
 }
 async function viewportRequest(rule){
+ const items=page.locator('.film-item'),count=await items.count();
+ if(count>1){
+  // Reopen through another document so a valid detailed-frame cache from an
+  // earlier scenario cannot hide the transport path under test.
+  const activeIndex=await items.evaluateAll(nodes=>nodes.findIndex(node=>node.classList.contains('active')));
+  const otherIndex=activeIndex===0?1:0;
+  await items.nth(otherIndex).locator('.film-open').click();await ready();
+  await items.nth(activeIndex).locator('.film-open').click();await ready();
+ }
  await page.getByRole('button',{name:'适屏',exact:true}).click();await ready();
  const index=await arm([{method:'viewport',...rule}]);
  await page.getByRole('button',{name:'1:1',exact:true}).click();await waitRecord(index,'written');return index;
@@ -108,6 +117,13 @@ try{
  assert.match((await record(index)).error,/SIGTERM/);assert.equal((await record(index)).signal,'SIGTERM');
  await watch();await releaseError(index);await quiet();await page.screenshot({path:join(out,'other-after-old-viewport.png')});await editable(.35);
  pass('GUI 1:1 pending viewport rejects with real SIGTERM after opening another image; no stale alert and editing works');
+ stage='ACR document selection shortcuts';
+ await page.keyboard.press('Meta+a');await expect(page.locator('.film-item.selected')).toHaveCount(2);
+ await page.keyboard.press('Meta+Shift+A');await expect(page.locator('.film-item.selected')).toHaveCount(1);
+ await expect(page.locator('.film-item.active.selected')).toHaveCount(1);
+ await page.keyboard.press('Meta+a');await expect(page.locator('.film-item.selected')).toHaveCount(2);
+ await page.keyboard.press('Meta+d');await expect(page.locator('.film-item.selected')).toHaveCount(1);
+ pass('ACR select-only-current shortcuts leave the active image selected through visible filmstrip state');
 
  stage='original XMP reopen';index=await viewportRequest({mode:'pending-exit'});await open(recipe);await waitRecord(index,'error');
  assert.match((await record(index)).error,/SIGTERM/);await watch();await releaseError(index);await quiet();
@@ -139,6 +155,21 @@ try{
  await page.getByRole('button',{name:'关闭错误',exact:true}).click();
  await page.getByRole('button',{name:'适屏',exact:true}).click();await editable(.95);
  pass('current viewport native failure is visibly reported and a subsequent edit recovers');
+
+ stage='ACR view shortcuts';
+ await page.getByRole('button',{name:'适屏',exact:true}).click();await ready();
+ await page.keyboard.press('Meta+Alt+0');
+ await expect(page.getByRole('button',{name:'1:1',exact:true})).toHaveClass(/active/);
+ await page.waitForFunction(()=>window.__lifecycleEvents.filter(e=>e.event==='preview'&&e.frame.kind==='detail').length>0);
+ await page.waitForFunction(()=>{const frame=window.__lifecycleEvents.filter(e=>e.event==='preview'&&e.frame.kind==='detail').at(-1)?.frame;return frame&&document.querySelector('canvas')?.dataset.detail===frame.url;});
+ await page.keyboard.press('Meta+0');await ready();
+ await expect(page.getByRole('button',{name:'适屏',exact:true})).toHaveClass(/active/);
+ const fitZoom=await page.getByLabel('缩放比例').innerText();
+ await page.keyboard.press('Meta+=');
+ await expect.poll(()=>page.getByLabel('缩放比例').innerText()).not.toBe(fitZoom);
+ await page.keyboard.press('Meta+-');
+ await expect.poll(()=>page.getByLabel('缩放比例').innerText()).toBe(fitZoom);
+ pass('ACR view shortcuts fit, show native 1:1 pixels and step zoom from the visible canvas controls');
 
  assert.equal(hash(fixture),fixtureHash);for(const path of [source,other,third])assert.equal(hash(path),fixtureHash);
  events=await page.evaluate(()=>window.__lifecycleEvents);assert.deepEqual(events.filter(e=>e.event==='error'),[],'Old core errors are filtered in main; the test must exercise IPC rejection independently');

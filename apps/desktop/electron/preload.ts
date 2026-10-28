@@ -5,6 +5,8 @@ const invoke=async(channel:string,...args:unknown[])=>{
   catch(error){const message=error instanceof Error?error.message:String(error);throw new Error(message.replace(/^Error invoking remote method '[^']+': (?:Error(?: \[[^\]]+\])?: )?/,''));}
 };
 const api: CaptRAWAPI = {
+  autoPerspective:request=>invoke('image:auto-perspective',request),
+  cancelAutoPerspective:id=>invoke('image:auto-perspective-cancel',id),
   importInputProfile:sessionId=>invoke('profiles:import',sessionId),listInputProfiles:()=>invoke('profiles:list'),inspectInputProfile:reference=>invoke('profiles:inspect',reference),
   listPresets:()=>invoke('presets:list'),createPreset:input=>invoke('presets:create',input),
   updatePreset:(id,input)=>invoke('presets:update',{id,input}),renamePreset:(id,name,group)=>invoke('presets:rename',{id,name,group}),
@@ -12,7 +14,13 @@ const api: CaptRAWAPI = {
   applyPreset:(id,target)=>invoke('presets:apply',{id,target}),
   beginObject:(sessionId,adjustments,artProfile)=>invoke('object:begin',{sessionId,adjustments,artProfile}),
   predictObject:(id,prompts,box)=>invoke('object:predict',{id,prompts,box}),
+  predictPersonParts:id=>invoke('object:parts',id),
+  predictSemanticMasks:id=>invoke('object:semantic',id),
+  predictSkyMask:id=>invoke('object:sky',id),
   commitObject:(id,revision,index)=>invoke('object:commit',{id,revision,index}),
+  commitPersonPart:(id,revision,part)=>invoke('object:commit-part',{id,revision,part}),
+  commitSemanticMask:(id,revision,part)=>invoke('object:commit-semantic',{id,revision,part}),
+  commitSkyMask:(id,revision)=>invoke('object:commit-sky',{id,revision}),
   cancelObject:id=>invoke('object:cancel',id),
   exportBatch:request=>invoke('images:export',request),
   synchronize:request=>invoke('images:synchronize',request),

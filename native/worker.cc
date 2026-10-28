@@ -10,7 +10,7 @@ int main(int argc,char **argv){
     auto send=[&](const captraw::Json &j){std::lock_guard<std::mutex> lock(output);const auto s=j.dump();fprintf(protocol,"%s\n",s.c_str());fflush(protocol);};
     try {
         if(argc!=3)throw std::runtime_error("Usage: captraw-engine RESOURCE_DIRECTORY CACHE_DIRECTORY");
-        captraw::Engine engine(argv[1],argv[2],send);send({{"event","ready"},{"engineVersion","CaptRAW-22_ART-1.26.10_LibRaw-3b20539"}});
+        captraw::Engine engine(argv[1],argv[2],send);send({{"event","ready"},{"engineVersion","CaptRAW-26_ART-1.26.10_LibRaw-3b20539"}});
         std::string line;
         while(std::getline(std::cin,line)){
             captraw::Json request;int id=-1;

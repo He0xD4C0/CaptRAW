@@ -29,7 +29,7 @@ try{
   let profile=section(image.artProfile,'Rotation',`Enabled=true\nDegree=${angle}\nCaptRAWMaskCoordinates=${fill}\nCaptRAWMaskReferenceDegree=${reference}`);
   profile=section(profile,'Common Properties for Transformations',`AutoFill=${fill}`);
   profile=section(profile,'Perspective',`Enabled=${perspective}\nHorizontal=25\nVertical=-15\nAngle=2\nShear=3\nFocalLength=10\nCropFactor=1.5\nAspect=1\nControlLines=`);
-  const adjustments={...image.adjustments,rotation,crop:{x:.1,y:.1,width:.8,height:.8},lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true}};
+  const adjustments={...image.adjustments,perspective:undefined,rotation,crop:{x:.1,y:.1,width:.8,height:.8},lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true}};
   const pending=engine.preview(++revision);const result=await engine.call('update',{revision,artProfile:profile,adjustments});const frame=await pending;
   assert(result.lensStatus.distortion&&result.lensStatus.ca);
   const target=JSON.parse(execFileSync(python,['-c',String.raw`

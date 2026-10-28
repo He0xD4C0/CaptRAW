@@ -13,6 +13,9 @@ public:
     ~Segmentation();
     Json info() const;
     Json predict(const Json &request);
+    Json parts(const Json &request);
+    Json semanticMasks(const Json &request);
+    Json sky(const Json &request);
     void close();
 private:
     struct Impl;

@@ -117,7 +117,7 @@ try{
  let profile=section(image.artProfile,'Rotation','Enabled=true\nDegree=23\nCaptRAWMaskCoordinates=true\nCaptRAWMaskReferenceDegree=7');
  profile=section(profile,'Common Properties for Transformations','AutoFill=true');
  profile=section(profile,'Perspective','Enabled=true\nHorizontal=25\nVertical=-15\nAngle=2\nShear=3\nFocalLength=10\nCropFactor=1.5\nAspect=1\nControlLines=');
- const adjustments={...image.adjustments,rotation,crop,lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true},masks:[group('Brush','brush'),group('Radial','radial')]};
+ const adjustments={...image.adjustments,perspective:undefined,rotation,crop,lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true},masks:[group('Brush','brush'),group('Radial','radial')]};
  const waiting=core.preview(++revision,'fit',120000),result=await core.call('update',{revision,artProfile:profile,adjustments}),frame=await waiting;
  const W=frame.fullWidth,H=frame.fullHeight;canvasDimensions={width:W,height:H};
  assert.equal(W,rotation%180?image.height:image.width);assert.equal(H,rotation%180?image.width:image.height);

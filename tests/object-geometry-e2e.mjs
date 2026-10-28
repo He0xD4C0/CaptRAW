@@ -141,7 +141,7 @@ im.save(sys.argv[2],exif=exif)
  let profile=section(image.artProfile,'Rotation','Enabled=true\nDegree=23\nCaptRAWMaskCoordinates=true\nCaptRAWMaskReferenceDegree=7');
  profile=section(profile,'Common Properties for Transformations','AutoFill=true');
  profile=section(profile,'Perspective','Enabled=true\nHorizontal=25\nVertical=-15\nAngle=2\nShear=3\nFocalLength=10\nCropFactor=1.5\nAspect=1\nControlLines=');
- const adjustments={...image.adjustments,rotation:90,crop:null,lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true},masks:[]};
+ const adjustments={...image.adjustments,perspective:undefined,rotation:90,crop:null,lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true},masks:[]};
  const pending=core.preview(1,'fit',120000),applied=await core.call('update',{revision:1,artProfile:profile,adjustments});await pending;
  assert.deepEqual(applied.geometry,{rotation:90,angle:23});assert(applied.lensStatus.distortion&&applied.lensStatus.ca);
  assert.match(applied.artProfile,/CaptRAWMaskReferenceDegree=7/);

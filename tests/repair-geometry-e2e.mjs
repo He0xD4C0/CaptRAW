@@ -215,7 +215,7 @@ im.save(sys.argv[2],exif=exif,icc_profile=icc)
   let profile=section(image.artProfile,'Rotation','Enabled=true\nDegree=23\nCaptRAWMaskCoordinates=true\nCaptRAWMaskReferenceDegree=7');
   profile=section(profile,'Common Properties for Transformations','AutoFill=true');
   profile=section(profile,'Perspective','Enabled=true\nHorizontal=25\nVertical=-15\nAngle=2\nShear=3\nFocalLength=10\nCropFactor=1.5\nAspect=1\nControlLines=');
-  const adjustments={...image.adjustments,rotation,crop:null,lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true},spots:[]};
+  const adjustments={...image.adjustments,perspective:undefined,rotation,crop:null,lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true},spots:[]};
   const wait=core.preview(++revision),result=await core.call('update',{revision,artProfile:profile,adjustments}),f=await wait;profile=result.artProfile;
   assert(result.lensStatus.distortion&&result.lensStatus.ca,'Lensfun fixture must enable real distortion and CA');
   const recipe=join(directory,'fixture.xmp'),otherRecipe=join(directory,'other.xmp');

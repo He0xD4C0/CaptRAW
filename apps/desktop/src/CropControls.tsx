@@ -6,7 +6,7 @@ export function flipCrop(a:Adjustments,image:ImageSession):Adjustments {
   const c=a.crop||{x:0,y:0,width:1,height:1},ratio=1/(a.cropAspect||c.width*image.width/(c.height*image.height));
   return {...a,cropAspect:a.cropAspect?ratio:null,crop:fitCropAspect(c,ratio*image.height/image.width)};
 }
-export function CropControls({value,image,edit,commit,done,straighten,toggleStraighten}:{value:Adjustments;image:ImageSession;edit:(fn:(a:Adjustments)=>Adjustments,transient?:boolean)=>void;commit:()=>void;done:()=>void;straighten:boolean;toggleStraighten:()=>void}){
+export function CropControls({value,image,edit,commit,done,straighten,toggleStraighten,straightenDisabled}:{value:Adjustments;image:ImageSession;edit:(fn:(a:Adjustments)=>Adjustments,transient?:boolean)=>void;commit:()=>void;done:()=>void;straighten:boolean;toggleStraighten:()=>void;straightenDisabled:boolean}){
   const turned=value.rotation%180!==0,locked=value.cropAspect||null,display=locked?(turned?1/locked:locked):null;
   const original=(image.cameraCrop?.width||1)*image.width/((image.cameraCrop?.height||1)*image.height);
   const presets=[['原照',turned?1/original:original],['1 : 1',1],['4 : 3',4/3],['3 : 2',3/2],['5 : 4',5/4],['7 : 5',7/5],['16 : 9',16/9]] as const;
@@ -17,7 +17,7 @@ export function CropControls({value,image,edit,commit,done,straighten,toggleStra
     <button aria-label="切换裁切横竖 X" title="切换横竖 X" onClick={()=>edit(a=>flipCrop(a,image))}><ArrowLeftRight size={15}/></button>
     <Control label="角度" value={value.fineRotation??0} min={-45} max={45} step={.01} unit="°" change={fineRotation=>edit(a=>({...a,fineRotation}),true)} commit={commit}/>
     <button disabled={!value.fineRotation} onClick={()=>edit(a=>({...a,fineRotation:0}))}>重置角度</button>
-    <button aria-pressed={straighten} title="沿水平或竖直参照线拖动" onClick={toggleStraighten}><Ruler size={15}/>拉直</button>
+    <button aria-pressed={straighten} disabled={straightenDisabled} title={straightenDisabled?'退出前后对比后画线拉直':'沿水平或竖直参照线拖动'} onClick={toggleStraighten}><Ruler size={15}/>拉直</button>
     {image.cameraCrop&&<button onClick={()=>edit(a=>({...a,crop:image.cameraCrop!,cropAspect:null}))}>相机原始构图</button>}
     <button onClick={()=>edit(a=>({...a,crop:null,cropAspect:null}))}>清除裁切</button><button className="primary small" onClick={done}><Check size={14}/>完成</button>
     <small>{straighten?'沿应当水平或竖直的边缘拖线 · 松开应用 · Esc 取消':'拖动边角缩放 · 框内移动 · 框外新建'}</small>

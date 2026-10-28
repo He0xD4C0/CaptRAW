@@ -27,7 +27,10 @@ try{
  await expect(page.getByTestId('mask-coverage')).toBeVisible();
  expect(await page.getByTestId('mask-coverage').getAttribute('href')).toBe(await page.evaluate(()=>window.__frames.filter(f=>f.kind==='fit').at(-1).mask.url));
  await page.keyboard.press('y');await expect(page.getByTestId('mask-coverage')).toHaveCount(0);
- await settle(()=>page.keyboard.press('y'));await expect(page.getByTestId('mask-coverage')).toBeVisible();passed('overlay displays native group coverage and Y toggles it');
+ await page.keyboard.press('y');await expect(page.getByTestId('mask-coverage')).toBeVisible();
+ // A quick off/on can reuse the current native coverage without a redundant frame.
+ const coverageURL=await page.getByTestId('mask-coverage').getAttribute('href');expect(coverageURL).toBe(await page.evaluate(()=>window.__frames.filter(f=>f.kind==='fit').at(-1).mask.url));
+ expect(await page.evaluate(async url=>{const image=new Image();image.crossOrigin='anonymous';image.src=url;await image.decode();return image.naturalWidth>0&&image.naturalHeight>0;},coverageURL)).toBe(true);passed('overlay displays native group coverage and Y toggles it');
  const originalShape=(await save('before-move')).adjustments.masks[0].components[0];
  const center=await page.getByTestId('mask-move-handle').boundingBox();
  await settle(async()=>{await page.mouse.move(center.x+center.width/2,center.y+center.height/2);await page.mouse.down();await page.mouse.move(center.x+center.width/2+30,center.y+center.height/2-20,{steps:6});await page.mouse.up();});

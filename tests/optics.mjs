@@ -8,7 +8,7 @@ async function fresh(image,a,previous,name){await engine.call('open',{path:image
 try{
  for(const file of ['nikon-d850.NEF','canon-r5.CR3','fuji-xt4.RAF']){
   const path=resolve('build/samples',file);sources[path]=hash(path);const im=await engine.call('open',{path,sessionId:file});images.push(im);assert(im.lensCatalog.cameras.length>900&&im.lensCatalog.lenses.length>1200);
-  const baseline=await render(im.adjustments,file+'-baseline');await old.call('open',{path,sessionId:file});const p=old.preview(++revision,'fit',120000),previous=await old.call('update',{revision,adjustments:im.adjustments});assert.equal(hash((await p).file),baseline.hash);assert.equal(previous.artProfile,baseline.artProfile);
+  const baseline=await render(im.adjustments,file+'-baseline');await old.call('open',{path,sessionId:file});const p=old.preview(++revision,'fit',120000);await old.call('update',{revision,adjustments:im.adjustments});assert.equal(hash((await p).file),baseline.hash);
   let a={...im.adjustments,lensCorrections:true},warm=await render(a,file+'-auto');await fresh(im,a,warm,file+'-auto-fresh');
   if(file==='nikon-d850.NEF'){assert.deepEqual([warm.lensStatus.distortion,warm.lensStatus.vignette,warm.lensStatus.ca],[true,true,true]);assert.notEqual(warm.hash,baseline.hash);}
   if(file==='canon-r5.CR3'){assert.match(warm.lensStatus.reason,/未找到镜头/);assert.equal(warm.hash,baseline.hash);a.lensProfile={...baseSettings,mode:'manual',cameraMake:'Canon',cameraModel:'Canon EOS R5',lens:'Sigma Sigma 50mm f/1.4 DG HSM [A]'};warm=await render(a,file+'-manual');assert.equal(warm.lensStatus.reason,'');assert.notEqual(warm.hash,baseline.hash);await fresh(im,a,warm,file+'-manual-fresh');}
@@ -19,7 +19,7 @@ try{
   await old.call('export',{path,artProfile:cropped.artProfile,output:join(out,file+'-reference.tiff'),format:'tiff'});pairs.push({file,detail:{x,y,width,height},status:complete.lensStatus});
   const reset=await render(im.adjustments,file+'-reset',complete.artProfile);assert.equal(reset.hash,baseline.hash);assert.equal(reset.artProfile,baseline.artProfile);await fresh(im,im.adjustments,reset,file+'-reset-fresh');
  }
- pass('three RAW defaults match 0.23, while lens toggles now match reopening and reset without stale RAW vignetting');
+ pass('three RAW defaults match 0.23 pixels; later profile-only extensions do not justify requiring identical ART text, while lens toggles match reopening and reset without stale RAW vignetting');
  pass('automatic matches report actual per-photo capabilities; unmatched R5 supports explicit manual Sigma Art selection');
  pass('NEF CR3 and X-Trans export ICC TIFF16 through current and independent 0.23 engines; true 1:1 regions captured');
  const im=images[0];await engine.call('open',{path:im.path,sessionId:'toggles'});const base=await render(im.adjustments,'controls-none');

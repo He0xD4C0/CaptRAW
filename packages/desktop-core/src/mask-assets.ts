@@ -2,8 +2,8 @@ import {readFile,writeFile,mkdir,rename,rm,lstat,stat,mkdtemp} from 'node:fs/pro
 import {join,dirname,basename,extname,isAbsolute} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
-import type {EditDocument,Adjustments} from '@captraw/contracts';
-type AssetDocument={artProfile:string;adjustments:Partial<Adjustments>;maskAssets?:EditDocument['maskAssets'];inputProfileAsset?:EditDocument['inputProfileAsset']};
+import type {EditDocument,AdjustmentPatch} from '@captraw/contracts';
+type AssetDocument={artProfile:string;adjustments:AdjustmentPatch;maskAssets?:EditDocument['maskAssets'];inputProfileAsset?:EditDocument['inputProfileAsset']};
 type Core={call(method:string,params:unknown):Promise<any>};
 const prefix='captraw-mask:';
 const hash=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');

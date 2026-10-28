@@ -9,4 +9,6 @@ struct SegmentationRgb { int width, height; std::vector<uint8_t> pixels; };
 SegmentationRgb readSegmentationPng(const std::string &path);
 SegmentationRgb readSegmentationPng(const std::vector<uint8_t> &bytes);
 Ort::Value prepareSegmentationInput(Ort::Session &, const SegmentationRgb &);
+Ort::Value preparePersonPartsInput(const SegmentationRgb &);
+Ort::Value prepareSubjectInput(const SegmentationRgb &);
 }

@@ -6,6 +6,7 @@ import type {useWorkbench} from './useWorkbench';
 type Workbench=ReturnType<typeof useWorkbench>;
 export function PresetsPanel({workbench:w}:{workbench:Workbench}){
  const [items,setItems]=useState<PresetSummary[]>([]),[errors,setErrors]=useState<string[]>([]),[error,setError]=useState(''),[busy,setBusy]=useState(false),[search,setSearch]=useState(''),[menu,setMenu]=useState('');
+ const [importNotice,setImportNotice]=useState<{name:string;warnings:string[]}>();
  const [form,setForm]=useState<{mode:'create'|'rename'|'update'|'delete';item?:PresetSummary}>();
  const [name,setName]=useState(''),[group,setGroup]=useState('用户预设'),[groups,setGroups]=useState<SyncGroup[]>([...DEFAULT_SYNC_GROUPS]);const dialog=useRef<HTMLDialogElement>(null);
  async function refresh(){const r=await window.captraw.listPresets();setItems(r.items);setErrors(r.errors);}
@@ -20,7 +21,8 @@ export function PresetsPanel({workbench:w}:{workbench:Workbench}){
   setForm(undefined);
  });}
  const filtered=items.filter(p=>(p.name+' '+p.group).toLocaleLowerCase().includes(search.toLocaleLowerCase())),disabled=busy||w.presetBusy;
- return <section className="presets-panel" aria-label="用户预设"><div className="preset-actions"><button disabled={disabled||w.busy} onClick={()=>open('create')}><Plus size={15}/>创建预设</button><button disabled={disabled} onClick={()=>void run(()=>window.captraw.importPreset())}>导入…</button></div>
+ return <section className="presets-panel" aria-label="用户预设"><div className="preset-actions"><button disabled={disabled||w.busy} onClick={()=>open('create')}><Plus size={15}/>创建预设</button><button disabled={disabled} onClick={()=>void run(async()=>{setImportNotice(undefined);const result=await window.captraw.importPreset();if(result?.warnings?.length)setImportNotice({name:result.name,warnings:result.warnings});})}>导入…</button></div>
+  {importNotice&&<details className="xmp-notice preset-import-notice" open><summary>已导入 {importNotice.name} · XMP 导入说明</summary>{importNotice.warnings.map(message=><p key={message}>{message}</p>)}</details>}
   <label className="preset-search"><span>搜索预设</span><input type="search" aria-label="搜索预设" value={search} onChange={e=>setSearch(e.target.value)}/></label>
   {!items.length&&<p className="hint">将当前调整保存为用户预设，在其他照片上重复使用。</p>}
   {[...new Set(filtered.map(p=>p.group))].map(g=><details key={g} open className="preset-group"><summary>{g}</summary>{filtered.filter(p=>p.group===g).map(p=><div key={p.id} className="preset-row"><button className="preset-apply" disabled={disabled||w.busy} onClick={()=>void w.applyPreset(p.id)} title={SYNC_GROUPS.filter(g=>p.groups.includes(g.id)).map(g=>g.label).join('、')}>{p.name}</button><button aria-label={`管理 ${p.name}`} disabled={disabled} onClick={()=>setMenu(menu===p.id?'':p.id)}><MoreHorizontal size={17}/></button>{menu===p.id&&<div className="preset-menu"><button onClick={()=>open('rename',p)}>重命名 / 分组</button><button disabled={w.busy} onClick={()=>open('update',p)}>用当前设置更新</button><button onClick={()=>{setMenu('');void run(()=>window.captraw.exportPreset(p.id));}}>导出预设…</button><button onClick={()=>open('delete',p)}>删除预设…</button></div>}{!!p.warnings?.length&&<details className="xmp-notice"><summary>XMP 兼容说明</summary>{p.warnings.map(message=><p key={message}>{message}</p>)}</details>}{p.approximateWB&&<small>白平衡使用近似色温 / 色调</small>}</div>)}</details>)}

@@ -3,6 +3,7 @@
 #include "white-balance.h"
 #include "input-profile.h"
 #include "geometry-map.h"
+#include "engine/perspectivecorrection.h"
 #include "engine/rtengine.h"
 #include "engine/image8.h"
 #include "engine/imagefloat.h"
@@ -26,6 +27,7 @@
 #include <condition_variable>
 #include <cmath>
 #include <algorithm>
+#include <tuple>
 #include <cctype>
 #include <cstring>
 #include <memory>
@@ -293,8 +295,15 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         adjustments["colorProfile"]=inputProfileSettings(params.icm);
         adjustments["blackWhite"]=blackWhiteSettings(params);
         adjustments["colorGrading"]=colorGradingSettings(params);
+        adjustments["lensManualDistortion"]=params.distortion.enabled?params.distortion.amount*200.:0;
+        adjustments["lensVignette"]=params.vignetting.enabled?params.vignetting.amount:0;
+        if(params.chmixer.enabled&&params.chmixer.mode==pp::ChannelMixerParams::PRIMARIES_CHROMA)adjustments["calibration"]={
+            {"redHue",params.chmixer.hue_tweak[0]},{"redSaturation",params.chmixer.sat_tweak[0]},
+            {"greenHue",params.chmixer.hue_tweak[1]},{"greenSaturation",params.chmixer.sat_tweak[1]},
+            {"blueHue",params.chmixer.hue_tweak[2]},{"blueSaturation",params.chmixer.sat_tweak[2]}};
         adjustments["spots"]=Json::array();
         adjustments["fineRotation"]=params.rotate.enabled?params.rotate.degree:0;
+        adjustments["perspective"]=perspectiveSettings(params);
         const auto *md=initial->getMetaData();
         if(const auto *frames=dynamic_cast<const ae::FramesData *>(md)){
             for(const auto &camera:presetDB)if(camera.at("make_model")==frames->getInternalMakeModel()){presets=camera.at("presets");break;}
@@ -308,7 +317,8 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         }
         Json result={{"lensCatalog",lensCatalog()},{"lensStatus",lensStatus()},{"cameraCrop",cameraCrop},{"inputProfiles",profileOptions},{"baselineVersion",4},{"whiteBalancePresets",options},{"id",id},{"path",path},{"name",fs::path(path).filename().string()},
             {"width",baseWidth},{"height",baseHeight},{"camera",md->getCamera()},{"profileCamera",profileCamera},{"lens",md->getLens()},
-            {"iso",md->getISOSpeed()},{"aperture",md->getFNumber()},{"shutter",md->getShutterSpeed()},{"focalLength",md->getFocalLen()},{"adjustments",adjustments},{"artProfile",profileText(params)}};
+            {"iso",md->getISOSpeed()},{"aperture",md->getFNumber()},{"shutter",md->getShutterSpeed()},{"focalLength",md->getFocalLen()},{"exposureCompensation",md->getExpComp()},{"adjustments",adjustments},{"artProfile",profileText(params)}};
+        const int rating=md->getRating();if(rating==-1||(rating>=1&&rating<=5))result["rating"]=rating;
         return result;
     }
     Json update(const Json &a,bool before=false){
@@ -338,7 +348,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         luminanceFingerprint=fingerprint;
         fullDetailImage.reset();fullDetailCoverage.reset();fullDetailLuminance.reset();
         const auto previousMask=selectedMask;selectedMask=before?std::string():a.value("maskId",std::string());
-        if(selectedMask!=previousMask||previous["masks"]!=adjustments["masks"]||previous["rotation"]!=adjustments["rotation"]||previous.value("fineRotation",Json())!=adjustments.value("fineRotation",Json())){fitMask=nullptr;detailMask=nullptr;}
+        if(selectedMask!=previousMask||previous["masks"]!=adjustments["masks"]||previous["rotation"]!=adjustments["rotation"]||previous.value("fineRotation",Json())!=adjustments.value("fineRotation",Json())||previous.value("perspective",Json())!=adjustments.value("perspective",Json())){fitMask=nullptr;detailMask=nullptr;}
         started=std::chrono::steady_clock::now();
         auto *target=processor->beginUpdateParams();*target=before?baseline:params;
         int flags=ae::FIRST;
@@ -347,12 +357,12 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             if(previous["temperature"]!=adjustments["temperature"] || previous["tint"]!=adjustments["tint"] || previous.value("wbMultipliers",Json())!=adjustments.value("wbMultipliers",Json()))flags|=ae::WHITEBALANCE;
             if(previous["exposure"]!=adjustments["exposure"])flags|=ae::HDR;
             if(previous["contrast"]!=adjustments["contrast"] || previous["curve"]!=adjustments["curve"] || previous["saturation"]!=adjustments["saturation"] || previous["vibrance"]!=adjustments["vibrance"])flags|=ae::RGBCURVE;
-            if(previous["masks"]!=adjustments["masks"] || previous["rotation"]!=adjustments["rotation"]||previous.value("fineRotation",Json())!=adjustments.value("fineRotation",Json()) || previous["crop"]!=adjustments["crop"])flags|=ae::ALLNORAW;
+            if(previous["masks"]!=adjustments["masks"] || previous["rotation"]!=adjustments["rotation"]||previous.value("fineRotation",Json())!=adjustments.value("fineRotation",Json())||previous.value("perspective",Json())!=adjustments.value("perspective",Json()) || previous["crop"]!=adjustments["crop"])flags|=ae::ALLNORAW;
             if(previous.value("spots",Json())!=adjustments.value("spots",Json()))flags|=ae::SPOTADJUST;
-            for(const auto *key:{"highlights","shadows","whites","blacks","sharpening","sharpenRadius","luminanceNoise","colorNoise","dehaze","texture","clarity","vignette","grain","lensCorrections","redCurve","greenCurve","blueCurve","hsl","parametricCurve","wbMultipliers","colorProfile","blackWhite","colorGrading"})if(previous.value(key,Json())!=adjustments.value(key,Json()))flags|=ae::ALLNORAW;
+            for(const auto *key:{"highlights","shadows","whites","blacks","sharpening","sharpenRadius","sharpenDetail","sharpenEdgeMask","luminanceNoise","luminanceNoiseDetail","luminanceNoiseContrast","colorNoise","colorNoiseDetail","colorNoiseSmoothness","dehaze","texture","clarity","vignette","postCropVignetteFeather","postCropVignetteRoundness","grain","lensCorrections","lensManualDistortion","defringe","redCurve","greenCurve","blueCurve","hsl","calibration","parametricCurve","wbMultipliers","colorProfile","blackWhite","colorGrading"})if(previous.value(key,Json())!=adjustments.value(key,Json()))flags|=ae::ALLNORAW;
         }
         // Lens vignetting is applied to RAW data before demosaicing, not in ALLNORAW.
-        if(previous.value("lensCorrections",Json())!=adjustments.value("lensCorrections",Json())||previous.value("lensProfile",Json())!=adjustments.value("lensProfile",Json()))flags|=ae::FIRST;
+        if(previous.value("lensCorrections",Json())!=adjustments.value("lensCorrections",Json())||previous.value("lensProfile",Json())!=adjustments.value("lensProfile",Json())||previous.value("lensVignette",Json())!=adjustments.value("lensVignette",Json()))flags|=ae::FIRST;
         if(selectedMask!=previousMask||luminanceEnabled!=previousLuminance)flags|=ae::ALLNORAW;
         if(previousGrading!=params.captrawGrading)flags|=ae::ALLNORAW;
         if(profileChanged||maskFailure)flags|=ae::FIRST;
@@ -404,6 +414,100 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             else result.push_back(nullptr);
         }
         return {{"sessionId",id},{"revision",revision},{"width",width},{"height",height},{"referenceAngle",reference},{"points",result}};
+    }
+    Json autoPerspective(const Json &request){
+        if(!processor||!initial||!initialized)throw std::runtime_error("请先完成照片预览，再自动校正透视。");
+        if(!request.contains("sessionId")||request.at("sessionId")!=id||!request.contains("revision")||
+           !request.at("revision").is_number_integer()||request.at("revision")!=revision)
+            throw std::runtime_error("照片或调整已变化，请重新自动校正。");
+        if(showingBefore)throw std::runtime_error("请退出原图对比后再自动校正。");
+        if(baseWidth<3||baseHeight<3)throw std::runtime_error("照片尺寸过小，无法检测直线。");
+        const bool guided=request.contains("lines");
+        std::string direction;
+        std::vector<ae::ControlLine> lines;
+        std::vector<ae::Coord2D> sourcePoints;
+        if(guided){
+            const auto &input=request.at("lines");
+            if(!input.is_array()||input.size()<2||input.size()>4)
+                throw std::runtime_error("请绘制两条同方向参考线、三条混合方向参考线，或水平垂直各两条参考线。");
+            const int width=processor->getFullWidth(),height=processor->getFullHeight();
+            auto neutral=params;
+            neutral.perspective.enabled=false;
+            neutral.perspective.horizontal=neutral.perspective.vertical=neutral.perspective.angle=neutral.perspective.shear=0;
+            const auto *metadata=initial->getMetaData();
+            const int rawRotation=initial->getImageSource()->getRotateDegree();
+            ae::GeometryMap current(params,width,height,metadata,rawRotation),target(neutral,width,height,metadata,rawRotation);
+            int horizontal=0,vertical=0;
+            for(const auto &line:input){
+                if(!line.is_object()||!line.contains("axis")||
+                   (line.at("axis")!="horizontal"&&line.at("axis")!="vertical"))
+                    throw std::runtime_error("参考线方向无效，请选择水平或垂直。");
+                const auto point=[&](const char *key){
+                    if(!line.contains(key)||!line.at(key).is_object())throw std::runtime_error("参考线端点无效，请在照片内重新画线。");
+                    const auto &p=line.at(key);
+                    for(const char *axis:{"x","y"})if(!p.contains(axis)||!p.at(axis).is_number()||!std::isfinite(p.at(axis).get<double>()))
+                        throw std::runtime_error("参考线端点无效，请在照片内重新画线。");
+                    ae::Coord2D value(p.at("x").get<double>(),p.at("y").get<double>());
+                    if(value.x<0||value.y<0||value.x>width-1||value.y>height-1)
+                        throw std::runtime_error("参考线端点超出当前照片，请在照片内重新画线。");
+                    const auto source=current.toSource(value);
+                    if(!std::isfinite(source.x)||!std::isfinite(source.y)||!target.toDisplay(source,value)||!std::isfinite(value.x)||!std::isfinite(value.y))
+                        throw std::runtime_error("参考线无法映射到原图，请重新画线。");
+                    sourcePoints.push_back(source);
+                    return value;
+                };
+                auto start=point("start"),end=point("end");
+                if(start.x>end.x||(start.x==end.x&&start.y>end.y))std::swap(start,end);
+                ae::ControlLine value{float(start.x),float(start.y),float(end.x),float(end.y),
+                    line.at("axis")=="horizontal"?ae::ControlLine::HORIZONTAL:ae::ControlLine::VERTICAL};
+                const double dx=value.x2-value.x1,dy=value.y2-value.y1,length=std::hypot(dx,dy);
+                if(!std::isfinite(length)||length<=1e-6)throw std::runtime_error("参考线太短，请画更长的参考线。");
+                for(const auto &previous:lines)if(previous.type==value.type&&
+                    std::abs(dx*(previous.y1-value.y1)-dy*(previous.x1-value.x1))/length<1e-4&&
+                    std::abs(dx*(previous.y2-value.y1)-dy*(previous.x2-value.x1))/length<1e-4)
+                    throw std::runtime_error("同方向参考线重合，请选择两条不同的直线。");
+                lines.push_back(value);
+                if(value.type==ae::ControlLine::HORIZONTAL)++horizontal;else ++vertical;
+            }
+            const bool three=lines.size()==3&&horizontal>0&&vertical>0;
+            if(!three&&((horizontal!=0&&horizontal!=2)||(vertical!=0&&vertical!=2)))
+                throw std::runtime_error("两条线须同方向，三条线须包含水平和垂直方向，四条线须每个方向各两条。");
+            direction=horizontal?(vertical?"both":"horizontal"):"vertical";
+        }else{
+            if(!request.contains("direction")||!request.at("direction").is_string())throw std::runtime_error("无效的自动透视方向。");
+            direction=request.at("direction").get<std::string>();
+        }
+        if(direction!="horizontal"&&direction!="vertical"&&direction!="both")throw std::runtime_error("无效的自动透视方向。");
+        processor->stopProcessing();
+        const auto axis=direction=="horizontal"?ae::PerspectiveCorrection::HORIZONTAL:direction=="vertical"?ae::PerspectiveCorrection::VERTICAL:ae::PerspectiveCorrection::BOTH;
+        bool success=false;auto candidate=params;
+        auto controlLines=lines;
+        if(controlLines.size()==3)std::sort(controlLines.begin(),controlLines.end(),[](const auto &a,const auto &b){
+            return std::tie(a.type,a.x1,a.y1,a.x2,a.y2)<std::tie(b.type,b.x1,b.y1,b.x2,b.y2);
+        });
+        // ART fits full coarse-rotated coordinates before perspective, retaining
+        // rotate/lens transforms (perspectivecorrection.cc: autocompute/toAshiftLines).
+        candidate.perspective=ae::PerspectiveCorrection::autocompute(initial->getImageSource(),axis,&params,initial->getMetaData(),guided?&controlLines:nullptr,&success);
+        if(!success)throw std::runtime_error("未找到足够可靠的直线，照片设置未改变。请重新画参考线，或使用手动透视与画线拉直。");
+        candidate.perspective.enabled=true;
+        auto result=perspectiveSettings(candidate),checked=adjustments;checked["perspective"]=result;
+        // Reject an out-of-range solution; clamping would no longer be the solved transform.
+        try{applyAdjustments(candidate,checked,baseWidth,baseHeight);}
+        catch(const std::exception &){throw std::runtime_error("透视求解结果超出支持范围，照片设置未改变。请重新选择参考线或手动调整。");}
+        if(guided){
+            // ART's bounded optimizer can report success at its parameter limits
+            // while leaving the guides tilted. Never present that as a solved fit.
+            ae::GeometryMap solved(candidate,processor->getFullWidth(),processor->getFullHeight(),initial->getMetaData(),initial->getImageSource()->getRotateDegree());
+            for(size_t i=0;i<lines.size();++i){
+                ae::Coord2D start,end;
+                const char *failure="当前范围内无法可靠校正这些参考线，照片设置未改变。请重新画线或手动调整。";
+                if(!solved.toDisplay(sourcePoints[2*i],start)||!solved.toDisplay(sourcePoints[2*i+1],end))throw std::runtime_error(failure);
+                const double dx=std::abs(end.x-start.x),dy=std::abs(end.y-start.y);
+                const double residual=lines[i].type==ae::ControlLine::HORIZONTAL?std::atan2(dy,dx):std::atan2(dx,dy);
+                if(!std::isfinite(residual)||std::hypot(dx,dy)<=1e-6||residual>0.1*std::acos(-1.)/180.)throw std::runtime_error(failure);
+            }
+        }
+        return result;
     }
     Json straighten(const Json &request){
         if(!processor||!initial)throw std::runtime_error("请先打开照片，再画线拉直。");
@@ -719,7 +823,11 @@ Json Engine::call(const std::string &method,const Json &p){
     if(method=="validate"){
         pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
         auto a=p.at("adjustments");a["masks"]=referencedMasks(a,params);
-        applyAdjustments(params,a,1000,1000);return {{"colorProfile",inputProfileSettings(params.icm)},{"blackWhite",blackWhiteSettings(params)},{"colorGrading",colorGradingSettings(params)},{"fineRotation",params.rotate.enabled?params.rotate.degree:0},{"masks",a["masks"]}};
+        applyAdjustments(params,a,1000,1000);return {{"colorProfile",inputProfileSettings(params.icm)},{"blackWhite",blackWhiteSettings(params)},{"colorGrading",colorGradingSettings(params)},{"fineRotation",params.rotate.enabled?params.rotate.degree:0},{"perspective",perspectiveSettings(params)},{"masks",a["masks"]}};
+    }
+    if(method=="adjustmentBase"){
+        pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
+        return adjustmentBase(params,p.at("groups"));
     }
     if(method=="parametricCurve"){
         ae::DiagonalCurve curve(parametricCurve(p));std::vector<double> samples;
@@ -736,6 +844,7 @@ Json Engine::call(const std::string &method,const Json &p){
     if(method=="whiteBalance")return impl->whiteBalance(p);
     if(method=="coordinates")return impl->coordinates(p);
     if(method=="straighten")return impl->straighten(p);
+    if(method=="autoPerspective")return impl->autoPerspective(p);
     if(method=="sampleLuminance")return impl->sampleLuminance(p);
     if(method=="sampleColor")return impl->sampleLuminance(p,true);
     if(method=="viewport")return impl->viewport(p);

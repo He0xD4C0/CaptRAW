@@ -34,7 +34,7 @@ try{
  profile=section(profile,'Perspective','Enabled=true\nHorizontal=25\nVertical=-15\nAngle=2\nShear=3\nFocalLength=10\nCropFactor=1.5\nAspect=1\nControlLines=');
  for(const rotation of [0,90,180,270]){
   const folder=join(out,'rotation'+rotation);mkdirSync(folder);
-  const a={...image.adjustments,rotation,crop:null,lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true}};
+  const a={...image.adjustments,perspective:undefined,rotation,crop:null,lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true}};
   const current=await render(a,profile);assert.deepEqual(current.geometry,{rotation,angle:23});assert(current.lensStatus.distortion&&current.lensStatus.ca);
   const input=await controller.begin(image,a,current.artProfile);
   const selections=readdirSync(join(host,'objects'));assert.equal(selections.length,1);

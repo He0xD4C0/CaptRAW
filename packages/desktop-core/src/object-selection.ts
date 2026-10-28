@@ -2,11 +2,11 @@ import {mkdir,mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {NativeEngine} from './engine.js';
-import {Segmenter,type SegmentationResult} from './segmentation.js';
-import type {Adjustments,ImageSession,ObjectMaskResult,ObjectCandidateResult,ObjectPrompt,ObjectBox} from '@captraw/contracts';
+import {Segmenter,type SegmentationResult,type PersonPartsSegmentationResult,type SemanticMasksSegmentationResult,type SkyMaskSegmentationResult} from './segmentation.js';
+import type {Adjustments,ImageSession,ObjectMaskResult,ObjectCandidateResult,ObjectPrompt,ObjectBox,PersonPart,PersonPartsResult,SemanticMaskPart,SemanticMasksResult,SkyMaskResult} from '@captraw/contracts';
 const sha=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
 const aborted=()=>new Error('对象选择已取消，请重新选择。');
-type Selection={id:string;sessionId:string;key:string;directory:string;rotation:number;referenceAngle:number;worker?:NativeEngine;closed?:Promise<void>;input?:{path:string;imageSha256:string;width:number;height:number};result?:SegmentationResult;revision:number;pending:boolean};
+type Selection={id:string;sessionId:string;key:string;directory:string;rotation:number;referenceAngle:number;worker?:NativeEngine;closed?:Promise<void>;input?:{path:string;imageSha256:string;width:number;height:number};result?:SegmentationResult;parts?:PersonPartsSegmentationResult;semantic?:SemanticMasksSegmentationResult;sky?:SkyMaskSegmentationResult;revision:number;pending:boolean};
 const selectionKey=(adjustments:Adjustments,artProfile:string)=>JSON.stringify([adjustments,artProfile]);
 export class ObjectSelection {
  private generation=0;private starting=false;private current?:Selection;private sequence=0;private closing:Promise<unknown>=Promise.resolve();
@@ -57,9 +57,35 @@ export class ObjectSelection {
   for(const p of prompts){points.push(pixel(oriented(p.point)));labels.push(p.exclude?0:1);}
   const revision=++this.sequence;c.revision=revision;c.pending=true;this.previews.clear();
   try{
+   c.parts=undefined;c.semantic=undefined;c.sky=undefined;
    const result=await this.segmenter.request({sessionId:id,revision,...c.input!,points,labels,outputRotation:c.rotation});
    if(this.current!==c||c.revision!==revision)throw aborted();c.result=result;
    return {id,revision,selected:result.selected,candidates:result.candidates.map(item=>{const key=`object/${id}/${revision}-${item.index}.png`;this.previews.set(key,item.file);return {index:item.index,pixels:item.pixels,url:`captraw://preview/${key}`};})};
+  }finally{if(c.revision===revision)c.pending=false;}
+ }
+ async predictPersonParts(id:string):Promise<PersonPartsResult>{
+  const c=this.selection(id),revision=++this.sequence;c.revision=revision;c.pending=true;c.result=undefined;c.parts=undefined;c.semantic=undefined;c.sky=undefined;this.previews.clear();
+  try{
+   const result=await this.segmenter.requestParts({sessionId:id,revision,...c.input!,outputRotation:c.rotation});
+   if(this.current!==c||c.revision!==revision)throw aborted();c.parts=result;
+   return {id,revision,parts:result.parts.map(item=>{const key=`person/${id}/${revision}-${item.part}.png`;this.previews.set(key,item.file);return {part:item.part,classIndex:item.classIndex,pixels:item.pixels,url:`captraw://preview/${key}`};})};
+  }finally{if(c.revision===revision)c.pending=false;}
+ }
+ async predictSemanticMasks(id:string):Promise<SemanticMasksResult>{
+  const c=this.selection(id),revision=++this.sequence;c.revision=revision;c.pending=true;c.result=undefined;c.parts=undefined;c.semantic=undefined;c.sky=undefined;this.previews.clear();
+  try{
+   const result=await this.segmenter.requestSemanticMasks({sessionId:id,revision,...c.input!,outputRotation:c.rotation});
+   if(this.current!==c||c.revision!==revision)throw aborted();c.semantic=result;
+   return {id,revision,parts:result.parts.map(item=>{const key=`semantic/${id}/${revision}-${item.part}.png`;this.previews.set(key,item.file);return {part:item.part,classIndex:item.classIndex,pixels:item.pixels,url:`captraw://preview/${key}`};})};
+  }finally{if(c.revision===revision)c.pending=false;}
+ }
+ async predictSkyMask(id:string):Promise<SkyMaskResult>{
+  const c=this.selection(id),revision=++this.sequence;c.revision=revision;c.pending=true;c.result=undefined;c.parts=undefined;c.semantic=undefined;c.sky=undefined;this.previews.clear();
+  try{
+   const result=await this.segmenter.requestSky({sessionId:id,revision,...c.input!,outputRotation:c.rotation});
+   if(this.current!==c||c.revision!==revision)throw aborted();c.sky=result;
+   const key=`sky/${id}/${revision}.png`;this.previews.set(key,result.file);
+   return {id,revision,pixels:result.pixels,url:`captraw://preview/${key}`};
   }finally{if(c.revision===revision)c.pending=false;}
  }
  async commit(id:string,revision:number,index:number):Promise<ObjectMaskResult>{
@@ -72,6 +98,39 @@ export class ObjectSelection {
   try{await writeFile(path,bytes,{flag:'wx',mode:0o600});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST'||sha(await readFile(path))!==candidate.sha256)throw error;}
   if(this.current!==c||c.revision!==revision)throw aborted();
   const raster={path,sha256:candidate.sha256,width:r.maskWidth,height:r.maskHeight};
+  const result={raster,referenceAngle:c.referenceAngle};await this.cancel(id);return result;
+ }
+ async commitSemanticMask(id:string,revision:number,part:SemanticMaskPart):Promise<ObjectMaskResult>{
+  const c=this.selection(id),r=c.semantic;if(c.pending||!r||r.revision!==revision)throw new Error('请等待最新自动主体蒙版计算完成。');
+  const candidate=r.parts.find(item=>item.part===part);if(!candidate||!candidate.pixels)throw new Error('自动主体蒙版为空，请选择另一个结果。');
+  const bytes=await readFile(candidate.file);if(sha(bytes)!==candidate.sha256)throw new Error('自动主体蒙版文件已改变，请重新计算。');
+  if(this.current!==c||c.revision!==revision)throw aborted();
+  const directory=join(this.cache,'document-assets');await mkdir(directory,{recursive:true});const path=join(directory,`${candidate.sha256}.png`);
+  try{await writeFile(path,bytes,{flag:'wx',mode:0o600});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST'||sha(await readFile(path))!==candidate.sha256)throw error;}
+  if(this.current!==c||c.revision!==revision)throw aborted();
+  const raster={path,sha256:candidate.sha256,width:r.maskWidth,height:r.maskHeight};
+  const result={raster,referenceAngle:c.referenceAngle};await this.cancel(id);return result;
+ }
+ async commitPersonPart(id:string,revision:number,part:PersonPart):Promise<ObjectMaskResult>{
+  const c=this.selection(id),r=c.parts;if(c.pending||!r||r.revision!==revision)throw new Error('请等待最新人物部位计算完成。');
+  const candidate=r.parts.find(item=>item.part===part);if(!candidate||!candidate.pixels)throw new Error('人物部位为空，请换用其他部位。');
+  const bytes=await readFile(candidate.file);if(sha(bytes)!==candidate.sha256)throw new Error('人物部位文件已改变，请重新计算。');
+  if(this.current!==c||c.revision!==revision)throw aborted();
+  const directory=join(this.cache,'document-assets');await mkdir(directory,{recursive:true});const path=join(directory,`${candidate.sha256}.png`);
+  try{await writeFile(path,bytes,{flag:'wx',mode:0o600});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST'||sha(await readFile(path))!==candidate.sha256)throw error;}
+  if(this.current!==c||c.revision!==revision)throw aborted();
+  const raster={path,sha256:candidate.sha256,width:r.maskWidth,height:r.maskHeight};
+  const result={raster,referenceAngle:c.referenceAngle};await this.cancel(id);return result;
+ }
+ async commitSkyMask(id:string,revision:number):Promise<ObjectMaskResult>{
+  const c=this.selection(id),r=c.sky;if(c.pending||!r||r.revision!==revision)throw new Error('请等待最新自动天空计算完成。');
+  if(!r.pixels)throw new Error('自动天空蒙版为空，请改用点选或框选。');
+  const bytes=await readFile(r.file);if(sha(bytes)!==r.sha256)throw new Error('自动天空蒙版文件已改变，请重新计算。');
+  if(this.current!==c||c.revision!==revision)throw aborted();
+  const directory=join(this.cache,'document-assets');await mkdir(directory,{recursive:true});const path=join(directory,`${r.sha256}.png`);
+  try{await writeFile(path,bytes,{flag:'wx',mode:0o600});}catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST'||sha(await readFile(path))!==r.sha256)throw error;}
+  if(this.current!==c||c.revision!==revision)throw aborted();
+  const raster={path,sha256:r.sha256,width:r.maskWidth,height:r.maskHeight};
   const result={raster,referenceAngle:c.referenceAngle};await this.cancel(id);return result;
  }
  cancel(id?:string):Promise<void>{

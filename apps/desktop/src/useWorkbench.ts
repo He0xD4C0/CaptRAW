@@ -1,15 +1,15 @@
 import type {ExportOptions} from '@captraw/contracts/export-options';
 import { useEffect, useRef, useState } from 'react';
 import type {MaskEditTransaction} from './useMaskGesture';
-import type {CanvasEditTransaction} from './geometry';
-import type {SyncGroup} from '@captraw/contracts/synchronize';
+import {rotatePoint,type CanvasEditTransaction} from './geometry';
+import {matchExposureByCameraSettings,type SyncGroup} from '@captraw/contracts/synchronize';
 import type { Adjustments, EngineEvent, ImageSession, JobStatus, LocalMask, MaskType, PreviewFrame, WhiteBalanceRequest, OutputColorSpace, Point, BatchSaveResult } from '@captraw/contracts';
-export interface EditingState {adjustments:Adjustments;profile:string;profileId:number}
+export interface EditingState {adjustments:Adjustments;profile:string;profileId:number;rating?:number}
 type HistoryState=EditingState&{before?:EditingState|null};
-export interface DocumentState extends EditingState { image: ImageSession; initial: Adjustments; dirty: boolean; saved:Adjustments;savedProfileId:number;opened?:EditingState;before?:EditingState; past: HistoryState[]; future: HistoryState[]; thumbnail?: string;previewToken?:string;thumbnailFrame?:string; }
+export interface DocumentState extends EditingState { image: ImageSession; initial: Adjustments; dirty: boolean; saved:Adjustments;savedProfileId:number;savedRating?:number;opened?:EditingState;before?:EditingState; past: HistoryState[]; future: HistoryState[]; thumbnail?: string;previewToken?:string;thumbnailFrame?:string; }
 const copy = <T,>(value: T): T => structuredClone(value);
-const snapshot=(d:EditingState):EditingState=>copy({adjustments:d.adjustments,profile:d.profile,profileId:d.profileId});
-const dirty=(d:DocumentState,a:Adjustments=d.adjustments,profileId=d.profileId)=>profileId!==d.savedProfileId||JSON.stringify(a)!==JSON.stringify(d.saved);
+const snapshot=(d:EditingState):EditingState=>copy({adjustments:d.adjustments,profile:d.profile,profileId:d.profileId,rating:d.rating});
+const dirty=(d:DocumentState,a:Adjustments=d.adjustments,profileId=d.profileId,rating=d.rating)=>profileId!==d.savedProfileId||JSON.stringify(a)!==JSON.stringify(d.saved)||rating!==d.savedRating;
 export function useWorkbench() {
   const [documents, setDocuments] = useState<DocumentState[]>([]);
   const [activeId, setActiveId] = useState('');
@@ -74,7 +74,11 @@ export function useWorkbench() {
   useEffect(() => {
     if (!active || loading.current) return;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => { void renderDocument(active).catch(() => {}); }, 90);
+    // Opening/switching already renders explicitly. A later React effect must
+    // not schedule the same state again beneath an accepted canvas gesture.
+    const alreadyRendered=()=>{const r=rendered.current;return r?.id===active.image.id&&r.revision===revision.current&&r.adjustments===active.adjustments&&r.profileId===active.profileId&&r.maskId===maskRef.current&&r.luminance===luminanceRef.current&&r.colorSampling===colorRef.current;};
+    if(alreadyRendered())return;
+    timer.current = setTimeout(() => { if(!alreadyRendered())void renderDocument(active).catch(() => {}); }, 90);
     return () => clearTimeout(timer.current);
   }, [activeId, active?.adjustments,active?.profileId,maskId,luminance,colorSampling]);
   async function openPaths(paths: string[]) {
@@ -87,7 +91,7 @@ export function useWorkbench() {
       // Each file is decoded to establish its own defaults and source identity.
       for (const path of paths) {
         const image = await window.captraw.open(path);
-        const entry: DocumentState = { image, adjustments: copy(image.adjustments), initial: copy(image.initialAdjustments || image.adjustments), profile: image.recipe?.artProfile || '',profileId:0,savedProfileId:0, dirty: false, saved:copy(image.adjustments), past: [], future: [] };
+        const entry: DocumentState = { image,rating:image.rating,savedRating:image.rating, adjustments: copy(image.adjustments), initial: copy(image.initialAdjustments || image.adjustments), profile: image.recipe?.artProfile || '',profileId:0,savedProfileId:0, dirty: false, saved:copy(image.adjustments), past: [], future: [] };
         setDocuments(old => old.some(d=>d.image.path===image.path)?old.map(d=>d.image.path===image.path?entry:d):[...old,entry]);
         setActiveId(image.id); idRef.current = image.id; setFrame(undefined);
         await renderDocument(entry);
@@ -117,6 +121,12 @@ export function useWorkbench() {
     if (!gesture.current) return;
     const previous = gesture.current;gesture.current = undefined;
     updateDocument(idRef.current, d => JSON.stringify(d.adjustments)===JSON.stringify(previous.adjustments)?d:({ ...d, past: [...d.past, previous], future: [], dirty: dirty(d) }));
+  }
+  function rate(rating:number,paths:string[]){
+    if(loading.current||canvasInProgress())return;
+    commit();++editEpoch.current;
+    setDocuments(old=>old.map(d=>paths.includes(d.image.path)&&d.rating!==rating?{...d,rating,dirty:dirty(d,d.adjustments,d.profileId,rating),past:[...d.past,snapshot(d)],future:[]}:d));
+    setStatus(rating===-1?'已标记拒绝 · 保存 XMP 后保留，不删除原片':rating===0?'已清除评分 · 尚未保存':`已评为 ${rating} 星 · 尚未保存`);
   }
   function beginCanvasEdit(sessionId:string,frameRevision:number,label:string):CanvasEditTransaction|null {
     if(canvasEdit.current)return null;
@@ -152,11 +162,14 @@ export function useWorkbench() {
   }
   function undo(redo = false) {
     if(loading.current)return;
+    const current=docs.current.find(d=>d.image.id===idRef.current);
+    if(!current||!(redo?current.future:current.past).length)return;
     ++editEpoch.current;gesture.current = undefined;
     updateDocument(idRef.current, d => {
       const stack = redo ? d.future : d.past;if (!stack.length) return d;
       const target=stack.at(-1)!,inverse:HistoryState={...snapshot(d),...('before' in target?{before:d.before?copy(d.before):null}:{})};
-      return { ...d,...snapshot(target),...('before' in target?{before:target.before?copy(target.before):undefined}:{}),past: redo ? [...d.past,inverse] : d.past.slice(0,-1), future: redo ? d.future.slice(0,-1) : [...d.future,inverse], dirty: dirty(d,target.adjustments,target.profileId) };
+      const restored=snapshot(target);if(JSON.stringify(restored.adjustments)===JSON.stringify(d.adjustments))restored.adjustments=d.adjustments;
+      return { ...d,...restored,...('before' in target?{before:target.before?copy(target.before):undefined}:{}),past: redo ? [...d.past,inverse] : d.past.slice(0,-1), future: redo ? d.future.slice(0,-1) : [...d.future,inverse], dirty: dirty({...d,rating:target.rating},target.adjustments,target.profileId) };
     });
   }
   function comparisonState(action:'capture'|'reset'|'swap'){
@@ -166,8 +179,8 @@ export function useWorkbench() {
       if(action==='capture')return {...d,before:snapshot(d)};
       if(action==='reset')return {...d,before:undefined};
       const before=d.before||d.opened;if(!before)return d;
-      const {rotation,fineRotation,crop,cropAspect,lensCorrections,lensProfile}=d.adjustments;
-      const next={...snapshot(before),adjustments:{...copy(before.adjustments),rotation,fineRotation,crop:copy(crop),cropAspect,lensCorrections:copy(lensCorrections),lensProfile:copy(lensProfile)}};
+      const {rotation,fineRotation,perspective,perspectiveGuides,crop,cropAspect,lensCorrections,lensProfile}=d.adjustments;
+      const next={...snapshot(before),rating:d.rating,adjustments:{...copy(before.adjustments),rotation,fineRotation,perspective:copy(perspective),perspectiveGuides:copy(perspectiveGuides),crop:copy(crop),cropAspect,lensCorrections:copy(lensCorrections),lensProfile:copy(lensProfile)}};
       if(next.profileId===d.profileId&&JSON.stringify(next.adjustments)===JSON.stringify(d.adjustments))return d;
       return {...d,...next,before:snapshot(d),past:[...d.past,{...snapshot(d),before:d.before?copy(d.before):null}],future:[],dirty:dirty(d,next.adjustments,next.profileId)};
     });
@@ -184,20 +197,20 @@ export function useWorkbench() {
     const profile = await renderDocument(d); return { doc: d, profile };
   }
   async function save() {
-    try { const f = await flush();if (!f) return false;const path = await window.captraw.save({ ...f.doc.image, adjustments: f.doc.adjustments }, f.profile);if (path) { updateDocument(f.doc.image.id, d => ({ ...d, saved:copy(f.doc.adjustments),savedProfileId:f.doc.profileId, dirty: d.profileId!==f.doc.profileId||JSON.stringify(d.adjustments)!==JSON.stringify(f.doc.adjustments) })); setStatus('编辑配方已保存');return true; } } catch (e) { setError(String(e)); }return false;
+    try { const f = await flush();if (!f) return false;const path = await window.captraw.save({ ...f.doc.image,rating:f.doc.rating, adjustments: f.doc.adjustments }, f.profile);if (path) { updateDocument(f.doc.image.id, d => ({ ...d, saved:copy(f.doc.adjustments),savedProfileId:f.doc.profileId,savedRating:f.doc.rating, dirty: d.profileId!==f.doc.profileId||JSON.stringify(d.adjustments)!==JSON.stringify(f.doc.adjustments)||d.rating!==f.doc.rating })); setStatus('编辑配方已保存');return true; } } catch (e) { setError(String(e)); }return false;
   }
   async function saveSelected(paths:string[]){
     if(loading.current||canvasInProgress())return;
     commit();const selected=docs.current.filter(d=>paths.includes(d.image.path)).map(d=>copy(d));if(!selected.length)return;
     clearTimeout(timer.current);loading.current=true;setOpening(true);setSaveOpen(true);setSaveBusy(true);setSaveResult(null);setSaveError('');setSaveProgress('选择保存文件夹…');
     try{
-      const result=await window.captraw.saveSelected({documents:selected.map(d=>({path:d.image.path,width:d.image.width,height:d.image.height,artProfile:d.profile,adjustments:d.adjustments,xmpPacket:d.image.recipe?.xmpPacket}))});
+      const result=await window.captraw.saveSelected({documents:selected.map(d=>({path:d.image.path,width:d.image.width,height:d.image.height,artProfile:d.profile,adjustments:d.adjustments,xmpPacket:d.image.recipe?.xmpPacket,rating:d.rating}))});
       if(!result){setSaveOpen(false);return;}
       setSaveResult(result);
       setDocuments(old=>old.map(d=>{
         const saved=selected.find(s=>s.image.path===d.image.path);
         if(!saved||!result.results.some(r=>r.source===d.image.path&&r.output))return d;
-        return {...d,saved:copy(saved.adjustments),savedProfileId:saved.profileId,dirty:d.profileId!==saved.profileId||JSON.stringify(d.adjustments)!==JSON.stringify(saved.adjustments)};
+        return {...d,saved:copy(saved.adjustments),savedProfileId:saved.profileId,savedRating:saved.rating,dirty:d.profileId!==saved.profileId||JSON.stringify(d.adjustments)!==JSON.stringify(saved.adjustments)||d.rating!==saved.rating};
       }));
       setStatus(`已保存 ${result.results.filter(r=>r.output).length}/${selected.length} 张照片的 XMP${result.cancelled?' · 已停止后续保存':''}`);
     }catch(error){setSaveError(error instanceof Error?error.message:String(error));}
@@ -213,7 +226,7 @@ export function useWorkbench() {
         try{
           const current=id===idRef.current?target:await switchDocument(id);if(!current)return;
           clearTimeout(timer.current);const profile=await renderDocument(current);
-          if(!await window.captraw.save({...current.image,adjustments:current.adjustments},profile))return;
+          if(!await window.captraw.save({...current.image,rating:current.rating,adjustments:current.adjustments},profile))return;
         }catch(e){setError(String(e));return;}
       }
     }
@@ -227,10 +240,14 @@ export function useWorkbench() {
     const doc=docs.current.find(d=>d.image.id===idRef.current);if(!doc)return;
     if(!await save())return;
     const current=docs.current.find(d=>d.image.path===doc.image.path);
-    if(current&&current.profileId===doc.profileId&&JSON.stringify(current.adjustments)===JSON.stringify(doc.adjustments))await closeDocument(current.image.id,true);
+    if(current&&current.profileId===doc.profileId&&JSON.stringify(current.adjustments)===JSON.stringify(doc.adjustments)&&current.rating===doc.rating)await closeDocument(current.image.id,true);
   }
   function openSynchronize(){if(loading.current||samplingRef.current||busy||wbPending||canvasInProgress())return;commit();setSyncError('');setSyncOpen(true);}
   async function cancelSynchronize(){if(loading.current){syncCancelled.current=true;setSyncProgress('正在取消同步…');await window.captraw.cancelSynchronize();}else setSyncOpen(false);}
+  async function previewThumbnail(preview:string){
+    const image=await new Promise<HTMLImageElement>((accept,reject)=>{const value=new Image();value.crossOrigin='anonymous';value.onload=()=>accept(value);value.onerror=()=>reject(new Error('无法读取照片预览，请重试。'));value.src=preview;});
+    const canvas=document.createElement('canvas');canvas.width=180;canvas.height=Math.round(180*image.height/image.width);canvas.getContext('2d')!.drawImage(image,0,0,canvas.width,canvas.height);return canvas.toDataURL('image/jpeg',.75);
+  }
   async function synchronize(paths:string[],groups:SyncGroup[]){
     if(loading.current)return;
     const source=docs.current.find(d=>d.image.id===idRef.current),targets=docs.current.filter(d=>paths.includes(d.image.path)&&d.image.id!==idRef.current);
@@ -242,10 +259,7 @@ export function useWorkbench() {
       const results=await window.captraw.synchronize({source:{image:source.image,adjustments:copy(source.adjustments),profile},targets:targets.map(d=>({image:d.image,adjustments:copy(d.adjustments),profile:d.profile})),groups});
       if(results===null||syncCancelled.current){setSyncOpen(false);syncStatusRevision.current=revision.current;setStatus('已取消同步，照片编辑未改变');return;}
       const thumbnails=new Map<string,string>();
-      for(const result of results){
-        const image=await new Promise<HTMLImageElement>((accept,reject)=>{const image=new Image();image.crossOrigin='anonymous';image.onload=()=>accept(image);image.onerror=()=>reject(new Error('无法读取同步预览，请重试。'));image.src=result.preview;});
-        const canvas=document.createElement('canvas');canvas.width=180;canvas.height=Math.round(180*image.height/image.width);canvas.getContext('2d')!.drawImage(image,0,0,canvas.width,canvas.height);thumbnails.set(result.path,canvas.toDataURL('image/jpeg',.75));
-      }
+      for(const result of results)thumbnails.set(result.path,await previewThumbnail(result.preview));
       if(syncCancelled.current){setSyncOpen(false);syncStatusRevision.current=revision.current;setStatus('已取消同步，照片编辑未改变');return;}
       if(epoch!==editEpoch.current)throw new Error('编辑已变化，请重新同步。');
       const profileIds=new Map(results.map(r=>[r.path,++profileEpoch.current]));
@@ -253,6 +267,45 @@ export function useWorkbench() {
       setSyncOpen(false);syncStatusRevision.current=revision.current;setStatus(results.length?`已同步 ${results.length} 张照片 · 可分别撤销和保存`:'所选调整已相同，无需同步');
     }catch(error){setSyncError(error instanceof Error?error.message:String(error));}
     finally{loading.current=false;setSyncBusy(false);}
+  }
+  async function matchCameraExposure(paths:string[]){
+    if(loading.current||busy||samplingRef.current||wbPending||canvasInProgress())return false;
+    const source=docs.current.find(d=>d.image.id===idRef.current),targets=docs.current.filter(d=>paths.includes(d.image.path)&&d.image.id!==idRef.current);
+    if(!source||!targets.length){setError('请选中当前照片和至少一张其他照片，再匹配曝光。');return false;}
+    commit();setError('');
+    try{
+      const matches=matchExposureByCameraSettings(
+        {image:source.image,adjustments:copy(source.adjustments),profile:source.profile},
+        targets.map(d=>({image:d.image,adjustments:copy(d.adjustments),profile:d.profile})),
+      );
+      const changed=matches.filter(match=>match.exposure!==match.target.adjustments.exposure);
+      if(!changed.length){setStatus('相机曝光已经匹配，无需修改');return true;}
+      loading.current=true;setSyncBusy(true);setSyncProgress('');
+      const completed=[];
+      try{
+        for(const [i,match] of changed.entries()){
+          setSyncProgress(`正在匹配曝光 ${i+1}/${changed.length} · ${match.target.image.name}`);setStatus(`正在匹配曝光 ${i+1}/${changed.length}…`);
+          const desired={...copy(match.target.adjustments),exposure:match.exposure};
+          const results=await window.captraw.synchronize({
+            source:{image:source.image,adjustments:desired,profile:match.target.profile},
+            targets:[match.target],
+            groups:['light'],
+          });
+          if(results===null)throw new Error('曝光匹配已取消。');
+          const result=results[0];
+          if(!result||result.path!==match.target.image.path)throw new Error(`${match.target.image.name} 未返回有效曝光预览。`);
+          completed.push({...result,exposure:match.exposure,thumbnail:await previewThumbnail(result.preview),profileId:++profileEpoch.current});
+        }
+      }finally{loading.current=false;setSyncBusy(false);setSyncProgress('');}
+      const byPath=new Map(completed.map(result=>[result.path,result]));
+      setDocuments(old=>old.map(d=>{
+        const result=byPath.get(d.image.path);if(!result)return d;
+        const adjustments={...result.adjustments,exposure:result.exposure};
+        return {...d,adjustments,profile:result.profile,profileId:result.profileId,dirty:dirty(d,adjustments,result.profileId),past:[...d.past,snapshot(d)],future:[],thumbnail:result.thumbnail,thumbnailFrame:result.preview,previewToken:result.preview};
+      }));
+      setStatus(`已按相机设置匹配 ${changed.length} 张照片曝光`);
+      return true;
+    }catch(error){setError(error instanceof Error?error.message:String(error));return false;}
   }
   const exporting=useRef(false);const [exportPending,setExportPending]=useState(false);
   async function applyPreset(id:string){
@@ -291,33 +344,39 @@ export function useWorkbench() {
       edit(a=>({...a,...result}));setStatus('白平衡已更新');
     }catch(e){setError(String(e));}finally{setWbPending(false);}
   }
-  async function sampleColor(maskId:string,componentId:string|undefined,start:Point,end?:Point,append=false){
-    if(loading.current||samplingRef.current)return;
+  async function sampleColor(maskId:string,componentId:string|undefined,start:Point,end:Point|undefined,append:boolean,transaction:CanvasEditTransaction){
+    if(loading.current||samplingRef.current||!transaction.valid())return;
     const current=docs.current.find(d=>d.image.id===idRef.current),mask=current?.adjustments.masks.find(m=>m.id===maskId),part=mask?.components?mask.components.find(c=>c.id===componentId):mask;
     if(!part||part.type!=='color')return;
     if(append&&(part.colorSamples?.length||0)>=5){setStatus('最多保留五个颜色样本，请先删除一个');return;}
-    samplingRef.current=true;setSampling(true);const token=++sampleEpoch.current,epoch=editEpoch.current;
+    samplingRef.current=true;setSampling(true);const token=++sampleEpoch.current;
     try{
-      const f=await flush();if(!f||epoch!==editEpoch.current||token!==sampleEpoch.current)return;
-      const result=await window.captraw.sampleColor(f.doc.image.id,revision.current,start,end);
-      if(token!==sampleEpoch.current||epoch!==editEpoch.current||idRef.current!==f.doc.image.id)return;
-      const sample={l:result.l,c:result.c,h:result.h,point:start,...(end?{end}:{})};
-      edit(a=>({...a,masks:a.masks.map(m=>{
+      const result=await window.captraw.sampleColor(transaction.sessionId,transaction.revision,start,end);
+      if(token!==sampleEpoch.current||!transaction.valid()||result.revision!==transaction.revision)return;
+      if(!frame||frame.sessionId!==transaction.sessionId||frame.revision!==transaction.revision)return;
+      const center=end?{x:(start.x+end.x)/2,y:(start.y+end.y)/2}:start;
+      const at=rotatePoint(center,current!.adjustments.rotation),width=frame.fullWidth,height=frame.fullHeight;
+      const mapped=await window.captraw.coordinates(transaction.sessionId,transaction.revision,'display','source',[{x:at.x*(width-1),y:at.y*(height-1)}]);
+      if(token!==sampleEpoch.current||!transaction.valid())return;
+      const point=mapped.points[0];
+      if(!point||mapped.width!==width||mapped.height!==height)throw new Error('无法定位颜色样本，请重新取样。');
+      const sourcePoint=rotatePoint({x:point.x/(width-1),y:point.y/(height-1)},-current!.adjustments.rotation);
+      const sample={l:result.l,c:result.c,h:result.h,point:start,...(end?{end}:{}),sourcePoint};
+      transaction.apply(a=>({...a,masks:a.masks.map(m=>{
         if(m.id!==maskId)return m;
         const apply=<T extends LocalMask|NonNullable<LocalMask['components']>[number]>(c:T):T=>({...c,initialized:true,colorSamples:append?[...(c.colorSamples||[]),sample]:[sample]});
         return m.components?{...m,components:m.components.map(c=>c.id===componentId?apply(c):c)}:apply(m);
       })}));setStatus('已更新颜色范围');
-    }catch(e){if(token===sampleEpoch.current)setError(String(e));}finally{samplingRef.current=false;setSampling(false);}
+    }catch(e){if(token===sampleEpoch.current&&transaction.valid())setError(String(e));}finally{if(token===sampleEpoch.current){samplingRef.current=false;setSampling(false);}}
   }
-  async function sampleLuminance(maskId:string,componentId:string|undefined,start:Point,end?:Point){
-    if(loading.current||samplingRef.current)return;
-    samplingRef.current=true;setSampling(true);const token=++sampleEpoch.current,epoch=editEpoch.current;
+  async function sampleLuminance(maskId:string,componentId:string|undefined,start:Point,end:Point|undefined,transaction:CanvasEditTransaction){
+    if(loading.current||samplingRef.current||!transaction.valid())return;
+    samplingRef.current=true;setSampling(true);const token=++sampleEpoch.current;
     try{
-      const f=await flush();if(!f||epoch!==editEpoch.current||token!==sampleEpoch.current)return;
-      const result=await window.captraw.sampleLuminance(f.doc.image.id,revision.current,start,end);
-      if(token!==sampleEpoch.current||epoch!==editEpoch.current||idRef.current!==f.doc.image.id)return;
+      const result=await window.captraw.sampleLuminance(transaction.sessionId,transaction.revision,start,end);
+      if(token!==sampleEpoch.current||!transaction.valid()||result.revision!==transaction.revision)return;
       const low=Math.min(99,Math.floor(result.minimum)),high=Math.max(low+1,Math.min(100,Math.ceil(result.maximum)));
-      const next={...f.doc.adjustments,masks:f.doc.adjustments.masks.map(m=>{
+      transaction.apply(a=>({...a,masks:a.masks.map(m=>{
         if(m.id!==maskId)return m;
         const apply=<T extends LocalMask|NonNullable<LocalMask['components']>[number]>(part:T):T=>{
           if(part.type!=='luminance')return part;
@@ -325,8 +384,8 @@ export function useWorkbench() {
           return {...part,luminanceRange:[Math.max(0,low-(initial?10:v[1]-v[0])),low,high,Math.min(100,high+(initial?10:v[3]-v[2]))]};
         };
         return m.components?{...m,components:m.components.map(c=>c.id===componentId?apply(c):c)}:apply(m);
-      })};if(JSON.stringify(next)!==JSON.stringify(f.doc.adjustments))edit(()=>next);setStatus('已按照片亮度更新范围');
-    }catch(e){if(token===sampleEpoch.current)setError(String(e));}finally{samplingRef.current=false;setSampling(false);}
+      })}));setStatus('已按照片亮度更新范围');
+    }catch(e){if(token===sampleEpoch.current&&transaction.valid())setError(String(e));}finally{if(token===sampleEpoch.current){samplingRef.current=false;setSampling(false);}}
   }
   async function viewport(x: number,y: number,width: number,height: number) {
     if(loading.current)return;
@@ -335,6 +394,6 @@ export function useWorkbench() {
     try { await window.captraw.viewport(d.image.id, requestedRevision, x,y,width,height); }
     catch (e) { if(!loading.current&&idRef.current===d.image.id&&revision.current===requestedRevision)setError(String(e)); }
   }
-  return {beginCanvasEdit,beginMaskEdit,saveSelected,cancelSave,saveOpen,saveBusy,saveProgress,saveResult,saveError,closeSave:()=>setSaveOpen(false), applyPreset,cancelPreset,presetBusy,flush,exportPending,dismissJob:()=>setJob(undefined),syncOpen,syncBusy,syncProgress,syncError,openSynchronize,cancelSynchronize,synchronize,documents, active, frame, detailFrame, busy:busy||opening||wbPending||sampling,opening,wbPending,sampling,error,status,job,revision, setError,setMaskPreview,setLuminance,setColorSampling,sampleColor,sampleLuminance,cancelLuminanceSample:()=>{++sampleEpoch.current;},openPaths,switchDocument,closeDocument,finish,whiteBalance,edit,commit,undo,addMask,save,exportImage,comparisonState,viewport,
+  return {rate,beginCanvasEdit,beginMaskEdit,saveSelected,cancelSave,saveOpen,saveBusy,saveProgress,saveResult,saveError,closeSave:()=>setSaveOpen(false), applyPreset,cancelPreset,presetBusy,flush,exportPending,dismissJob:()=>setJob(undefined),syncOpen,syncBusy,syncProgress,syncError,openSynchronize,cancelSynchronize,synchronize,matchCameraExposure,documents, active, frame, detailFrame, busy:busy||opening||wbPending||sampling,opening,wbPending,sampling,error,status,job,revision, setError,setMaskPreview,setLuminance,setColorSampling,sampleColor,sampleLuminance,cancelLuminanceSample:()=>{++sampleEpoch.current;samplingRef.current=false;setSampling(false);},openPaths,switchDocument,closeDocument,finish,whiteBalance,edit,commit,undo,addMask,save,exportImage,comparisonState,viewport,
     reset: () => { if (active) edit(() => copy(active.initial)); } };
 }

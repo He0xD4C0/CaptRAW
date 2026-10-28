@@ -2,6 +2,7 @@
   "name": "@captraw/desktop-core", "version": "0.0.0", "private": true,
   "type": "module", "license": "GPL-3.0-or-later",
   "exports": {
+    "./auto-perspective": { "types": "./dist/auto-perspective.d.ts", "import": "./dist/auto-perspective.js" },
     "./input-profiles": { "types": "./dist/input-profiles.d.ts", "import": "./dist/input-profiles.js" },
     "./engine": { "types": "./dist/engine.d.ts", "import": "./dist/engine.js" },
     "./batch-export": { "types": "./dist/batch-export.d.ts", "import": "./dist/batch-export.js" },

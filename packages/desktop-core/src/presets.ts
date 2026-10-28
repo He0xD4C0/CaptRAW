@@ -1,8 +1,8 @@
 import {join} from 'node:path';
 import {mkdir,readdir,rename,rm} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
-import {capturePreset,validatePreset,presetName,presetValidationBase,type PresetDocument,type PresetInput,type PresetSummary} from '@captraw/contracts/presets';
-import type {Adjustments} from '@captraw/contracts';
+import {capturePreset,validatePreset,presetName,presetValidationAdjustments,type PresetDocument,type PresetInput,type PresetSummary} from '@captraw/contracts/presets';
+import {mergeAdjustmentPatch,type AdjustmentPatch} from '@captraw/contracts';
 import type {SyncDocument} from '@captraw/contracts/synchronize';
 import {saveRecipeWithMasks,restoreRecipeMasks} from './mask-assets.js';
 import {XMP,CRS,CT,property,text,encode,lookup,readExtension,encodeAdjustments,decodeAdjustments} from './xmp.js';
@@ -16,7 +16,7 @@ export class Presets {
  cancel(){++this.generation;}
  constructor(private root:string,core:Core,private cache:string,private xmp:XMP){
   // Presets carry selected controls only, never hidden source-image ART settings.
-  this.core={call:async(method,params)=>{if(method!=='maskAssets')return core.call(method,params);const input=params as {adjustments:Partial<Adjustments>};const missing=!Object.hasOwn(input.adjustments,'masks');const result=await core.call(method,{...input,adjustments:{masks:[],...input.adjustments}});if(missing)delete result.adjustments.masks;return {...result,artProfile:''};}};
+  this.core={call:async(method,params)=>{if(method!=='maskAssets')return core.call(method,params);const input=params as {adjustments:AdjustmentPatch};const missing=!Object.hasOwn(input.adjustments,'masks');const result=await core.call(method,{...input,adjustments:{masks:[],...input.adjustments}});if(missing)delete result.adjustments.masks;return {...result,artProfile:''};}};
  }
  private path(id:string){return join(this.root,validID(id),'preset.xmp');}
  private summary(id:string,p:PresetDocument):PresetSummary{return {id,name:p.name,group:p.group,groups:p.groups,approximateWB:!!p.approximateWB,warnings:p.warnings};}
@@ -31,13 +31,14 @@ export class Presets {
  }
  private async save(path:string,p:PresetDocument){
   await saveRecipeWithMasks(this.core,path,p,async value=>{
+   const previous=value.xmpPacket?(await this.xmp.call('read',value.xmpPacket)).properties:[];
    const localized=(s:string)=>({localized:s});
-   const changes=[...encodeAdjustments(value.adjustments),property(CRS,'Name',localized(value.name)),property(CRS,'Group',localized(value.group)),property(CRS,'PresetType',text('Normal')),property(CT,'EngineVersion',encode(ENGINE_VERSION)),property(CT,'MaskAssets',value.maskAssets?encode(value.maskAssets):null)];
+   const changes=[...encodeAdjustments(value.adjustments,previous),property(CRS,'Name',localized(value.name)),property(CRS,'Group',localized(value.group)),property(CRS,'PresetType',text('Normal')),property(CT,'EngineVersion',encode(ENGINE_VERSION)),property(CT,'MaskAssets',value.maskAssets?encode(value.maskAssets):null)];
    if(!value.xmpPacket)changes.push(property(CRS,'ProcessVersion',text('15.4')),property(CRS,'UUID',text(randomUUID().replaceAll('-','').toUpperCase())));
    return (await this.xmp.call('write',value.xmpPacket||'',changes)).packet!;
   });
  }
- private async restore(path:string){const p=await restoreRecipeMasks(this.core,path,await this.read(path),this.cache);await this.core.call('validate',{artProfile:'',adjustments:{...presetValidationBase,...p.adjustments}});return p;}
+ private async restore(path:string){const p=await restoreRecipeMasks(this.core,path,await this.read(path),this.cache);await this.core.call('validate',{artProfile:'',adjustments:presetValidationAdjustments(p.adjustments)});return p;}
  async list(){await mkdir(this.root,{recursive:true});const items:PresetSummary[]=[],errors:string[]=[];for(const id of await readdir(this.root)){if(!/^[0-9a-f-]{36}$/.test(id))continue;try{items.push(this.summary(id,await this.read(this.path(id))));}catch(e){errors.push(`${id}：${String(e)}`);}}return {items:items.sort((a,b)=>a.group.localeCompare(b.group)||a.name.localeCompare(b.name)),errors};}
  private async add(p:PresetDocument){const id=randomUUID(),path=this.path(id);await mkdir(join(this.root,id),{recursive:true});try{await this.save(path,p);}catch(e){await rm(join(this.root,id),{recursive:true,force:true});throw e;}return this.summary(id,p);}
  async create(input:PresetInput){const checked=await this.core.call('validate',{artProfile:input.artProfile||'',adjustments:input.adjustments});input={...input,adjustments:{...input.adjustments,masks:checked.masks}};return this.add(capturePreset(input));}
@@ -50,6 +51,6 @@ export class Presets {
   // Synchronizer never opens its source; this identity prevents collision with the target photo.
   // A preset without a leaf reference retains its historical target-canvas
   // semantics. This profile supplies binding context only; it is never stored.
-  return sync.run({source:{image:{...target.image,path:'captraw-preset:'+id},profile:target.profile,adjustments:{...target.adjustments,...p.adjustments} as Adjustments},targets:[target],groups:p.groups});
+  return sync.run({source:{image:{...target.image,path:'captraw-preset:'+id},profile:target.profile,adjustments:mergeAdjustmentPatch(target.adjustments,p.adjustments)},targets:[target],groups:p.groups});
  }
 }

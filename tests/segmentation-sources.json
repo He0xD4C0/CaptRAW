@@ -61,6 +61,36 @@
       "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/onnxruntime-osx-arm64-1.30.0.tgz",
       "sha256": "6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012",
       "bytes": 42373116
+    },
+    {
+      "name": "selfie-multiclass.onnx",
+      "url": "https://huggingface.co/senty-au/selfie_multiclass_256x256-ONNX/resolve/main/onnx/model.onnx",
+      "sha256": "35ec1ecd9ee7f85073c99c00020b7f6751b69506eeacf683bc8665f6117f85b0",
+      "bytes": 16454560
+    },
+    {
+      "name": "person-parts-model-card.pdf",
+      "url": "https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Multiclass%20Segmentation.pdf",
+      "sha256": "59372fce0666d4c75b3877540fa77f80ac4b2a0f75e914711417f85fc490a9e6",
+      "bytes": 1378158
+    },
+    {
+      "name": "person-parts-LICENSE.txt",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "bytes": 11358
+    },
+    {
+      "name": "u2net.onnx",
+      "url": "https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx",
+      "sha256": "8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491",
+      "bytes": 175997641
+    },
+    {
+      "name": "u2net-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/xuebinqin/U-2-Net/master/LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "bytes": 11357
     }
   ],
   "convertedModels": {
@@ -91,6 +121,24 @@
         "encoder.onnx": {
           "bytes": 138018811,
           "sha256": "cdf3645422777c6c257d52d69f93951b6f360481570cdcdba5220050609d5c4a"
+        }
+      }
+    },
+    "personParts": {
+      "modelId": "mediapipe-selfie-multiclass-fp32-r1",
+      "files": {
+        "model.onnx": {
+          "bytes": 16454560,
+          "sha256": "35ec1ecd9ee7f85073c99c00020b7f6751b69506eeacf683bc8665f6117f85b0"
+        }
+      }
+    },
+    "subject": {
+      "modelId": "u2net-salient-fp32-r1",
+      "files": {
+        "model.onnx": {
+          "bytes": 175997641,
+          "sha256": "8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491"
         }
       }
     }

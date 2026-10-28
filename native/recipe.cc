@@ -18,7 +18,7 @@ Json defaults() {
         {"contrast",0},{"saturation",0},{"vibrance",0},{"rotation",0},{"crop",nullptr},
         {"curve",Json::array({{{"x",0},{"y",0}},{{"x",1},{"y",1}}})},{"masks",Json::array()},
         {"highlights",0},{"shadows",0},{"whites",0},{"blacks",0},{"sharpening",0},{"sharpenRadius",1},
-        {"luminanceNoise",0},{"colorNoise",0},{"dehaze",0},{"vignette",0},{"grain",0},{"lensCorrections",false},
+        {"luminanceNoise",0},{"colorNoise",0},{"dehaze",0},{"vignette",0},{"grain",0},{"lensCorrections",false},{"lensManualDistortion",0},{"lensVignette",0},
         {"redCurve",Json::array({{{"x",0},{"y",0}},{{"x",1},{"y",1}}})},
         {"greenCurve",Json::array({{{"x",0},{"y",0}},{{"x",1},{"y",1}}})},
         {"blueCurve",Json::array({{{"x",0},{"y",0}},{{"x",1},{"y",1}}})},
@@ -48,6 +48,10 @@ Json referencedMasks(const Json &adjustments,const pp::ProcParams &params) {
     for(auto &mask:masks)bind(mask,0);
     return masks;
 }
+Json perspectiveSettings(const pp::ProcParams &p) {
+    const auto &v=p.perspective;
+    return {{"enabled",v.enabled},{"horizontal",v.horizontal},{"vertical",v.vertical},{"angle",v.angle},{"shear",v.shear},{"focalLength",v.flength},{"cropFactor",v.cropfactor},{"aspect",v.aspect}};
+}
 Json colorGradingSettings(const pp::ProcParams &p) {
     const auto &values=p.captrawGrading;Json result=Json::object();int i=0;
     for(const char *region:{"shadows","midtones","highlights","global"}){
@@ -63,6 +67,47 @@ std::vector<double> parametricCurve(const Json &settings) {
     for(const auto &split:splits){const double v=num({{"v",split}},"v",0,1,99);if(v-previous<1)throw std::runtime_error("Curve splits must be ordered with a one percent gap");curve.push_back(v/100.);previous=v;}
     bool changed=false;for(const char *key:{"highlights","lights","darks","shadows"}){const double v=num(settings,key,0,-100,100);curve.push_back(v);changed|=v!=0;}
     return changed?curve:std::vector<double>{double(art::utils::DCT_Linear)};
+}
+Json adjustmentBase(const pp::ProcParams &p,const Json &groups) {
+    if(!groups.is_array()||groups.size()>4)throw std::runtime_error("Invalid adjustment projection groups");
+    Json result=Json::object();
+    for(const auto &group:groups){
+        if(group=="colorGrading"){
+            if(!p.captrawGrading.empty()&&p.captrawGrading.size()!=14)throw std::runtime_error("Invalid stored color grading");
+            result["colorGrading"]=colorGradingSettings(p);
+        }else if(group=="parametricCurve"){
+            Json values={{"shadows",0},{"darks",0},{"lights",0},{"highlights",0},{"splits",{25,50,75}}};
+            const auto &curve=p.toneCurve.captrawParametric;
+            if(curve.size()>1){
+                if(curve.size()!=8||curve[0]!=double(art::utils::DCT_Parametric))throw std::runtime_error("原生参数曲线无法无损投影为当前控件，已停止载入");
+                values["splits"]=Json::array();
+                for(int i=1;i<=3;++i){const double value=curve[i]*100.;if(!std::isfinite(value)||std::abs(value-std::round(value))>1e-5)throw std::runtime_error("原生参数曲线分界无法无损投影");values["splits"].push_back(int(std::round(value)));}
+                values["highlights"]=curve[4];values["lights"]=curve[5];values["darks"]=curve[6];values["shadows"]=curve[7];
+            }
+            result["parametricCurve"]=values;
+        }else if(group=="calibration"){
+            const auto &m=p.chmixer;
+            if(m.enabled&&m.mode!=pp::ChannelMixerParams::PRIMARIES_CHROMA)throw std::runtime_error("原生通道混合无法无损投影为原色校准，已停止载入");
+            result["calibration"]={{"redHue",m.enabled?m.hue_tweak[0]:0},{"redSaturation",m.enabled?m.sat_tweak[0]:0},
+                {"greenHue",m.enabled?m.hue_tweak[1]:0},{"greenSaturation",m.enabled?m.sat_tweak[1]:0},
+                {"blueHue",m.enabled?m.hue_tweak[2]:0},{"blueSaturation",m.enabled?m.sat_tweak[2]:0}};
+        }else if(group=="hsl"){
+            Json values=Json::object();const std::array<double,8> positions{0,1./12,1./6,1./3,.5,2./3,.75,5./6};
+            const std::vector<double> *curves[]={&p.hsl.hCurve,&p.hsl.sCurve,&p.hsl.lCurve};const char *names[]={"hue","saturation","luminance"};
+            for(int channel=0;channel<3;++channel){
+                values[names[channel]]=std::vector<int>(8,0);if(!p.hsl.enabled)continue;
+                const auto &curve=*curves[channel];
+                if(curve.size()!=33||curve[0]!=double(art::utils::FCT_MinMaxCPoints))throw std::runtime_error("原生 HSL 曲线无法无损投影为八色控件，已停止载入");
+                for(int i=0;i<8;++i){
+                    const int offset=1+i*4;const double value=(curve[offset+1]-.5)*200.;
+                    if(!std::isfinite(value)||std::abs(curve[offset]-positions[i])>1e-5||std::abs(value-std::round(value))>1e-5||curve[offset+2]!=0||curve[offset+3]!=0)throw std::runtime_error("原生 HSL 曲线无法无损投影为八色控件，已停止载入");
+                    values[names[channel]][i]=int(std::round(value));
+                }
+            }
+            result["hsl"]=values;
+        }else throw std::runtime_error("Unknown adjustment projection group");
+    }
+    return result;
 }
 Json inputProfileSettings(const pp::ColorManagementParams &p) {
     const std::string mode=p.inputProfile=="(cameraICC)"?"auto":p.inputProfile=="(camera)"||p.inputProfile.empty()?"matrix":p.inputProfile=="(embedded)"?"embedded":"inherited";
@@ -302,12 +347,27 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
     p.toneEqualizer.enabled=std::any_of(p.toneEqualizer.bands.begin(),p.toneEqualizer.bands.end(),[](int x){return x!=0;});
     p.sharpening.enabled=num(a,"sharpening",0,0,150)>0;p.sharpening.method="usm";
     p.sharpening.amount=int(num(a,"sharpening",0,0,150));p.sharpening.radius=num(a,"sharpenRadius",1,.1,3);
+    if(a.contains("sharpenDetail"))p.sharpening.contrast=num(a,"sharpenDetail",25,0,100)*.8;
+    if(a.contains("sharpenEdgeMask")){
+        const double mask=num(a,"sharpenEdgeMask",0,0,100);
+        p.sharpening.edgesonly=mask>0;p.sharpening.edges_radius=1.9;
+        p.sharpening.edges_tolerance=int(std::lround(10.+9990.*std::sqrt(mask/100.)));
+    }
     p.denoise.enabled=num(a,"luminanceNoise",0,0,100)>0||num(a,"colorNoise",0,0,100)>0;
     p.denoise.luminance=num(a,"luminanceNoise",0,0,100);p.denoise.chrominance=num(a,"colorNoise",0,0,100);
     p.denoise.chrominanceMethod=pp::DenoiseParams::ChrominanceMethod::MANUAL;
+    if(a.contains("luminanceNoiseDetail"))p.denoise.luminanceDetail=num(a,"luminanceNoiseDetail",50,0,100);
+    if(a.contains("luminanceNoiseContrast"))p.denoise.luminanceDetailThreshold=int(num(a,"luminanceNoiseContrast",0,0,100));
+    if(a.contains("colorNoiseDetail")||a.contains("colorNoiseSmoothness")){
+        const double detail=num(a,"colorNoiseDetail",50,0,100),smoothness=num(a,"colorNoiseSmoothness",50,0,100);
+        p.denoise.guidedChromaRadius=std::clamp(int(std::lround((100.-detail+smoothness)*.1)),0,20);
+        p.denoise.smoothingEnabled=p.denoise.guidedChromaRadius>0;
+    }
     const double dehaze=num(a,"dehaze",0,-100,100);p.dehaze.enabled=dehaze!=0;
     p.dehaze.strength={double(art::utils::FCT_MinMaxCPoints),0,.5+dehaze/200,0,0,1,.5+dehaze/200,0,0};
     const double vignette=num(a,"vignette",0,-100,100);p.pcvignette.enabled=vignette!=0;p.pcvignette.strength=-vignette/100;
+    if(a.contains("postCropVignetteFeather"))p.pcvignette.feather=int(num(a,"postCropVignetteFeather",50,0,100));
+    if(a.contains("postCropVignetteRoundness"))p.pcvignette.roundness=int(num(a,"postCropVignetteRoundness",0,-100,100));
     p.grain.enabled=num(a,"grain",0,0,100)>0;p.grain.strength=int(num(a,"grain",0,0,100));
     p.lensProf.lcMode=a.value("lensCorrections",false)?pp::LensProfParams::LcMode::LENSFUNAUTOMATCH:pp::LensProfParams::LcMode::NONE;
     p.lensProf.useDist=true;p.lensProf.useCA=true;p.lensProf.useVign=true;
@@ -327,17 +387,79 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
             if(a.value("lensCorrections",false))p.lensProf.lcMode=pp::LensProfParams::LcMode::LENSFUNMANUAL;
         }
     }
+    if(a.contains("lensManualDistortion")){
+        const double amount=num(a,"lensManualDistortion",0,-100,100);
+        p.distortion.enabled=amount!=0;p.distortion.amount=amount/200.;p.distortion.autocompute=false;
+    }
+    if(a.contains("lensVignette")){
+        const int amount=int(num(a,"lensVignette",0,-100,100));
+        p.vignetting.enabled=amount!=0;p.vignetting.amount=amount;
+    }
+    if(a.contains("defringe")){
+        const auto &d=a.at("defringe");if(!d.is_object())throw std::runtime_error("Invalid defringe settings");
+        const double purpleAmount=num(d,"purpleAmount",0,0,100),purpleLow=num(d,"purpleHueLo",30,0,100),purpleHigh=num(d,"purpleHueHi",70,0,100);
+        const double greenAmount=num(d,"greenAmount",0,0,100),greenLow=num(d,"greenHueLo",40,0,100),greenHigh=num(d,"greenHueHi",60,0,100);
+        if(purpleLow>=purpleHigh||greenLow>=greenHigh)throw std::runtime_error("Invalid defringe hue range");
+        std::vector<double> curve{double(art::utils::FCT_MinMaxCPoints)};
+        for(int i=0;i<=100;++i){
+            const double x=i/100.,purpleCenter=(purpleLow+purpleHigh)/200.,greenCenter=(greenLow+greenHigh)/200.;
+            double value=.5;
+            if(purpleAmount>0&&x>=purpleLow/100.&&x<=purpleHigh/100.){
+                const double half=(purpleHigh-purpleLow)/200.,factor=1.-std::abs(x-purpleCenter)/half;
+                value=std::min(value,.5-purpleAmount/200.*factor);
+            }
+            if(greenAmount>0&&x>=greenLow/100.&&x<=greenHigh/100.){
+                const double half=(greenHigh-greenLow)/200.,factor=1.-std::abs(x-greenCenter)/half;
+                value=std::min(value,.5-greenAmount/200.*factor);
+            }
+            curve.insert(curve.end(),{x,value,0,0});
+        }
+        p.defringe.enabled=purpleAmount>0||greenAmount>0;p.defringe.radius=2;p.defringe.threshold=13;p.defringe.huecurve=std::move(curve);
+    }
     p.hsl.enabled=a.contains("hsl");
     if(p.hsl.enabled){const std::array<double,8> positions{0,1./12,1./6,1./3,.5,2./3,.75,5./6};
         const auto hsl=[&](const char *name){const auto &values=a.at("hsl").at(name);if(values.size()!=8)throw std::runtime_error("Invalid HSL bands");std::vector<double> out{double(art::utils::FCT_MinMaxCPoints)};
             for(int i=0;i<8;i++){const double v=values[i];if(!std::isfinite(v)||v< -100||v>100)throw std::runtime_error("Invalid HSL value");out.insert(out.end(),{positions[i],.5+v/200,0,0});}return out;};
         p.hsl.hCurve=hsl("hue");p.hsl.sCurve=hsl("saturation");p.hsl.lCurve=hsl("luminance");}
+    if(a.contains("calibration")){
+        const auto &c=a.at("calibration");if(!c.is_object())throw std::runtime_error("Invalid calibration settings");
+        const auto value=[&](const char *key){const double number=num(c,key,0,-100,100);const int v=int(number);if(v!=number)throw std::runtime_error("Calibration values must be integers");return v;};
+        p.chmixer.mode=pp::ChannelMixerParams::PRIMARIES_CHROMA;
+        p.chmixer.hue_tweak[0]=value("redHue");p.chmixer.sat_tweak[0]=value("redSaturation");
+        p.chmixer.hue_tweak[1]=value("greenHue");p.chmixer.sat_tweak[1]=value("greenSaturation");
+        p.chmixer.hue_tweak[2]=value("blueHue");p.chmixer.sat_tweak[2]=value("blueSaturation");
+        p.chmixer.enabled=p.chmixer.hue_tweak[0]!=0||p.chmixer.hue_tweak[1]!=0||p.chmixer.hue_tweak[2]!=0||
+            p.chmixer.sat_tweak[0]!=0||p.chmixer.sat_tweak[1]!=0||p.chmixer.sat_tweak[2]!=0;
+    }
     int rotation=a.value("rotation",0);
     if(rotation!=0 && rotation!=90 && rotation!=180 && rotation!=270)throw std::runtime_error("Invalid rotation");
     p.coarse.rotate=rotation;
     if(a.contains("fineRotation")){
         const double angle=num(a,"fineRotation",0,-45,45);
         if(angle!=(p.rotate.enabled?p.rotate.degree:0)){p.rotate.degree=angle;p.rotate.enabled=angle!=0;}
+    }
+    if(a.contains("perspective")){
+        const auto &v=a.at("perspective");auto &target=p.perspective;
+        target.enabled=v.at("enabled").get<bool>();
+        target.horizontal=num(v,"horizontal",target.horizontal,-200,200);
+        target.vertical=num(v,"vertical",target.vertical,-200,200);
+        target.angle=num(v,"angle",target.angle,-20,20);
+        target.shear=num(v,"shear",target.shear,-50,50);
+        target.flength=num(v,"focalLength",target.flength,0,1200);
+        target.cropfactor=num(v,"cropFactor",target.cropfactor,.1,10);
+        target.aspect=num(v,"aspect",target.aspect,.5,2);
+    }
+    if(a.contains("perspectiveGuides")){
+        const auto &guides=a.at("perspectiveGuides");
+        if(!guides.is_array()||guides.size()>4)throw std::runtime_error("Invalid perspective guides");
+        for(const auto &guide:guides){
+            const std::string axis=guide.at("axis");
+            if(axis!="horizontal"&&axis!="vertical")throw std::runtime_error("Invalid perspective guide axis");
+            for(const char *end:{"start","end"})for(const char *key:{"x","y"}){
+                const auto &v=guide.at(end).at(key);
+                if(!v.is_number()||!std::isfinite(v.get<double>()))throw std::runtime_error("Invalid perspective guide point");
+            }
+        }
     }
     const auto rotate=[&](double x,double y)->std::pair<double,double>{switch(rotation){case 90:return {1-y,x};case 180:return {1-x,1-y};case 270:return {y,1-x};default:return {x,y};}};
     if(rotation==90 || rotation==270)std::swap(width,height);
@@ -409,6 +531,13 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
                     const auto &point=sample.at(key);
                     if(!point.at("x").is_number()||!point.at("y").is_number())throw std::runtime_error("Invalid color sample position");
                     num(point,"x",0,0,1);num(point,"y",0,0,1);
+                }
+                // UI anchor only: colors remain fixed when geometry changes.
+                if(sample.contains("sourcePoint")){
+                    const auto &point=sample.at("sourcePoint");
+                    if(!point.is_object()||!point.contains("x")||!point.contains("y")||!point.at("x").is_number()||!point.at("y").is_number())
+                        throw std::runtime_error("Invalid color sample source position");
+                    num(point,"x",0,-1e7,1e7);num(point,"y",0,-1e7,1e7);
                 }
                 pp::Mask part;part.parametricMask.enabled=true;part.parametricMask.blur=-10;
                 auto &d=part.deltaEMask;d.enabled=true;
@@ -490,7 +619,7 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
             region.toneBands={int(num(t,"blacks",0,-100,100)),int(num(t,"shadows",0,-100,100)),0,int(num(t,"highlights",0,-100,100)),int(num(t,"whites",0,-100,100))};
             if(std::all_of(region.toneBands.begin(),region.toneBands.end(),[](int v){return v==0;}))region.toneBands.clear();
         }
-        const double gain=std::exp2(num(m,"brightness",0,-3,3));
+        const double gain=std::exp2(num(m,"brightness",0,-4,4));
         const double contrast=std::exp2(num(m,"contrast",0,-100,100)/100.0);
         for(int i=0;i<3;++i){region.slope[i]=gain;region.power[i]=1.0/contrast;region.pivot[i]=0.18;}
         region.outSaturation=num(m,"saturation",0,-100,100);

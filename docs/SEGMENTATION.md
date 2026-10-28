@@ -4,6 +4,43 @@
 
 下文早期部分记录基于安装版 0.25 的独立研究探针，**不是对象分割的安装版功能验收，也不是 ACR 画质对齐结论**。后续 0.26 修复下述外部蒙版失败路径，没有加入对象、主体、天空或人物部位按钮。之前的关闭文件、蒙版、曲线及 Nikon 支持交付保持不变。
 
+## 当前工作区：人物部位分割
+
+对象选择面板新增面部皮肤、身体皮肤、头发、衣物和附件五类人物部位。使用 Google MediaPipe Selfie Multiclass 256×256 模型：输入 NHWC FP32 RGB，输出 `[1,256,256,6]` logits，类别为背景、头发、身体皮肤、面部皮肤、衣物和附件。模型权重为 Apache-2.0；ONNX 文件仅经过格式转换，权重未修改。
+
+- ONNX SHA-256：`35ec1ecd9ee7f85073c99c00020b7f6751b69506eeacf683bc8665f6117f85b0`，16,454,560 字节。
+- ONNX 转换来源：[senty-au/selfie_multiclass_256x256-ONNX](https://huggingface.co/senty-au/selfie_multiclass_256x256-ONNX)。
+- 原始模型：[MediaPipe Multiclass Segmentation model card](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Multiclass%20Segmentation.pdf)。
+- 构建会在 `tests/segmentation-sources.json` 中核对模型、Apache-2.0 许可和模型卡的大小 / SHA-256；安装包随附许可文本、模型卡和归属说明。
+
+原生 worker 将已验证 PNG 双线性缩放到 256×256，运行同一 ONNX Runtime 进程内的额外模型，对每像素执行 argmax 后生成五张预览坐标灰度 PNG。输出沿用 SAM 对象选择的粗旋转约定；提交仍复制到内容寻址文档资产，保存与重开不依赖模型。所有推理均为本地 CPU，没有下载、上传或 Python 运行依赖。
+
+公有领域多人人像专项通过 0° / 90° 尺寸、五类实际像素、错误哈希 / revision 和源文件不变检查。测试照片来自 Wikimedia Commons 的 `Grace_Hopper_and_UNIVAC.jpg`，原始下载 SHA-256 为 `b76f46c24644d898b10767c78c8e330dd17e4cc3087b48af2881357c9f5841a6`；转换为 RGB PNG 后为 `bc080704c1bec65b7fab8ece94066ecbf029621e8bfdd8c6263180a5c4b8cd06`。隐藏 GUI 验证五个按钮、面部皮肤预览、创建蒙版、局部亮度、XMP / 资产重启和 TIFF16 导出；原有 SAM worker 17 组及对象点选 GUI 回归继续通过。证据：`artifacts/person-parts/report.json`、`artifacts/person-parts-gui/report.json` 和 `grace-overlay.jpg`。
+
+当前模型会把画面内所有人的同类区域合并，不能指定某一个人；没有人物框、逐人实例、姿态部位（手臂 / 腿等）、发丝抠图或半透明头发 alpha。它只提供语义部位，不等于 ACR 人物蒙版的对象理解、边缘细化或画质。尚无与 ACR 18.7 的蒙版边界盲评，也没有安装版结果。
+
+## 当前工作区：自动主体与背景
+
+对象选择面板新增“自动主体”和“自动背景”。后端使用 U²-Net 显著物体模型的 FP32 ONNX 权重，模型来源为官方 U²-Net 项目，权重为 Apache-2.0；随包保存来源、许可、哈希和模型清单。模型文件为 175,997,641 字节，SHA-256 为 `8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491`。
+
+推理输入为 320×320 FP32 NCHW、0–1 RGB，不做 ImageNet 归一化；主输出为 `[1,1,320,320]` 的 0–1 主体概率。原生 `semantic-masks` 方法将概率双线性采样回当前显影预览尺寸，生成主体灰度图，并以 `255 - subject` 生成背景灰度图。两者沿用对象选择现有的四方向粗旋转、内容寻址栅格提交、XMP / 资产持久化和 TIFF16 输出链路，没有云端请求或运行时 Python 依赖。
+
+公有领域多人人像专项通过 **5 项**原生检查：主体与背景 PNG 尺寸和模型标识正确；0°、90°、180°、270° 输出分别与 `np.rot90` 逐像素一致；背景是主体的精确灰度补集；非法 revision、源哈希和旋转显式拒绝；源图保持不变。隐藏 Electron GUI 的 **5 项**检查通过：“自动主体”和“自动背景”可见且可切换真实预览，主体提交后生成栅格蒙版并以局部亮度改变画布，XMP / 资产重开显示像素一致且不重新推理，TIFF16 导出成功，窗口隐藏、不可聚焦且源图不变。证据为 `artifacts/semantic-masks/report.json`、`artifacts/semantic-masks-gui/report.json` 和 `semantic-mask-preview.png`。
+
+U²-Net 输出的是显著物体概率，不是 ACR 的完整场景理解，也不能直接当作天空类别；自动天空使用下节的独立检测与 SAM 提示链。透明物、发丝、遮挡、复杂背景和 ACR 18.7 蒙版边界盲评尚未完成。不能根据简单人物样本把该功能表述为与 ACR Subject / Background 同级。
+
+## 当前工作区：自动天空
+
+对象选择面板新增“自动天空”。该功能不新增模型或权重来源，复用已随包的 Apache-2.0 SAM2.1 Small：先在显影预览顶部 27% 范围按颜色、亮度和局部平滑度检测连续天空候选，从四个横向区域生成 3–4 个正提示点，再由 SAM 输出并旋转回当前文档坐标的单一栅格蒙版。
+
+- 纯蓝、明亮中性与低饱和阴天天空都可形成提示；顶部没有足够连续候选时明确返回“未检测到可靠天空”，不会创建全黑或全白占位蒙版。
+- 输入与对象选择共用当前旋转 / 镜头 / 透视、取消裁切后的 sRGB 快照。输出沿用 session、递增 revision、源文件 SHA-256、内容寻址资产和细旋转参考角校验。
+- 提交后与画笔、羽化、组运算、局部调色、XMP 保存恢复和 TIFF16 输出使用同一链路。已保存天空蒙版重开时不依赖模型或推理。
+
+真实 Nikon D850 RAW 的适屏预览专项通过 **5 项**原生检查：自动提示生成 4 个种子，SAM 结果与独立人工提示天空蒙版的 IoU 为 **0.9971**；0°、90°、180°、270° 与 `np.rot90` 逐像素一致；revision、源哈希与旋转错误显式拒绝；无天空公有领域人像被明确拒绝；两张源图哈希不变。隐藏 Electron GUI 的 **5 项**检查通过：按钮和真实预览可见，提交后生成栅格蒙版并用局部亮度改变画布，XMP / 资产重开显示像素一致且不重新推理，TIFF16 导出成功，窗口隐藏、不可聚焦且源图不变。证据为 `artifacts/sky-mask/report.json`、`artifacts/sky-mask-gui/report.json` 和 `sky-mask-preview.png`。
+
+这是自动天空基线，不是 ACR Sky 的场景理解、树枝间细碎天空或边缘 matting 等效实现。当前样本为明确蓝天，阴天、晚霞、大面积遮挡、极小天窗、海天相接和树冠细枝尚无质量结论；也没有 ACR 18.7 边界盲评。
+
 ## 候选与开放性
 
 | 组件 | 固定来源 | 核查结论 |

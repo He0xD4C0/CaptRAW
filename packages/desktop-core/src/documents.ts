@@ -1,11 +1,11 @@
-import {ENGINE_VERSION,READABLE_ENGINE_VERSIONS,type EditDocument,type BatchSaveRequest,type BatchSaveResult} from '@captraw/contracts';
+import {ENGINE_VERSION,READABLE_ENGINE_VERSIONS,validRating,type EditDocument,type BatchSaveRequest,type BatchSaveResult} from '@captraw/contracts';
 import {createHash,randomUUID} from 'node:crypto';
 import {createReadStream} from 'node:fs';
 import {stat,lstat,rm} from 'node:fs/promises';
 import {basename,extname,join,isAbsolute} from 'node:path';
 import {NativeEngine} from './engine.js';
 import {saveRecipeWithMasks} from './mask-assets.js';
-import {XMP,CRS,CT,property,text,encode,readExtension,encodeAdjustments,decodeAdjustments,type XMPProperty} from './xmp.js';
+import {XMP,CRS,CT,XMP_BASIC,lookup,property,text,encode,readExtension,encodeAdjustments,decodeAdjustments,type XMPProperty} from './xmp.js';
 export class Documents {
  constructor(readonly xmp:XMP){}
  async read(path:string){
@@ -13,15 +13,20 @@ export class Documents {
   const engineVersion=readExtension(result.properties,'EngineVersion')||'';
   if(engineVersion&&!READABLE_ENGINE_VERSIONS.has(engineVersion))throw new Error('XMP 使用了不支持的 ART 显影版本。');
   const {adjustments,warnings}=decodeAdjustments(result.properties);
+  const ratingNode=lookup(result.properties,XMP_BASIC,'Rating'),rating=ratingNode===undefined?undefined:Number(ratingNode.value);
+  if(ratingNode&&(!ratingNode.value?.trim()||!validRating(rating)))throw new Error('XMP 评分须为 -1（拒绝）或 0–5。');
   const source=readExtension(result.properties,'Source');
   if(source&&(!source.path||!Number.isSafeInteger(source.size)||!/^[a-f0-9]{64}$/.test(source.sha256)))throw new Error('XMP 原片关联无效。');
   const baselineVersion=readExtension(result.properties,'BaselineVersion');if(baselineVersion!==undefined&&baselineVersion!==4)throw new Error('XMP 初始显影版本不受支持。');
   const artProfile=readExtension(result.properties,'ARTProfile')||'';if(typeof artProfile!=='string')throw new Error('无效的 ART 配置。');
-  return {xmpPacket:result.packet,engineVersion,source,artProfile,adjustments,warnings,baselineVersion:4 as const,maskAssets:readExtension(result.properties,'MaskAssets'),inputProfileAsset:readExtension(result.properties,'InputProfileAsset')};
+  return {xmpPacket:result.packet,engineVersion,source,artProfile,adjustments,rating,warnings,baselineVersion:4 as const,maskAssets:readExtension(result.properties,'MaskAssets'),inputProfileAsset:readExtension(result.properties,'InputProfileAsset')};
  }
  async serialize(doc:EditDocument){
-  const changes:XMPProperty[]=[...encodeAdjustments(doc.adjustments),property(CT,'EngineVersion',encode(ENGINE_VERSION)),property(CT,'Source',encode(doc.source)),property(CT,'ARTProfile',encode(doc.artProfile)),property(CT,'BaselineVersion',encode(4)),property(CT,'MaskAssets',doc.maskAssets?encode(doc.maskAssets):null),property(CT,'InputProfileAsset',doc.inputProfileAsset?encode(doc.inputProfileAsset):null),property(CRS,'HasSettings',text('True'))];
+  const previous=doc.xmpPacket?(await this.xmp.call('read',doc.xmpPacket)).properties:[];
+  if(doc.rating!==undefined&&!validRating(doc.rating))throw new Error('XMP 评分须为 -1（拒绝）或 0–5。');
+  const changes:XMPProperty[]=[...encodeAdjustments(doc.adjustments,previous),property(CT,'EngineVersion',encode(ENGINE_VERSION)),property(CT,'Source',encode(doc.source)),property(CT,'ARTProfile',encode(doc.artProfile)),property(CT,'BaselineVersion',encode(4)),property(CT,'MaskAssets',doc.maskAssets?encode(doc.maskAssets):null),property(CT,'InputProfileAsset',doc.inputProfileAsset?encode(doc.inputProfileAsset):null),property(CRS,'HasSettings',text('True'))];
   // Do not claim the Adobe renderer version for an ART-produced image.
+  if(doc.rating!==undefined)changes.push(property(XMP_BASIC,'Rating',text(doc.rating)));
   if(!doc.xmpPacket)changes.push(property(CRS,'ProcessVersion',text('15.4')));
   const result=await this.xmp.call('write',doc.xmpPacket||'',changes);return result.packet!;
  }
@@ -33,6 +38,7 @@ export function validateBatchSave(request:BatchSaveRequest){
  for(const d of request.documents){
   if(!d||typeof d.path!=='string'||!isAbsolute(d.path)||paths.has(d.path)||typeof d.artProfile!=='string'||!d.adjustments||typeof d.adjustments!=='object'||Array.isArray(d.adjustments)||!Number.isInteger(d.width)||!Number.isInteger(d.height)||d.width<1||d.height<1||d.width>200000||d.height>200000||(d.xmpPacket!==undefined&&typeof d.xmpPacket!=='string'))throw new Error('保存照片快照无效或重复。');
   paths.add(d.path);
+  if(d.rating!==undefined&&!validRating(d.rating))throw new Error('评分须为 -1（拒绝）或 0–5。');
  }
 }
 
@@ -58,7 +64,7 @@ export class BatchDocumentSaver {
      const info=await stat(doc.path);if(!info.isFile())throw new Error('原片不是可读取的文件。');
      const hash=createHash('sha256');for await(const chunk of createReadStream(doc.path))hash.update(chunk);
      const {artProfile}=await worker.call('compose',doc);
-     const recipe:EditDocument={engineVersion:ENGINE_VERSION,baselineVersion:4,source:{path:doc.path,size:info.size,sha256:hash.digest('hex')},adjustments:doc.adjustments,artProfile,xmpPacket:doc.xmpPacket};
+     const recipe:EditDocument={engineVersion:ENGINE_VERSION,baselineVersion:4,source:{path:doc.path,size:info.size,sha256:hash.digest('hex')},adjustments:doc.adjustments,artProfile,xmpPacket:doc.xmpPacket,rating:doc.rating};
      const stem=basename(doc.path,extname(doc.path));let suffix=0;
      for(;;){
       const output=join(directory,`${stem}${suffix?'_'+suffix:''}.xmp`);++suffix;

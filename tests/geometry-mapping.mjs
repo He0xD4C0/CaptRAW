@@ -37,7 +37,7 @@ try{
   profile=section(profile,'Common Properties for Transformations',`AutoFill=${fill}`);
   profile=section(profile,'Perspective',`Enabled=${perspective}\nHorizontal=25\nVertical=-15\nAngle=2\nShear=3\nFocalLength=10\nCropFactor=1.5\nAspect=1\nControlLines=`);
   profile=section(profile,'CACorrection','Enabled=false\nRed=0.012\nBlue=-0.009');
-  const adjustments={...image.adjustments,rotation,crop:{x:.02,y:.02,width:.96,height:.96},lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true}};
+  const adjustments={...image.adjustments,perspective:undefined,rotation,crop:{x:.02,y:.02,width:.96,height:.96},lensCorrections:true,lensProfile:{mode:'auto',cameraMake:'',cameraModel:'',lens:'',distortion:true,vignette:false,ca:true}};
   const pending=current.preview(++revision),response=await current.call('update',{revision,adjustments,artProfile:profile}),frame=await pending;
   assert(response.lensStatus.distortion&&response.lensStatus.ca);
   const before=old.preview(revision);await old.call('update',{revision,adjustments,artProfile:profile});const oldFrame=await before;

@@ -15,6 +15,9 @@ int main(int argc,char **argv){
                 const auto request=nlohmann::json::parse(line);id=request.at("id");const auto method=request.at("method").get<std::string>();
                 nlohmann::json result;
                 if(method=="predict")result=worker.predict(request.at("params"));
+                else if(method=="parts")result=worker.parts(request.at("params"));
+                else if(method=="semantic-masks")result=worker.semanticMasks(request.at("params"));
+                else if(method=="sky")result=worker.sky(request.at("params"));
                 else if(method=="info")result=worker.info();
                 else if(method=="close"){worker.close();result=nlohmann::json::object();}
                 else throw std::runtime_error("Unknown segmentation operation");

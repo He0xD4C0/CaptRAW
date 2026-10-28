@@ -1,7 +1,7 @@
 import {readDocument} from './xmp-test.mjs';
 import {expect} from '@playwright/test';import {EngineClient} from './engine-client.mjs';import {electron,closeElectron,electronDiagnostics} from './electron-background.mjs';
 import {resolve,join} from 'node:path';import {readFileSync,writeFileSync,mkdirSync,cpSync,existsSync,rmSync} from 'node:fs';import {createHash} from 'node:crypto';
-const out=resolve(process.env.CAPTRAW_SYNC_E2E_OUT||'artifacts/synchronize-gui');mkdirSync(out,{recursive:true});
+const out=resolve(process.env.CAPTRAW_SYNC_E2E_OUT||'artifacts/synchronize-gui');rmSync(out,{recursive:true,force:true});mkdirSync(out,{recursive:true});
 const source=resolve('build/samples/luminance-range.png'),hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex'),before=hash(source);
 const files=['来源 照片.png','目标 一.png','目标 二.png','保持 原样.png'].map(n=>join(out,n));for(const p of files)cpSync(source,p);
 const executablePath=process.env.CAPTRAW_APP,checks=[],errors=[];let app,page;
