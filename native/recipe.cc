@@ -1,4 +1,11 @@
 #include "recipe.h"
+#include "enhanced-profile.h"
+#include "input-profile.h"
+#include "geometry-reference.h"
+#include "source-frame.h"
+#include "brush.h"
+#include "repair-recipe.h"
+#include "white-balance.h"
 #include "engine/curves.h"
 #include "engine/rtlensfun.h"
 #include "engine/dcp.h"
@@ -29,10 +36,42 @@ static double num(const Json &j, const char *key, double def, double low, double
     if(!std::isfinite(v) || v<low || v>high) throw std::runtime_error(std::string("Invalid ")+key);
     return v;
 }
-Json referencedMasks(const Json &adjustments,const pp::ProcParams &params) {
+Json maskGeometryReference(const pp::ProcParams &params) {
+    if(!params.commonTrans.captrawSourceFrame.empty()&&!params.commonTrans.captrawSourceIdentity.empty()){
+        const auto bound=art::engine::bindGeometryReference(art::engine::maskGeometryParams(params),params);
+        return {{"version",3},{"data",art::engine::geometryReference(bound,true)}};
+    }
+    const bool frame=art::engine::activeSourceFrame(params);
+    return {{"version",frame?2:1},{"data",art::engine::geometryReference(params,frame)}};
+}
+std::string maskGeometryReferenceData(const Json &reference) {
+    if(!reference.is_object()||(reference.at("version")!=1&&reference.at("version")!=2&&reference.at("version")!=3)||!reference.at("data").is_string())
+        throw std::runtime_error("Invalid mask geometry reference version");
+    auto data=reference.at("data").get<std::string>();
+    const auto p=art::engine::geometryReferenceParams(data);
+    if(reference.at("version")==3){
+        const auto frame=art::engine::checkedSourceFrame(Json::parse(p.commonTrans.captrawSourceFrame));
+        art::engine::checkedRenderBinding(frame.at("renderBinding"));
+    }else if(reference.at("version")==2){
+        art::engine::checkedSourceFrame(Json::parse(p.commonTrans.captrawSourceFrame));
+        if(art::engine::hasRenderBinding(p))throw std::runtime_error("A render binding requires reference version 3");
+    }
+    else if(!p.commonTrans.captrawSourceFrame.empty())throw std::runtime_error("A framed reference requires version 2");
+    return data;
+}
+Json referencedMasks(const Json &adjustments,const pp::ProcParams &params,bool bindFrame) {
     auto masks=adjustments.at("masks");
     const double reference=params.rotate.captrawMaskCoordinates?params.rotate.captrawMaskReferenceDegree:
         (params.rotate.enabled?params.rotate.degree:0);
+    const auto framedReference=[&](const Json &old,double angle){
+        auto p=old.is_null()?art::engine::maskGeometryParams(params):
+            art::engine::geometryReferenceParams(maskGeometryReferenceData(old));
+        if(old.is_null()){p.rotate.degree=angle;p.rotate.enabled=angle!=0;}
+        if(p.commonTrans.captrawSourceFrame.empty())p.commonTrans.captrawSourceFrame=params.commonTrans.captrawSourceFrame;
+        if(p.commonTrans.captrawSourceFrame.empty())return old;
+        p=art::engine::bindGeometryReference(p,params);
+        return Json{{"version",art::engine::hasRenderBinding(p)?3:2},{"data",art::engine::geometryReference(p,true)}};
+    };
     std::function<void(Json &,int)> bind=[&](Json &mask,int depth){
         if(depth>8)throw std::runtime_error("Mask group nesting limit exceeded");
         if(mask.contains("components")){
@@ -40,8 +79,15 @@ Json referencedMasks(const Json &adjustments,const pp::ProcParams &params) {
         }else{
             const auto type=mask.at("type").get<std::string>();
             if(type=="brush"||type=="linear"||type=="radial"||type=="raster"){
-                if(!mask.contains("referenceAngle"))mask["referenceAngle"]=reference;
+                if(mask.contains("geometryReference"))maskGeometryReferenceData(mask.at("geometryReference"));
+                if(!mask.contains("referenceAngle")&&mask.value("initialized",true))mask["referenceAngle"]=reference;
                 num(mask,"referenceAngle",0,-45,45);
+                if(bindFrame&&mask.value("initialized",true)){
+                    const auto ref=framedReference(mask.value("geometryReference",Json()),mask.value("referenceAngle",reference));
+                    if(!ref.is_null())mask["geometryReference"]=ref;
+                    if(mask.contains("brush"))for(auto &stroke:mask.at("brush").at("strokes"))
+                        stroke["geometryReference"]=framedReference(stroke.at("geometryReference"),reference);
+                }
             }
         }
     };
@@ -50,7 +96,10 @@ Json referencedMasks(const Json &adjustments,const pp::ProcParams &params) {
 }
 Json perspectiveSettings(const pp::ProcParams &p) {
     const auto &v=p.perspective;
-    return {{"enabled",v.enabled},{"horizontal",v.horizontal},{"vertical",v.vertical},{"angle",v.angle},{"shear",v.shear},{"focalLength",v.flength},{"cropFactor",v.cropfactor},{"aspect",v.aspect}};
+    Json result={{"enabled",v.enabled},{"horizontal",v.horizontal},{"vertical",v.vertical},{"angle",v.angle},{"shear",v.shear},{"focalLength",v.flength},{"cropFactor",v.cropfactor},{"aspect",v.aspect}};
+    if(v.captrawManual){result["manualModel"]=v.captrawSignedFraming?"signed-framing-v1":"art-perspective-v1";result["scale"]=v.captrawScale;
+        result["offsetX"]=v.captrawOffsetX;result["offsetY"]=v.captrawOffsetY;result["constrainCrop"]=v.captrawConstrain;}
+    return result;
 }
 Json colorGradingSettings(const pp::ProcParams &p) {
     const auto &values=p.captrawGrading;Json result=Json::object();int i=0;
@@ -69,12 +118,18 @@ std::vector<double> parametricCurve(const Json &settings) {
     return changed?curve:std::vector<double>{double(art::utils::DCT_Linear)};
 }
 Json adjustmentBase(const pp::ProcParams &p,const Json &groups) {
-    if(!groups.is_array()||groups.size()>4)throw std::runtime_error("Invalid adjustment projection groups");
+    if(!groups.is_array()||groups.size()>5)throw std::runtime_error("Invalid adjustment projection groups");
     Json result=Json::object();
     for(const auto &group:groups){
         if(group=="colorGrading"){
             if(!p.captrawGrading.empty()&&p.captrawGrading.size()!=14)throw std::runtime_error("Invalid stored color grading");
             result["colorGrading"]=colorGradingSettings(p);
+        }else if(group=="curveRefine"){
+            const auto &t=p.toneCurve;
+            if(!t.captrawCurveRefineModel.empty()){
+                if(t.captrawCurveRefineModel!="weighted-std-v1"||!std::isfinite(t.captrawCurveRefineAmount)||t.captrawCurveRefineAmount<0||t.captrawCurveRefineAmount>100||std::round(t.captrawCurveRefineAmount)!=t.captrawCurveRefineAmount)throw std::runtime_error("Invalid stored curve refinement");
+                result["curveRefineModel"]=t.captrawCurveRefineModel;result["curveRefineSaturation"]=t.captrawCurveRefineAmount;
+            }
         }else if(group=="parametricCurve"){
             Json values={{"shadows",0},{"darks",0},{"lights",0},{"highlights",0},{"splits",{25,50,75}}};
             const auto &curve=p.toneCurve.captrawParametric;
@@ -91,6 +146,7 @@ Json adjustmentBase(const pp::ProcParams &p,const Json &groups) {
             result["calibration"]={{"redHue",m.enabled?m.hue_tweak[0]:0},{"redSaturation",m.enabled?m.sat_tweak[0]:0},
                 {"greenHue",m.enabled?m.hue_tweak[1]:0},{"greenSaturation",m.enabled?m.sat_tweak[1]:0},
                 {"blueHue",m.enabled?m.hue_tweak[2]:0},{"blueSaturation",m.enabled?m.sat_tweak[2]:0}};
+            if(m.captrawShadowTint)result["calibration"]["shadowTint"]=m.captrawShadowTint;
         }else if(group=="hsl"){
             Json values=Json::object();const std::array<double,8> positions{0,1./12,1./6,1./3,.5,2./3,.75,5./6};
             const std::vector<double> *curves[]={&p.hsl.hCurve,&p.hsl.sCurve,&p.hsl.lCurve};const char *names[]={"hue","saturation","luminance"};
@@ -114,6 +170,7 @@ Json inputProfileSettings(const pp::ColorManagementParams &p) {
     Json state={{"mode",mode},{"toneCurve",p.toneCurve},{"lookTable",p.applyLookTable},{"hueSatMap",p.applyHueSatMap},
         {"baselineExposure",p.applyBaselineExposureOffset},{"illuminant",p.dcpIlluminant}};
     if(mode=="inherited")state["reference"]=std::string(p.inputProfile);
+    if(!p.captrawEnhanced.empty())state["look"]=Json::parse(p.captrawEnhanced);
     return state;
 }
 void applyInputProfile(pp::ColorManagementParams &p,const Json &c) {
@@ -129,8 +186,23 @@ void applyInputProfile(pp::ColorManagementParams &p,const Json &c) {
     p.applyHueSatMap=c.value("hueSatMap",p.applyHueSatMap);p.applyBaselineExposureOffset=c.value("baselineExposure",p.applyBaselineExposureOffset);
     if(c.contains("illuminant")&&(!c.at("illuminant").is_number_integer()||c.at("illuminant")<0||c.at("illuminant")>2))throw std::runtime_error("Invalid DCP illuminant");
     p.dcpIlluminant=c.value("illuminant",p.dcpIlluminant);
+    p.captrawEnhanced.clear();
+    if(c.contains("look")&&!c.at("look").is_null()){
+        enhanced::Profile::parse(c.at("look"));
+        p.captrawEnhanced=c.at("look").dump();
+    }
 }
 void validateInputProfile(const pp::ColorManagementParams &p) {
+    if(!p.captrawEnhanced.empty()){
+        const auto look=Json::parse(p.captrawEnhanced);enhanced::Profile::parse(look);
+        const auto base=look.at("profile").at("baseProfile").get<std::string>();
+        if(!base.empty()){
+            if(inputProfileSettings(p).at("mode")!="inherited"||p.inputProfile=="(none)")throw std::runtime_error("Look 缺少基础 DCP“"+base+"”，未应用。");
+            const std::string path=p.inputProfile.substr(0,5)=="file:"?p.inputProfile.substr(5):p.inputProfile;
+            const auto info=inspectInputProfile(path);
+            if(info.at("kind")!="dcp"||info.at("name")!=base)throw std::runtime_error("Look 的基础配置必须为匹配的 DCP“"+base+"”。");
+        }
+    }
     if(inputProfileSettings(p).at("mode")!="inherited"||p.inputProfile=="(none)")return;
     const auto filename=p.inputProfile.substr(0,5)=="file:"?p.inputProfile.substr(5):p.inputProfile;
     if((p.inputProfile.substr(0,5)=="file:"||filename.find('/')!=Glib::ustring::npos)&&!Glib::file_test(filename,Glib::FILE_TEST_IS_REGULAR))throw std::runtime_error("配方引用的输入配置文件不可用，请恢复相关文件后重试。");
@@ -155,6 +227,10 @@ void validateExternalMasks(const pp::ProcParams &p) {
             std::shared_ptr<art::engine::array2D<float>> pixels;
             if(!art::engine::ExternalMaskManager::getInstance()->load_mask(mask.externalMask.filename,pixels,true,nullptr,&mask.externalMask))
                 throw std::runtime_error("配方引用的蒙版文件缺失或损坏，请恢复文件后重试："+std::string(mask.externalMask.filename));
+        }
+        if(!mask.captrawBrushProgram.empty()){
+            auto program=Json::parse(mask.captrawBrushProgram);std::vector<std::string> paths;
+            art::engine::brushProgramAssets(program,Json::object(),true,paths);
         }
         for(const auto &child:mask.components)check(child);
     };
@@ -182,6 +258,11 @@ Json externalMaskAssets(pp::ProcParams &p,const Json &replacements,bool validate
                 }
                 paths.push_back(path);
             }
+        }
+        if(!mask.captrawBrushProgram.empty()){
+            auto program=Json::parse(mask.captrawBrushProgram);std::vector<std::string> assets;
+            art::engine::brushProgramAssets(program,replacements,validate,assets);mask.captrawBrushProgram=program.dump();
+            for(const auto &path:assets)if(std::find(paths.begin(),paths.end(),path)==paths.end())paths.push_back(path);
         }
         for(auto &child:mask.components)visit(child);
     };
@@ -214,6 +295,10 @@ Json rasterMaskAssets(Json &a,const Json &replacements,bool validate) {
                 if(!art::engine::ExternalMaskManager::getInstance()->load_mask(mask.filename,pixels,true,nullptr,&mask))throw std::runtime_error("栅格蒙版资产缺失、已改变或尺寸不符："+std::string(mask.filename));}
             if(std::find(paths.begin(),paths.end(),std::string(mask.filename))==paths.end())paths.push_back(std::string(mask.filename));
         }else if(m.value("type",std::string())=="raster"&&!m.contains("components"))throw std::runtime_error("Missing raster mask asset");
+        if(m.contains("brush")){
+            std::vector<std::string> assets;art::engine::brushProgramAssets(m.at("brush"),replacements,validate,assets);
+            for(const auto &path:assets)if(std::find(paths.begin(),paths.end(),path)==paths.end())paths.push_back(path);
+        }
         if(m.contains("components")){if(!m["components"].is_array()||m["components"].size()>32)throw std::runtime_error("Invalid mask components");for(auto &child:m["components"])visit(child,depth+1);}
     };
     if(!a.at("masks").is_array())throw std::runtime_error("Invalid masks");
@@ -281,6 +366,15 @@ static std::vector<double> localWhiteBalance(double temperature,double tint,cons
     return matrix;
 }
 void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, std::vector<std::string> *maskIds) {
+    if(a.contains("sourceFrame"))art::engine::attachSourceFrame(p,a.at("sourceFrame"));
+    if(a.contains("hdrHeadroom"))num(a,"hdrHeadroom",3,1,4);
+    if(a.contains("hdrEnabled")){
+        if(!a.at("hdrEnabled").is_boolean())throw std::runtime_error("Invalid HDR edit mode");
+        p.toneCurve.captrawHDREditMode=a.at("hdrEnabled").get<bool>();
+        p.toneCurve.whitePoint=p.toneCurve.captrawHDREditMode?std::exp2(num(a,"hdrHeadroom",3,1,4)):1.;
+    }else if(p.toneCurve.captrawHDREditMode){
+        p.toneCurve.captrawHDREditMode=false;p.toneCurve.whitePoint=1.;
+    }
     if(a.contains("colorGrading")){
         const auto &g=a.at("colorGrading");if(!g.is_object())throw std::runtime_error("Invalid color grading settings");
         std::vector<double> values;
@@ -316,16 +410,33 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
     p.exposure.hrmode=pp::ExposureParams::HR_COLORSOFT;
     p.wb.enabled=true; p.wb.method=pp::WBParams::CUSTOM_TEMP;
     // Validate CRS coordinates here; core.cc resolves them with this image's profile.
-    num(a,"temperature",6500,2000,50000);num(a,"tint",0,-150,150);
+    num(a,"temperature",6500,1500,50000);num(a,"tint",0,-150,150);
     p.wb.temperature=6500;p.wb.green=1;p.wb.equal=1;
+    p.wb.captrawRelativeMatrix.clear();
     if(a.contains("wbMultipliers")&&!a["wbMultipliers"].is_null()){
         const auto &m=a["wbMultipliers"];if(!m.is_array()||m.size()!=3)throw std::runtime_error("Invalid white balance multipliers");
         for(int i=0;i<3;++i){const double v=m[i].get<double>();if(!std::isfinite(v)||v<=0||v>100)throw std::runtime_error("Invalid white balance multiplier");p.wb.mult[i]=v;}
         p.wb.method=pp::WBParams::CUSTOM_MULT;
     }
+    const bool relative=a.contains("incrementalTemperature")||a.contains("incrementalTint")||a.contains("relativeWBModel");
+    if(relative){
+        if(a.value("relativeWBModel",std::string("art-ctl-v1"))!="art-ctl-v1")throw std::runtime_error("Unsupported relative white balance model");
+        const double t=num(a,"incrementalTemperature",0,-100,100),g=num(a,"incrementalTint",0,-100,100);
+        if(std::round(t)!=t||std::round(g)!=g)throw std::runtime_error("Relative white balance requires integer offsets");
+        if(a.contains("wbMultipliers")&&!a.at("wbMultipliers").is_null())throw std::runtime_error("Relative white balance cannot contain camera coefficients");
+        p.wb.enabled=false;p.wb.method=pp::WBParams::CUSTOM_TEMP;p.wb.mult={1,1,1};
+        if(t!=0||g!=0){const auto matrix=relativeWhiteBalanceMatrix(t,g,p.icm.workingProfile);p.wb.captrawRelativeMatrix.assign(matrix.begin(),matrix.end());}
+    }
     p.toneCurve.captrawParametric=a.contains("parametricCurve")?parametricCurve(a.at("parametricCurve")):std::vector<double>{double(art::utils::DCT_Linear)};
     p.toneCurve.enabled=true; p.toneCurve.contrast=int(num(a,"contrast",0,-100,100));
     p.toneCurve.curveMode=pp::ToneCurveParams::TcMode::STD;
+    p.toneCurve.captrawCurveRefineModel.clear();p.toneCurve.captrawCurveRefineAmount=0.;
+    if(a.contains("curveRefineModel")||a.contains("curveRefineSaturation")){
+        if(a.value("curveRefineModel",std::string())!="weighted-std-v1"||!a.contains("curveRefineSaturation"))throw std::runtime_error("Invalid curve refinement model or amount");
+        const double amount=num(a,"curveRefineSaturation",0,0,100);
+        if(std::round(amount)!=amount)throw std::runtime_error("Curve refinement amount requires an integer");
+        p.toneCurve.captrawCurveRefineModel="weighted-std-v1";p.toneCurve.captrawCurveRefineAmount=amount;
+    }
     p.toneCurve.curve={double(art::gui::DCT_Spline)};
     double last=-1;
     if(a.at("curve").size()<2||a.at("curve").size()>128)throw std::runtime_error("Invalid curve point count");
@@ -366,9 +477,31 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
     const double dehaze=num(a,"dehaze",0,-100,100);p.dehaze.enabled=dehaze!=0;
     p.dehaze.strength={double(art::utils::FCT_MinMaxCPoints),0,.5+dehaze/200,0,0,1,.5+dehaze/200,0,0};
     const double vignette=num(a,"vignette",0,-100,100);p.pcvignette.enabled=vignette!=0;p.pcvignette.strength=-vignette/100;
-    if(a.contains("postCropVignetteFeather"))p.pcvignette.feather=int(num(a,"postCropVignetteFeather",50,0,100));
-    if(a.contains("postCropVignetteRoundness"))p.pcvignette.roundness=int(num(a,"postCropVignetteRoundness",0,-100,100));
+    if(!a.contains("postCropVignetteStyle")&&a.contains("postCropVignetteFeather"))p.pcvignette.feather=int(num(a,"postCropVignetteFeather",50,0,100));
+    if(!a.contains("postCropVignetteStyle")&&a.contains("postCropVignetteRoundness"))p.pcvignette.roundness=int(num(a,"postCropVignetteRoundness",0,-100,100));
     p.grain.enabled=num(a,"grain",0,0,100)>0;p.grain.strength=int(num(a,"grain",0,0,100));
+    // Explicit model selection: absent fields keep the legacy ART algorithms.
+    p.captrawEffects.clear();
+    const bool modernGrain=a.contains("grainModel"),modernVignette=a.contains("postCropVignetteStyle");
+    if((a.contains("grainSize")||a.contains("grainRoughness"))&&!modernGrain)
+        throw std::runtime_error("Grain size/roughness requires explicit procedural-v1 model");
+    if((a.contains("postCropVignetteMidpoint")||a.contains("postCropVignetteHighlights"))&&!modernVignette)
+        throw std::runtime_error("Vignette midpoint/highlights requires explicit style selection");
+    if(modernGrain||modernVignette){
+        if(modernGrain&&a.at("grainModel")!="procedural-v1")throw std::runtime_error("Unsupported grain model");
+        const std::string style=a.value("postCropVignetteStyle",std::string("highlight-priority"));
+        const int mode=style=="highlight-priority"?1:style=="color-priority"?2:style=="paint-overlay"?3:0;
+        if(!mode)throw std::runtime_error("Invalid post-crop vignette style");
+        p.captrawEffects={modernGrain?1.:0.,num(a,"grain",0,0,100),num(a,"grainSize",25,0,100),num(a,"grainRoughness",50,0,100),
+            modernVignette?double(mode):0.,vignette,num(a,"postCropVignetteMidpoint",50,0,100),
+            num(a,"postCropVignetteRoundness",0,-100,100),num(a,"postCropVignetteFeather",50,0,100),num(a,"postCropVignetteHighlights",0,0,100)};
+        if(modernGrain)p.grain.enabled=false;
+        if(modernVignette)p.pcvignette.enabled=false;
+    }
+    const std::string glowStyle=a.value("glowStyle",std::string("diffusion"));
+    const int glowMode=glowStyle=="diffusion"?0:glowStyle=="bloom"?1:glowStyle=="halation"?2:-1;
+    if(glowMode<0)throw std::runtime_error("Invalid glow style");
+    p.captrawGlow={num(a,"glow",0,0,100),double(glowMode),num(a,"glowRange",50,0,100),num(a,"glowSpread",50,0,100),num(a,"glowWarmth",0,-100,100)};
     p.lensProf.lcMode=a.value("lensCorrections",false)?pp::LensProfParams::LcMode::LENSFUNAUTOMATCH:pp::LensProfParams::LcMode::NONE;
     p.lensProf.useDist=true;p.lensProf.useCA=true;p.lensProf.useVign=true;
     p.lensProf.lfCameraMake="";p.lensProf.lfCameraModel="";p.lensProf.lfLens="";
@@ -424,6 +557,7 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
     if(a.contains("calibration")){
         const auto &c=a.at("calibration");if(!c.is_object())throw std::runtime_error("Invalid calibration settings");
         const auto value=[&](const char *key){const double number=num(c,key,0,-100,100);const int v=int(number);if(v!=number)throw std::runtime_error("Calibration values must be integers");return v;};
+        p.chmixer.captrawShadowTint=value("shadowTint");
         p.chmixer.mode=pp::ChannelMixerParams::PRIMARIES_CHROMA;
         p.chmixer.hue_tweak[0]=value("redHue");p.chmixer.sat_tweak[0]=value("redSaturation");
         p.chmixer.hue_tweak[1]=value("greenHue");p.chmixer.sat_tweak[1]=value("greenSaturation");
@@ -433,7 +567,15 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
     }
     int rotation=a.value("rotation",0);
     if(rotation!=0 && rotation!=90 && rotation!=180 && rotation!=270)throw std::runtime_error("Invalid rotation");
+    const bool flipCoordinates=a.contains("flipHorizontal")||a.contains("flipVertical");
+    if((flipCoordinates||p.coarse.rotate!=rotation)&&!p.rotate.captrawSourceBasisSet){
+        p.rotate.captrawSourceBasisSet=true;
+        p.rotate.captrawSourceBasisHorizontal=p.coarse.rotate%180?p.coarse.vflip:p.coarse.hflip;
+        p.rotate.captrawSourceBasisVertical=p.coarse.rotate%180?p.coarse.hflip:p.coarse.vflip;
+    }
     p.coarse.rotate=rotation;
+    if(a.contains("flipHorizontal"))p.coarse.hflip=a.at("flipHorizontal").get<bool>();
+    if(a.contains("flipVertical"))p.coarse.vflip=a.at("flipVertical").get<bool>();
     if(a.contains("fineRotation")){
         const double angle=num(a,"fineRotation",0,-45,45);
         if(angle!=(p.rotate.enabled?p.rotate.degree:0)){p.rotate.degree=angle;p.rotate.enabled=angle!=0;}
@@ -447,7 +589,15 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         target.shear=num(v,"shear",target.shear,-50,50);
         target.flength=num(v,"focalLength",target.flength,0,1200);
         target.cropfactor=num(v,"cropFactor",target.cropfactor,.1,10);
-        target.aspect=num(v,"aspect",target.aspect,.5,2);
+        target.captrawManual=v.contains("manualModel");
+        target.captrawSignedFraming=target.captrawManual&&v.at("manualModel")=="signed-framing-v1";
+        if(target.captrawManual&&!target.captrawSignedFraming&&v.at("manualModel")!="art-perspective-v1")throw std::runtime_error("Unsupported manual perspective model");
+        target.aspect=num(v,"aspect",target.captrawSignedFraming?0:target.aspect,target.captrawSignedFraming?-100:.5,target.captrawSignedFraming?100:2);
+        if(!target.captrawManual)for(const char *key:{"scale","offsetX","offsetY","constrainCrop"})
+            if(v.contains(key))throw std::runtime_error("Manual perspective parameters require a model");
+        target.captrawScale=num(v,"scale",1,target.captrawSignedFraming?.5:.1,target.captrawSignedFraming?1.5:4);
+        target.captrawOffsetX=num(v,"offsetX",0,target.captrawSignedFraming?-100:-.5,target.captrawSignedFraming?100:.5);target.captrawOffsetY=num(v,"offsetY",0,target.captrawSignedFraming?-100:-.5,target.captrawSignedFraming?100:.5);
+        target.captrawConstrain=v.value("constrainCrop",false);
     }
     if(a.contains("perspectiveGuides")){
         const auto &guides=a.at("perspectiveGuides");
@@ -463,19 +613,15 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
     }
     const auto rotate=[&](double x,double y)->std::pair<double,double>{switch(rotation){case 90:return {1-y,x};case 180:return {1-x,1-y};case 270:return {y,1-x};default:return {x,y};}};
     if(rotation==90 || rotation==270)std::swap(width,height);
-    if(a.contains("spots")){
-        if(!a.at("spots").is_array())throw std::runtime_error("Invalid repair list");
-        p.spot.entries.clear();p.spot.enabled=false;
-        for(const auto &s:a.at("spots")){
-            pp::SpotEntry entry;
-            const auto position=[&](const Json &v){auto q=rotate(num(v,"x",0,0,1),num(v,"y",0,0,1));art::engine::Coord c;c.set(std::lround(q.first*(width-1)),std::lround(q.second*(height-1)));return c;};
-            entry.sourcePos=position(s.at("source"));entry.targetPos=position(s.at("target"));
-            entry.radius=int(num(s,"radius",40,pp::SpotParams::minRadius,pp::SpotParams::maxRadius));
-            entry.feather=num(s,"feather",50,0,100)/100.;entry.opacity=num(s,"opacity",100,0,100)/100.;
-            const auto method=s.at("method").get<std::string>();if(method!="clone"&&method!="heal")throw std::runtime_error("Invalid repair method");
-            entry.detail=method=="heal"?2+int(num(s,"detail",0,0,3)):(s.value("retainTexture",false)?1:0);
-            if(s.at("enabled").get<bool>()){p.spot.entries.push_back(entry);p.spot.enabled=true;}
-        }
+    if(a.contains("spots"))applyRepairs(p,a.at("spots"),width,height,rotation);
+    // Repair recipes keep unflipped source anchors; ART applies spots after
+    // getImage() has already mirrored the coarse source canvas.
+    const auto sourceBasis=art::engine::geometrySourceBasis(p);
+    for(auto &entry:p.spot.entries){
+        const auto mirror=[&](double &x,double &y){if(p.coarse.hflip!=sourceBasis.first)x=width-1-x;if(p.coarse.vflip!=sourceBasis.second)y=height-1-y;};
+        double sx=entry.sourcePos.x,sy=entry.sourcePos.y,tx=entry.targetPos.x,ty=entry.targetPos.y;
+        mirror(sx,sy);mirror(tx,ty);entry.sourcePos.set(sx,sy);entry.targetPos.set(tx,ty);
+        for(size_t i=0;i<entry.repairPath.size();i+=2)mirror(entry.repairPath[i],entry.repairPath[i+1]);
     }
     if(a.contains("cropAspect")&&!a.at("cropAspect").is_null())num(a,"cropAspect",1,1e-6,1e6);
     p.crop.enabled=!a.at("crop").is_null();
@@ -484,7 +630,8 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         double x=num(c,"x",0,0,1),y=num(c,"y",0,0,1);
         double w=num(c,"width",1,0.001,1),h=num(c,"height",1,0.001,1);
         if(x+w>1.00001 || y+h>1.00001)throw std::runtime_error("Crop extends outside image");
-        const auto first=rotate(x,y),second=rotate(x+w,y+h);
+        const auto orient=[&](double x,double y){auto q=rotate(x,y);if(p.coarse.hflip!=sourceBasis.first)q.first=1-q.first;if(p.coarse.vflip!=sourceBasis.second)q.second=1-q.second;return q;};
+        const auto first=orient(x,y),second=orient(x+w,y+h);
         p.crop.x=std::round(std::min(first.first,second.first)*width);p.crop.y=std::round(std::min(first.second,second.second)*height);
         p.crop.w=std::max(1,int(std::round(std::abs(second.first-first.first)*width)));p.crop.h=std::max(1,int(std::round(std::abs(second.second-first.second)*height)));
     }
@@ -499,10 +646,12 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         pp::Mask mask; mask.enabled=m.value("enabled",true);mask.inverted=m.value("inverted",false);
         mask.name=m.value("name",std::string("Mask"));
         if(depth>8)throw std::runtime_error("Mask group nesting limit exceeded");
+        if(m.contains("linearGradientModel")&&(m.at("linearGradientModel")!="full-zero-v1"||m.value("type",std::string())!="linear"||m.contains("components")||m.value("feather",0.)!=0.))
+            throw std::runtime_error("Invalid Full/Zero gradient model");
         if(m.contains("components")){
             if(!m["components"].is_array()||m["components"].size()>32)throw std::runtime_error("Invalid mask components");
             for(const auto &child:m["components"]){
-                if(!child.value("enabled",true)||!child.value("initialized",true)||(child.value("type",std::string())=="brush"&&child.at("points").empty()))continue;
+                if(!child.value("enabled",true)||!child.value("initialized",true)||(child.value("type",std::string())=="brush"&&child.at("points").empty()&&(!child.contains("brush")||child.at("brush").at("strokes").empty())))continue;
                 auto component=makeMask(child,depth+1);if(!component.enabled)continue;
                 const auto operation=child.value("operation",std::string("add"));
                 if(operation!="add"&&operation!="subtract"&&operation!="intersect")throw std::runtime_error("Invalid mask operation");
@@ -515,6 +664,8 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
             mask.captrawReferenceAngle=num(m,"referenceAngle",0,-45,45);
             mask.captrawReferenceAngleSet=true;
         }
+        if(m.contains("geometryReference"))mask.captrawGeometryReference=maskGeometryReferenceData(m.at("geometryReference"));
+        mask.captrawMirrorCoordinates=flipCoordinates||p.rotate.captrawSourceBasisSet;
         const double feather=num(m,"feather",30,0,100);
         std::string type=m.value("type",std::string("brush"));
         if(type=="raster") {
@@ -566,6 +717,10 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
             if(v[2]<1)point(v[2]==v[3]?std::min(1.,v[2]+1e-6):v[3],0);
             point(1,v[2]==1?1:0);
         } else if(type=="brush") {
+            if(m.contains("brush")){
+                art::engine::validateBrushProgram(m.at("brush"));
+                mask.captrawBrushProgram=m.at("brush").dump();mask.captrawBrushRotation=rotation;
+            }
             mask.drawnMask.enabled=true;mask.drawnMask.feather=feather;
             mask.drawnMask.smoothness=feather/100.0;
             for(const auto &point:m.at("points")) {
@@ -588,11 +743,23 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
                 shape->roundness=100;shape->feather=feather;
                 mask.areaMask.shapes.push_back(std::move(shape));
             } else if(type=="linear") {
+                double authorWidth=width,authorHeight=height;
+                if(m.contains("geometryReference")&&m.at("geometryReference").at("version")>=2){
+                    const auto reference=art::engine::geometryReferenceParams(mask.captrawGeometryReference);
+                    const auto frame=art::engine::checkedSourceFrame(Json::parse(reference.commonTrans.captrawSourceFrame));
+                    authorWidth=frame.at(rotation%180?"height":"width");authorHeight=frame.at(rotation%180?"width":"height");
+                }
                 auto shape=std::make_unique<pp::AreaMask::Gradient>();
                 shape->x=(sx+ex-1)*100;shape->y=(sy+ey-1)*100;
-                shape->angle=std::atan2((ex-sx)*width,(ey-sy)*height)*180.0/3.141592653589793;
+                shape->angle=std::atan2((ex-sx)*authorWidth,(ey-sy)*authorHeight)*180.0/3.141592653589793;
                 shape->strengthStart=100;shape->strengthEnd=0;
-                shape->feather=std::max(.01,std::hypot((ex-sx)*width,(ey-sy)*height)/std::hypot(width,height)*100.0*(.5+feather/100.0));
+                if(m.contains("linearGradientModel")){
+                    mask.areaMask.feather=0;
+                    shape->captrawFullZero={sx,sy,ex,ey};
+                    shape->feather=std::hypot((ex-sx)*authorWidth,(ey-sy)*authorHeight)/std::hypot(authorWidth,authorHeight)*100.0;
+                }else{
+                shape->feather=std::max(.01,std::hypot((ex-sx)*authorWidth,(ey-sy)*authorHeight)/std::hypot(authorWidth,authorHeight)*100.0*(.5+feather/100.0));
+                }
                 mask.areaMask.shapes.push_back(std::move(shape));
             } else throw std::runtime_error("Unknown mask type");
         }
@@ -604,7 +771,7 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         return false;
     };
     for(const auto &m:a.at("masks")){
-        if(!m.value("enabled",true)||!m.value("initialized",true)||(m.value("type",std::string())=="brush"&&!m.contains("components")&&m.at("points").empty()))continue;
+        if(!m.value("enabled",true)||!m.value("initialized",true)||(m.value("type",std::string())=="brush"&&!m.contains("components")&&m.at("points").empty()&&(!m.contains("brush")||m.at("brush").at("strokes").empty())))continue;
         auto mask=makeMask(m,0);if(!mask.enabled)continue;
         const bool rangeMask=hasRange(hasRange,mask);
         if(rangeMask)mask.name="@CaptRAW-range:"+std::to_string(p.colorcorrection.regions.size());
@@ -623,6 +790,11 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
         const double contrast=std::exp2(num(m,"contrast",0,-100,100)/100.0);
         for(int i=0;i<3;++i){region.slope[i]=gain;region.power[i]=1.0/contrast;region.pivot[i]=0.18;}
         region.outSaturation=num(m,"saturation",0,-100,100);
+        const double localGlow=m.contains("details")?num(m.at("details"),"glow",0,-100,100):0;
+        if(localGlow!=0){
+            if(!rangeMask)mask.name="@CaptRAW-glow:"+std::to_string(p.colorcorrection.regions.size());
+            p.captrawGlow.push_back(double(p.colorcorrection.regions.size()));p.captrawGlow.push_back(localGlow);
+        }
         p.colorcorrection.regions.push_back(region);p.colorcorrection.masks.push_back(mask);
         if(maskIds)maskIds->push_back(m.value("id",std::string()));
         if(m.contains("details")){
@@ -640,7 +812,15 @@ void applyAdjustments(pp::ProcParams &p, const Json &a, int width, int height, s
             if(noise!=0){pp::SmoothingParams::Region r;r.mode=pp::SmoothingParams::Region::Mode::NLMEANS;r.channel=pp::SmoothingParams::Region::Channel::LUMINANCE;r.nlstrength=int(noise);r.nldetail=int(noiseDetail);addDetailRegion(p.smoothing,r,detailMask,id+":noise");}
         }
     }
+    if(p.captrawGlow[0]==0&&p.captrawGlow.size()==5)p.captrawGlow.clear();
     p.colorcorrection.enabled=!p.colorcorrection.regions.empty();
+    if(p.toneCurve.captrawHDREditMode){
+        if(!p.toneCurve.hasWhitePoint())throw std::runtime_error("当前旧式或第二色调曲线不能应用 HDR 白点，请关闭 HDR 或复位对应曲线。");
+        for(const auto *channel:{&p.rgbCurves.rcurve,&p.rgbCurves.gcurve,&p.rgbCurves.bcurve}){
+            if(!channel->empty()&&!art::engine::DiagonalCurve(*channel).isIdentity())throw std::runtime_error("RGB 单通道曲线尚未支持 HDR，请关闭 HDR 后复位单通道曲线再重试。");
+        }
+        if(p.blackwhite.enabled&&(p.blackwhite.gammaRed||p.blackwhite.gammaGreen||p.blackwhite.gammaBlue||p.blackwhite.colorCast.getBottom()))throw std::runtime_error("当前黑白 gamma 或染色尚未支持 HDR，请关闭 HDR 或复位黑白配置。");
+    }
     p.icm.outputProfile="RTv4_sRGB";p.icm.outputIntent=art::engine::RI_RELATIVE;p.icm.outputBPC=true;
     validateInputProfile(p.icm);
     validateExternalMasks(p);

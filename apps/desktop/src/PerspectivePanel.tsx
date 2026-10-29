@@ -6,7 +6,10 @@ import {Control} from './Panels';
 
 const defaults:PerspectiveSettings={enabled:false,horizontal:0,vertical:0,angle:0,shear:0,focalLength:0,cropFactor:1,aspect:1};
 export function PerspectivePanel({guided,startGuided,automatic,value,edit,commit}:{guided:ReturnType<typeof useGuidedPerspective>;startGuided:()=>void;automatic:ReturnType<typeof useAutoPerspective>;value:Adjustments;edit:(fn:(a:Adjustments)=>Adjustments,transient?:boolean)=>void;commit:()=>void}){
- const p=value.perspective||defaults,snapshot=useRef(p);
+ const p=value.perspective||defaults,snapshot=useRef(p),signed=p.manualModel==='signed-framing-v1';
+ const legacy=!signed&&(!!p.manualModel||p.aspect!==1||(p.scale??1)!==1||(p.offsetX??0)!==0||(p.offsetY??0)!==0);
+ const manual=(a:Adjustments):PerspectiveSettings=>legacy?{...(a.perspective||defaults),enabled:true,manualModel:'art-perspective-v1'}:a.perspective?.manualModel==='signed-framing-v1'?{...a.perspective,enabled:true}:{...(a.perspective||defaults),enabled:true,manualModel:'signed-framing-v1',aspect:0,scale:1,offsetX:0,offsetY:0,constrainCrop:false};
+ const framing=legacy?p:signed?p:{...p,aspect:0,scale:1,offsetX:0,offsetY:0};
  return <div role="group" aria-label="透视变换">
   <div className="preset-actions" role="group" aria-label="自动透视">{([['horizontal','自动水平'],['vertical','自动垂直'],['both','自动联合']] as const).map(([direction,label])=><button key={direction} disabled={automatic.disabled||automatic.pending} title="根据照片中的直线校正；请先退出对比或画布工具" onClick={()=>void automatic.run(direction)}>{label}</button>)}</div>
   {automatic.pending&&<div role="status">正在分析照片直线… <button onClick={automatic.cancel}>取消自动透视</button></div>}
@@ -20,7 +23,10 @@ export function PerspectivePanel({guided,startGuided,automatic,value,edit,commit
   </div>}
   <label className="check-control"><input type="checkbox" checked={p.enabled} onChange={e=>edit(a=>({...a,perspective:{...(a.perspective||defaults),enabled:e.target.checked}}))}/>启用透视变换</label>
   {([['vertical','垂直透视',-200,200,.1],['horizontal','水平透视',-200,200,.1],['angle','透视旋转',-20,20,.01],['shear','倾斜',-50,50,.1]] as const).map(([key,label,min,max,step])=><Control key={key} label={label} value={p[key]} min={min} max={max} step={step} unit={key==='angle'?'°':''} begin={()=>{snapshot.current=structuredClone(p);}} cancel={()=>edit(a=>({...a,perspective:snapshot.current}),true)} change={v=>edit(a=>({...a,perspective:{...(a.perspective||defaults),enabled:true,[key]:v}}),true)} commit={commit}/>)}
+  {legacy&&<p className="hint">旧版几何使用原有比例与补正单位，保持原外观。<button onClick={()=>edit(a=>({...a,perspective:{...defaults,manualModel:'signed-framing-v1',aspect:0,scale:1,offsetX:0,offsetY:0,constrainCrop:false}}))}>采用新版并重置透视</button></p>}
+  {([['aspect','长宽比',legacy ? .5 : -100,legacy?2:100,.001,1,''],['scale','几何缩放',legacy?10:50,legacy?400:150,.1,100,'%'],['offsetX','横向补正',legacy?-50:-100,legacy?50:100,.1,legacy?100:1,legacy?'%':''],['offsetY','纵向补正',legacy?-50:-100,legacy?50:100,.1,legacy?100:1,legacy?'%':'']] as const).map(([key,label,min,max,step,factor,unit])=><Control key={key} label={label} value={(framing[key]??(key==='scale'?1:0))*factor} min={min} max={max} step={step} unit={unit} begin={()=>{snapshot.current=structuredClone(p);}} cancel={()=>edit(a=>({...a,perspective:snapshot.current}),true)} change={v=>edit(a=>({...a,perspective:{...manual(a),[key]:v/factor}}),true)} commit={commit}/>)}
+  <label className="check-control"><input type="checkbox" checked={p.constrainCrop??false} onChange={e=>edit(a=>({...a,perspective:{...manual(a),constrainCrop:e.target.checked}}))}/>自动填满画布</label>
   <button onClick={()=>edit(a=>({...a,perspective:{...defaults}}))}>重置透视变换</button>
-  <p className="hint">拖动调节会自动启用。取消勾选可暂时关闭并保留数值；裁切与拉直角度单独保留。</p>
+  <p className="hint">拖动调节会自动启用。自动填满会缩放有效图像以填满画布，并会限制缩放与补正效果；实际裁框单独保留。新版正长宽比变窄变高，正横向向右、正纵向向上；采用已验证的候选映射，尚未确认完整 Adobe 公式。跨模型联动仅转换当前控件，长宽比与缩放可能联动补偿；无法无损转换时不应用。</p>
  </div>;
 }

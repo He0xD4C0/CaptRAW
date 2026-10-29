@@ -1,4 +1,5 @@
 #include "geometry-map.h"
+#include "geometry-reference.h"
 #include "engine/improcfun.h"
 #include "engine/perspectivecorrection.h"
 #include <algorithm>
@@ -21,7 +22,7 @@ struct GeometryMap::Impl {
         if (w < 2 || h < 2) throw std::runtime_error("Invalid geometry dimensions");
         ipf.setScale(1);
         lens = ipf.getLensCorrection(w, h, metadata, rawRotation);
-        scale = params.commonTrans.autofill ? ipf.getTransformAutoFill(w, h, lens.get()) : 1;
+        scale = params.perspective.captrawFill(params.commonTrans.autofill) ? ipf.getTransformAutoFill(w, h, lens.get()) : 1;
         // Keep ART's actual autofill above, which also sees retained disabled
         // CA values. Only the subsequent pixel sampling ignores disabled CA.
         if (!params.cacorrection.enabled) {
@@ -44,7 +45,13 @@ struct GeometryMap::Impl {
         if (lensCA) lens->correctCA(point.x, point.y, 0, 0, channel);
         std::vector<Coord2D> red, green, blue;
         ipf.transCoord(width, height, {point}, red, green, blue, scale, lens.get(), false);
-        return channel == 0 ? red[0] : channel == 1 ? green[0] : blue[0];
+        auto result=channel == 0 ? red[0] : channel == 1 ? green[0] : blue[0];
+        // Retain the document's original coarse source canvas (unflipped for
+        // neutral documents), including inherited legacy anchor reflections.
+        const auto basis=geometrySourceBasis(params);
+        if(params.coarse.hflip!=basis.first)result.x=width-1-result.x;
+        if(params.coarse.vflip!=basis.second)result.y=height-1-result.y;
+        return result;
     }
 };
 GeometryMap::GeometryMap(const procparams::ProcParams &p, int w, int h,

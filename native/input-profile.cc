@@ -1,9 +1,11 @@
 #include "input-profile.h"
+#include "enhanced-profile.h"
 #include "engine/dcp.h"
 #include <lcms2.h>
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <stdexcept>
 #include <vector>
@@ -22,6 +24,11 @@ Json inspectInputProfile(const std::string &path) {
         throw std::runtime_error("输入配置文件为空、无法读取或超过 64 MB。");
     auto extension=file.extension().string();
     std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c){return std::tolower(c);});
+    if(extension==".look"){
+        std::ifstream stream(file);Json document;stream>>document;
+        auto result=enhanced::Profile::parse({{"profile",document},{"amount",1}}).describe();
+        result["id"]="inherited";result["reference"]="file:"+file.string();return result;
+    }
     if(extension!=".dcp"&&extension!=".icc"&&extension!=".icm")
         throw std::runtime_error("请选择 DCP、ICC 或 ICM 输入配置文件。");
     Json result={{"id","inherited"},{"reference","file:"+file.string()},

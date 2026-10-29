@@ -99,4 +99,141 @@ export function patchGeometryMapping(upstream){
 `+s.slice(end);
   return '#include "geometry-map.h"\n'+s;
  });
+ // Optional manual geometry: absent fields retain ART's original pixel path.
+ patch('procparams.h','bool captrawManual = false;',s=>s.replace('    double aspect;\n    std::vector<int> control_lines;',`    double aspect;
+    bool captrawManual = false;
+    double captrawScale = 1, captrawOffsetX = 0, captrawOffsetY = 0;
+    bool captrawConstrain = false;
+    bool captrawFill(bool inherited) const { return enabled && captrawManual ? captrawConstrain : inherited; }
+    std::vector<int> control_lines;`));
+ patch('procparams.cc','// Versioned manual perspective geometry.',s=>{
+  const edits=[
+   ['           control_lines == other.control_lines;',`           control_lines == other.control_lines && captrawManual == other.captrawManual &&
+           captrawScale == other.captrawScale && captrawOffsetX == other.captrawOffsetX &&
+           captrawOffsetY == other.captrawOffsetY && captrawConstrain == other.captrawConstrain;`],
+   ['            saveToKeyfile("Perspective", "Aspect", perspective.aspect, keyFile);',`            saveToKeyfile("Perspective", "Aspect", perspective.aspect, keyFile);
+            // Versioned manual perspective geometry.
+            if (perspective.captrawManual) {
+                saveToKeyfile("Perspective", "CaptRAWManualV1", true, keyFile);
+                saveToKeyfile("Perspective", "CaptRAWScale", perspective.captrawScale, keyFile);
+                saveToKeyfile("Perspective", "CaptRAWOffsetX", perspective.captrawOffsetX, keyFile);
+                saveToKeyfile("Perspective", "CaptRAWOffsetY", perspective.captrawOffsetY, keyFile);
+                saveToKeyfile("Perspective", "CaptRAWConstrainCrop", perspective.captrawConstrain, keyFile);
+            }`],
+   ['        if (keyFile.has_group("Perspective") && RELEVANT_(perspective)) {',`        if (keyFile.has_group("Perspective") && RELEVANT_(perspective)) {
+            perspective.captrawManual = false;
+            perspective.captrawScale = 1; perspective.captrawOffsetX = perspective.captrawOffsetY = 0;
+            perspective.captrawConstrain = false;
+            assignFromKeyfile(keyFile, "Perspective", "CaptRAWManualV1", perspective.captrawManual);
+            if (perspective.captrawManual) {
+                assignFromKeyfile(keyFile, "Perspective", "CaptRAWScale", perspective.captrawScale);
+                assignFromKeyfile(keyFile, "Perspective", "CaptRAWOffsetX", perspective.captrawOffsetX);
+                assignFromKeyfile(keyFile, "Perspective", "CaptRAWOffsetY", perspective.captrawOffsetY);
+                assignFromKeyfile(keyFile, "Perspective", "CaptRAWConstrainCrop", perspective.captrawConstrain);
+            }`]
+  ];
+  for(const [before,after] of edits){if(!s.includes(before))throw new Error('ART manual perspective parameter anchor missing');s=s.replace(before,after);}return s;
+ });
+ patch('perspectivecorrection.h','double manualScale_ = 1,',s=>s.replace('    float ihomograph_[3][3];',`    float ihomograph_[3][3];
+    bool manual_ = false;
+    double manualScale_ = 1, manualOffsetX_ = 0, manualOffsetY_ = 0;`));
+ patch('perspectivecorrection.cc','// Apply manual framing after ART perspective correction.',s=>{
+  const anchor='        calc_scale(width, height, pp, fill);';
+  if(!s.includes(anchor))throw new Error('ART manual perspective initialization anchor missing');
+  s=s.replace('    if (params.enabled) {\n        auto pp = import_meta(params, metadata);',`    manual_ = params.enabled && params.captrawManual;
+    if (params.enabled) {
+        fill = params.captrawFill(fill);
+        auto pp = import_meta(params, metadata);`);
+  s=s.replace(anchor,anchor+`
+        if (manual_) {
+            // Apply manual framing after ART perspective correction. When
+            // constrained, ART fills the lens/rotation/projective stages first.
+            // Intersect the affine image rectangle with the output canvas,
+            // then fit the original aspect inside it. No coverage resampling
+            // or separate mask transform is introduced.
+            const double zoom = params.captrawScale;
+            double k = 1, mx = .5, my = .5;
+            if (params.captrawConstrain) {
+                const double left = std::max(0., .5*(1-zoom)+params.captrawOffsetX);
+                const double right = std::min(1., .5*(1+zoom)+params.captrawOffsetX);
+                const double top = std::max(0., .5*(1-zoom)+params.captrawOffsetY);
+                const double bottom = std::min(1., .5*(1+zoom)+params.captrawOffsetY);
+                k = std::min(right-left, bottom-top);
+                mx = .5*(left+right); my = .5*(top+bottom);
+            }
+            manualScale_ = k/zoom;
+            manualOffsetX_ = ((mx-.5*k-.5-params.captrawOffsetX)/zoom+.5)*width;
+            manualOffsetY_ = ((my-.5*k-.5-params.captrawOffsetY)/zoom+.5)*height;
+        }`);
+  return s.replace('    correct(x, y, scale_, offx_, offy_);',`    if (manual_) {
+        x = x*manualScale_+manualOffsetX_;
+        y = y*manualScale_+manualOffsetY_;
+    }
+    correct(x, y, scale_, offx_, offy_);`);
+ });
+ patch('iptransform.cc','// Versioned aspect and affine controls also need the perspective sampler.',s=>{
+  s=s.replaceAll('params->commonTrans.autofill','params->perspective.captrawFill(params->commonTrans.autofill)');
+  const anchor='            params->perspective.angle || params->perspective.shear);';
+  if(!s.includes(anchor))throw new Error('ART manual perspective sampler gate missing');
+  return s.replace(anchor,`            params->perspective.angle || params->perspective.shear ||
+            // Versioned aspect and affine controls also need the perspective sampler.
+            (params->perspective.captrawManual && (params->perspective.aspect != 1 ||
+             params->perspective.captrawScale != 1 || params->perspective.captrawOffsetX != 0 ||
+             params->perspective.captrawOffsetY != 0)));`);
+ });
+ patch('dcrop.cc','// Include versioned manual framing in the complete-canvas rule.',s=>{
+  const anchor='perspective.angle || perspective.shear)) ||';
+  if(!s.includes(anchor))throw new Error('ART manual perspective detail canvas anchor missing');
+  return s.replace(anchor,`perspective.angle || perspective.shear || perspective.captrawManual)) ||
+        // Include versioned manual framing in the complete-canvas rule.`);
+ });
+ // Signed framing is stored in its public units and lowered only at the
+ // existing ART sampler. Legacy aspect/scale/offset arithmetic stays intact.
+ patch('procparams.h','bool captrawSignedFraming = false;',s=>s.replace('    bool captrawManual = false;',`    bool captrawManual = false;
+    bool captrawSignedFraming = false;
+    PerspectiveParams captrawNativeFraming() const;`));
+ patch('procparams.cc','PerspectiveParams PerspectiveParams::captrawNativeFraming() const',s=>{
+  const before='bool PerspectiveParams::operator==(const PerspectiveParams &other) const';
+  if(!s.includes(before))throw new Error('Signed framing parameter method anchor missing');
+  s=s.replace(before,`PerspectiveParams PerspectiveParams::captrawNativeFraming() const
+{
+    PerspectiveParams p(*this);
+    if (!captrawManual || !captrawSignedFraming) return p;
+    p.captrawSignedFraming = false;
+    const double ratio = 1 + std::abs(aspect) / 500.;
+    p.aspect = aspect >= 0 ? 1 / ratio : ratio;
+    p.captrawScale *= std::sqrt(ratio);
+    p.captrawOffsetX *= .0072;
+    p.captrawOffsetY *= -.0072;
+    return p;
+}
+
+`+before);
+  const edits=[
+   ['captrawConstrain == other.captrawConstrain;', 'captrawConstrain == other.captrawConstrain && captrawSignedFraming == other.captrawSignedFraming;'],
+   ['                saveToKeyfile("Perspective", "CaptRAWManualV1", true, keyFile);','                saveToKeyfile("Perspective", "CaptRAWManualV1", true, keyFile);\n                if (perspective.captrawSignedFraming) saveToKeyfile("Perspective", "CaptRAWSignedFramingV1", true, keyFile);'],
+   ['            perspective.captrawManual = false;', '            perspective.captrawSignedFraming = false;\n            perspective.captrawManual = false;'],
+   ['            if (perspective.captrawManual) {\n                assignFromKeyfile', '            if (perspective.captrawManual) {\n                assignFromKeyfile(keyFile, "Perspective", "CaptRAWSignedFramingV1", perspective.captrawSignedFraming);\n                assignFromKeyfile']
+  ];
+  for(const [a,b] of edits){if(!s.includes(a))throw new Error('Signed framing persistence anchor missing');s=s.replace(a,b);}return s;
+ });
+ patch('perspectivecorrection.cc','const auto nativeFraming = stored.captrawNativeFraming();',s=>{
+  const start=s.indexOf('void PerspectiveCorrection::init('),end=s.indexOf('inline void PerspectiveCorrection::correct',start);
+  if(start<0||end<0)throw new Error('Signed framing sampler anchor missing');
+  let part=s.slice(start,end).replace('const procparams::PerspectiveParams &params,','const procparams::PerspectiveParams &stored,');
+  part=part.replace('{\n    manual_',`{\n    const auto nativeFraming = stored.captrawNativeFraming();
+    const auto &params = stored.captrawSignedFraming ? nativeFraming : stored;
+    manual_`);
+  s=s.slice(0,start)+part+s.slice(end);
+  const a='    procparams::PerspectiveParams ret(pp);';
+  if(!s.includes(a))throw new Error('Signed framing metadata import anchor missing');
+  s=s.replace(a,'    procparams::PerspectiveParams ret(pp.captrawNativeFraming());');
+  const crop=s.indexOf('void PerspectiveCorrection::autocrop('),anchor='    get_view_size(width, height, params, cw, ch);';
+  if(crop<0||!s.slice(crop).includes(anchor))throw new Error('Signed framing crop lowering anchor missing');
+  return s.slice(0,crop)+s.slice(crop).replace(anchor,'    get_view_size(width, height, params.captrawSignedFraming ? pp : params, cw, ch);');
+ });
+ patch('iptransform.cc','params->perspective.captrawSignedFraming ? 0 : 1',s=>{
+  const a='params->perspective.aspect != 1 ||';if(!s.includes(a))throw new Error('Signed framing neutral sampler gate missing');
+  return s.replace(a,'params->perspective.aspect != (params->perspective.captrawSignedFraming ? 0 : 1) ||');
+ });
 }

@@ -1,5 +1,8 @@
 #include "geometry-field.h"
+#include "geometry-reference.h"
+#include "source-frame.h"
 #include "engine/improcfun.h"
+#include "engine/rtengine.h"
 #include <array>
 #include <algorithm>
 #include <cmath>
@@ -16,21 +19,31 @@ struct GeometryField::Impl {
         bool exact=false;
     };
     GeometryMap &current, &reference;
-    int width,height;
+    int width,height,referenceRotation;
+    int referenceWidth,referenceHeight;
+    std::unique_ptr<SourceFrameTransform> sourceTransform;
     double tolerance;
     bool identity;
+    bool referenceHorizontalFlip,referenceVerticalFlip;
     size_t exactCells=0;
     std::vector<Node> nodes;
-    Impl(GeometryMap &c,GeometryMap &r,int w,int h,double t)
-        :current(c),reference(r),width(w),height(h),tolerance(t),identity(&c==&r) {
+    Impl(GeometryMap &c,GeometryMap &r,int w,int h,double t,int rotation,bool horizontal,bool vertical,int rw,int rh,const procparams::ProcParams *p,const procparams::ProcParams *rp)
+        :current(c),reference(r),width(w),height(h),referenceRotation(rotation),referenceWidth(rw?rw:rotation%180?h:w),referenceHeight(rh?rh:rotation%180?w:h),tolerance(t),identity(&c==&r&&!horizontal&&!vertical),referenceHorizontalFlip(horizontal),referenceVerticalFlip(vertical) {
         if(w<2||h<2||!std::isfinite(t)||t<.005||t>.25)
             throw std::runtime_error("Invalid geometry field bounds or tolerance");
+        if(p&&rp)sourceTransform.reset(new SourceFrameTransform(w,h,referenceWidth,referenceHeight,*p,*rp));
         if(!identity) build(0,0,w-1,h-1,0);
     }
     bool exact(Coord2D q,Coord2D &result) const {
         const auto p=current.toSource(q);
         if(!std::isfinite(p.x)||!std::isfinite(p.y))return false;
-        return reference.toDisplay(p,result);
+        const auto source=sourceTransform?
+            sourceTransform->map(p):
+            maskSourceRotation(p,width,height,referenceRotation);
+        if(!reference.toDisplay(source,result))return false;
+        result=geometrySourceFlip(result,referenceWidth,referenceHeight,referenceHorizontalFlip,referenceVerticalFlip);
+        result=maskCanvasRotation(result,referenceWidth,referenceHeight,-referenceRotation);
+        return true;
     }
     static Coord2D interpolate(const Node &n,double x,double y) {
         const double u=(x-n.x0)/(n.x1-n.x0),v=(y-n.y0)/(n.y1-n.y0);
@@ -75,11 +88,13 @@ struct GeometryField::Impl {
         }
     }
 };
-GeometryField::GeometryField(GeometryMap &current,GeometryMap &reference,int w,int h,double t)
-    :impl(new Impl(current,reference,w,h,t)) {}
+GeometryField::GeometryField(GeometryMap &current,GeometryMap &reference,int w,int h,double t,int rotation,bool horizontal,bool vertical,int rw,int rh,const procparams::ProcParams *p,const procparams::ProcParams *rp)
+    :impl(new Impl(current,reference,w,h,t,rotation,horizontal,vertical,rw,rh,p,rp)) {}
 GeometryField::~GeometryField()=default;
 bool GeometryField::map(Coord2D current,Coord2D &reference) const {return impl->map(current,reference);}
 bool GeometryField::isIdentity() const {return impl->identity;}
+int GeometryField::referenceWidth() const {return impl->referenceRotation%180?impl->referenceHeight:impl->referenceWidth;}
+int GeometryField::referenceHeight() const {return impl->referenceRotation%180?impl->referenceWidth:impl->referenceHeight;}
 size_t GeometryField::nodeCount() const {return impl->nodes.size();}
 size_t GeometryField::exactCellCount() const {return impl->exactCells;}
 void GeometryField::warp(const array2D<float> &source,Coord2D sourceOrigin,
@@ -113,17 +128,12 @@ struct MaskGeometryCache::Impl {
                 height==other.height && fullWidth==other.fullWidth && fullHeight==other.fullHeight;
         }
     } source;
+    std::string sourceIdentity;
     static procparams::ProcParams geometryParams(const procparams::ProcParams &p) {
         procparams::ProcParams result;
         result.rotate=p.rotate;result.commonTrans=p.commonTrans;result.coarse=p.coarse;
         result.distortion=p.distortion;result.cacorrection=p.cacorrection;
         result.perspective=p.perspective;result.lensProf=p.lensProf;
-        return result;
-    }
-    static procparams::ProcParams referenceParams(const procparams::ProcParams &p) {
-        auto result=geometryParams(p);
-        result.rotate.degree=p.rotate.captrawMaskReferenceDegree;
-        result.rotate.enabled=result.rotate.degree!=0;
         return result;
     }
     static bool sameGeometry(const procparams::ProcParams &a,const procparams::ProcParams &b) {
@@ -137,13 +147,30 @@ struct MaskGeometryCache::Impl {
     struct Entry {
         Source source;
         procparams::ProcParams params;
+        procparams::ProcParams referenceParams;
+        std::string referenceKey;
+        bool mirrorLegacy;
+        int rw,rh,rfw,rfh;
         GeometryMap current,reference;
         GeometryField field;
-        Entry(const Source &s,const procparams::ProcParams &p)
-            :source(s),params(geometryParams(p)),
+        Entry(const Source &s,const procparams::ProcParams &p,const procparams::ProcParams &r,const std::string &key,bool mirror)
+            :source(s),params(geometryParams(p)),referenceParams(r),referenceKey(key),mirrorLegacy(mirror),
+             rw(referenceSize(s,p,r,true,false)),rh(referenceSize(s,p,r,false,false)),
+             rfw(referenceSize(s,p,r,true,true)),rfh(referenceSize(s,p,r,false,true)),
              current(params,s.width,s.height,s.metadata,s.rotation,s.fullWidth,s.fullHeight),
-             reference(referenceParams(p),s.width,s.height,s.metadata,s.rotation,s.fullWidth,s.fullHeight),
-             field(current,reference,s.width,s.height) {}
+             reference(referenceParams,rw,rh,s.metadata,s.rotation,rfw,rfh),
+             field(current,reference,s.width,s.height,.02,r.coarse.rotate-p.coarse.rotate,false,false,rw,rh,&params,&referenceParams) {}
+        static int referenceSize(const Source &s,const procparams::ProcParams &p,const procparams::ProcParams &r,bool horizontal,bool full){
+            const bool swap=(r.coarse.rotate-p.coarse.rotate)%180;
+            const int current=horizontal?(swap?s.height:s.width):(swap?s.width:s.height);
+            const int currentFull=horizontal?(swap?s.fullHeight:s.fullWidth):(swap?s.fullWidth:s.fullHeight);
+            if(p.commonTrans.captrawSourceFrame.empty()||r.commonTrans.captrawSourceFrame.empty())return full?currentFull:current;
+            const auto a=checkedSourceFrame(nlohmann::json::parse(p.commonTrans.captrawSourceFrame));
+            const auto b=checkedSourceFrame(nlohmann::json::parse(r.commonTrans.captrawSourceFrame));
+            const char *key=(horizontal!=(r.coarse.rotate%180!=0))?"width":"height";
+            const double ratio=b.at(key).get<double>()/a.at(key).get<double>();
+            return std::max(2,int(std::lround((full?currentFull:current)*ratio)));
+        }
     };
     // Fit and detail alternate on one ART processor. Keep both resolutions;
     // exposure/local changes and ROI panning reuse the same coordinate field.
@@ -154,6 +181,7 @@ MaskGeometryCache::~MaskGeometryCache()=default;
 void MaskGeometryCache::setSource(const FramesMetaData *metadata,int rotation,int width,int height,
                                   int fullWidth,int fullHeight) {
     auto &source=impl->source;
+    if(source.metadata!=metadata)impl->sourceIdentity.clear();
     source.metadata=metadata;source.rotation=rotation;source.width=width;source.height=height;
     source.fullWidth=fullWidth;source.fullHeight=fullHeight;
 }
@@ -161,26 +189,42 @@ const GeometryField *MaskGeometryCache::get(const procparams::ProcParams &params
     if(!params.rotate.captrawMaskCoordinates)return nullptr;
     return get(params,params.rotate.captrawMaskReferenceDegree);
 }
-const GeometryField *MaskGeometryCache::get(const procparams::ProcParams &params,double reference) {
+const GeometryField *MaskGeometryCache::get(const procparams::ProcParams &params,double reference,bool mirrorLegacy) {
     const double angle=params.rotate.enabled?params.rotate.degree:0;
     if(!std::isfinite(angle)||!std::isfinite(reference)||std::abs(angle)>45||std::abs(reference)>45)
         throw MaskGeometryError("Invalid mask reference rotation");
-    if(angle==reference)return nullptr;
+    const auto basis=geometrySourceBasis(params);
+    if(angle==reference&&!(mirrorLegacy&&(params.coarse.hflip!=basis.first||params.coarse.vflip!=basis.second)))return nullptr;
+    auto p=maskGeometryParams(params);p.rotate.degree=reference;p.rotate.enabled=reference!=0;
+    if(mirrorLegacy){p.coarse.hflip=basis.first;p.coarse.vflip=basis.second;}
+    return get(params,geometryReference(p),mirrorLegacy);
+}
+const GeometryField *MaskGeometryCache::get(const procparams::ProcParams &params,const std::string &key,bool mirrorLegacy) {
+    auto reference=geometryReferenceParams(key);
+    // v1 snapshots deliberately have no frame: their source canvas is the
+    // document's historical canvas. Binding for copy upgrades them explicitly.
+    if(reference.commonTrans.captrawSourceFrame.empty())reference.commonTrans.captrawSourceFrame=params.commonTrans.captrawSourceFrame;
+    auto geometry=maskGeometryParams(params);
+    if(Impl::sameGeometry(geometry,reference))return nullptr;
     const auto &source=impl->source;
     if(!source.metadata||source.width<2||source.height<2||source.fullWidth<source.width||source.fullHeight<source.height)
         throw MaskGeometryError("Mask geometry source is unavailable");
+    if(hasRenderBinding(reference)&&geometry.commonTrans.captrawSourceIdentity.empty()){
+        // Standalone ART profile rendering has no Node snapshot. Resolve the
+        // actual input once per processor, never from the reference's label.
+        if(impl->sourceIdentity.empty())impl->sourceIdentity=sourceContentIdentity(source.metadata->getFileName().raw()).dump();
+        geometry.commonTrans.captrawSourceIdentity=impl->sourceIdentity;
+    }
     // Copy only transform parameters, never the profile's masks or strokes.
-    auto geometry=Impl::geometryParams(params);
-    geometry.rotate.captrawMaskCoordinates=true;
-    geometry.rotate.captrawMaskReferenceDegree=reference;
     for(size_t i=0;i<impl->entries.size();++i) {
         const auto &entry=impl->entries[i];
-        if(entry && entry->source==source && Impl::sameGeometry(entry->params,geometry)) {
+        if(entry && entry->source==source && entry->referenceKey==key && entry->mirrorLegacy==mirrorLegacy &&
+           entry->params.commonTrans.captrawSourceIdentity==geometry.commonTrans.captrawSourceIdentity&&Impl::sameGeometry(entry->params,geometry)) {
             if(i)std::swap(impl->entries[0],impl->entries[i]);
             return &impl->entries[0]->field;
         }
     }
-    std::unique_ptr<Impl::Entry> next(new Impl::Entry(source,geometry));
+    std::unique_ptr<Impl::Entry> next(new Impl::Entry(source,geometry,reference,key,mirrorLegacy));
     impl->entries[1]=std::move(impl->entries[0]);impl->entries[0]=std::move(next);
     return &impl->entries[0]->field;
 }
@@ -195,6 +239,17 @@ const GeometryField *ImProcFunctions::maskGeometry() {
     return maskGeometryCache_->get(*params);
 }
 const GeometryField *ImProcFunctions::maskGeometry(const procparams::Mask &mask) {
+    if(!mask.captrawGeometryReference.empty()){
+        if(!maskGeometryCache_)maskGeometryCache_.reset(new MaskGeometryCache);
+        return maskGeometryCache_->get(*params,mask.captrawGeometryReference);
+    }
+    if(mask.captrawMirrorCoordinates){
+        if(!maskGeometryCache_)maskGeometryCache_.reset(new MaskGeometryCache);
+        const double reference=mask.captrawReferenceAngleSet?mask.captrawReferenceAngle:
+            params->rotate.captrawMaskCoordinates?params->rotate.captrawMaskReferenceDegree:
+            params->rotate.enabled?params->rotate.degree:0;
+        return maskGeometryCache_->get(*params,reference,true);
+    }
     if(!mask.captrawReferenceAngleSet)return maskGeometry();
     if(!maskGeometryCache_)maskGeometryCache_.reset(new MaskGeometryCache);
     return maskGeometryCache_->get(*params,mask.captrawReferenceAngle);

@@ -1,5 +1,6 @@
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {patchRepairContinuous} from './repair-patch.mjs';
 export function patchPreviewCrop(upstream){
  const patch=(file,marker,edit)=>{
   const path=join(upstream,'src/engine',file),source=readFileSync(path,'utf8');
@@ -344,7 +345,27 @@ bool getDeltaEColor(Imagefloat *rgb`));
 }
 
 export function patchQualityFixes(upstream){
+ patchRepairContinuous(upstream);
  const patch=(file,marker,edit)=>{const path=join(upstream,'src/engine',file),source=readFileSync(path,'utf8');if(source.includes(marker))return;const changed=edit(source);if(changed===source||!changed.includes(marker))throw new Error('ART quality patch anchor mismatch: '+file);writeFileSync(path,changed);};
+ patch('PF_correct_RT.cc','CaptRAW: deterministic in-place fringe correction.',s=>{
+  for(const [before,after] of [
+   ['#pragma omp for reduction(+ : chromave) schedule(dynamic, 16)','#pragma omp for schedule(dynamic, 16)'],
+   ['                chromave += chroma;\n',''],
+   ['    chromave /= height * width;',`    // Sum in the original one-thread pixel order, independent of scheduling.
+    for (int i = 0; i < height * width; ++i) chromave += fringe[i];
+    chromave /= height * width;`],
+   ['#ifdef _OPENMP\n#pragma omp parallel for schedule(dynamic, 16)\n#endif',`// CaptRAW: deterministic in-place fringe correction.
+// Neighbor reads observe earlier corrected rows, as in ART's one-thread path.
+// Parallel writes would race with these reads and change Undo/export pixels.`]
+  ]){
+   if(!s.includes(before)||s.indexOf(before)!==s.lastIndexOf(before))throw new Error('ART defringe anchor mismatch');
+   s=s.replace(before,()=>after);
+  }
+  return s;
+ });
+ patch('improcfun.cc','CaptRAW: fit previews use the same scale-aware detail operators.',s=>s.replace('        if (cur_pipeline == Pipeline::OUTPUT || cur_pipeline == Pipeline::PREVIEW) {\n            stop = STEP_s_(sharpening, !params->sharpening.enabled);',`        // CaptRAW: fit previews use the same scale-aware detail operators.
+        if (cur_pipeline == Pipeline::OUTPUT || cur_pipeline == Pipeline::PREVIEW || cur_pipeline == Pipeline::NAVIGATOR) {
+            stop = STEP_s_(sharpening, !params->sharpening.enabled);`));
  patch('xtrans_demosaic.cc','CaptRAW: keep homogeneity reads inside initialized tile bounds.',s=>{
   const extension=`                if (height - top < ts + 4) {
                     mrow = height - top + 2;
@@ -572,6 +593,53 @@ export function patchColorGrading(upstream){
  patch('procparams.cc','// CaptRAW: honor grading partial-profile selection.',s=>s.replace('        if (!pedited && !captrawGrading.empty()) {','        // CaptRAW: honor grading partial-profile selection.\n        if (RELEVANT_(captrawGrading) && !captrawGrading.empty()) {').replace('        if (!pedited) {\n            captrawGrading.clear();','        if (RELEVANT_(captrawGrading) && (!pedited || keyFile.has_group("CaptRAW Color Grading"))) {\n            captrawGrading.clear();'));
  patch('improcfun.h','void captrawColorGrading(',s=>s.replace('    void blackAndWhite(Imagefloat *rgb);','    void blackAndWhite(Imagefloat *rgb);\n    void captrawColorGrading(Imagefloat *img);'));
  patch('improcfun.cc','STEP_(captrawColorGrading,',s=>s.replace('            STEP_(blackAndWhite, !params->blackwhite.enabled);','            STEP_(blackAndWhite, !params->blackwhite.enabled);\n            STEP_(captrawColorGrading, params->captrawGrading.empty());'));
+ // Calibration shadow tint is stored independently of primary hue/saturation.
+ patch('procparams.h','int captrawShadowTint = 0;',s=>s.replace('    int hue_tweak[3];','    int captrawShadowTint = 0;\n    int hue_tweak[3];'));
+ patch('procparams.cc','// CaptRAW: persistent ART shadow calibration.',s=>s.replace(
+  '    if (enabled != other.enabled || mode != other.mode) {',
+  '    if (enabled != other.enabled || mode != other.mode || captrawShadowTint != other.captrawShadowTint) {'
+ ).replace('            saveToKeyfile("Channel Mixer", "Mode", int(chmixer.mode), keyFile);',`            // CaptRAW: persistent ART shadow calibration.
+            if (chmixer.captrawShadowTint != 0)
+                saveToKeyfile("Channel Mixer", "CaptRAWShadowTint", chmixer.captrawShadowTint, keyFile);
+            saveToKeyfile("Channel Mixer", "Mode", int(chmixer.mode), keyFile);`
+ ).replace('        if (keyFile.has_group("Channel Mixer") && RELEVANT_(chmixer)) {',`        if (keyFile.has_group("Channel Mixer") && RELEVANT_(chmixer)) {
+            if (!pedited) chmixer.captrawShadowTint = 0;
+            assignFromKeyfile(keyFile, "Channel Mixer", "CaptRAWShadowTint", chmixer.captrawShadowTint);
+            if (chmixer.captrawShadowTint < -100 || chmixer.captrawShadowTint > 100)
+                throw std::runtime_error("Invalid stored shadow tint");`));
+ patch('improcfun.h','void captrawCalibration(',s=>s.replace('    void captrawColorGrading(Imagefloat *img);','    void captrawColorGrading(Imagefloat *img);\n    void captrawCalibration(Imagefloat *img);'));
+ patch('improcfun.cc','STEP_(captrawCalibration,',s=>s.replace('        STEP_(channelMixer, !params->chmixer.enabled);','        STEP_(channelMixer, !params->chmixer.enabled);\n        STEP_(captrawCalibration, params->chmixer.captrawShadowTint == 0);'));
+ patch('procparams.h','std::vector<double> captrawRelativeMatrix;',s=>s.replace('struct WBParams {','struct WBParams {\n    std::vector<double> captrawRelativeMatrix;'));
+ patch('procparams.cc','// CaptRAW: versioned relative rendered white balance.',s=>s.replace('    return enabled == other.enabled && method == other.method &&','    return captrawRelativeMatrix == other.captrawRelativeMatrix && enabled == other.enabled && method == other.method &&').replace('            saveToKeyfile("White Balance", "Green", wb.green, keyFile);',`            // CaptRAW: versioned relative rendered white balance.
+            if (!wb.captrawRelativeMatrix.empty()) {
+                keyFile.set_integer("White Balance", "CaptRAWRelativeVersion", 1);
+                keyFile.set_double_list("White Balance", "CaptRAWRelativeMatrix", wb.captrawRelativeMatrix);
+            }
+            saveToKeyfile("White Balance", "Green", wb.green, keyFile);`).replace('            assignFromKeyfile(keyFile, "White Balance", "Enabled", wb.enabled);',`            assignFromKeyfile(keyFile, "White Balance", "Enabled", wb.enabled);
+            if (!pedited) wb.captrawRelativeMatrix.clear();
+            if (keyFile.has_key("White Balance", "CaptRAWRelativeMatrix")) {
+                if (keyFile.get_integer("White Balance", "CaptRAWRelativeVersion") != 1)
+                    throw std::runtime_error("Unsupported relative white balance version");
+                wb.captrawRelativeMatrix = keyFile.get_double_list("White Balance", "CaptRAWRelativeMatrix");
+                if (wb.captrawRelativeMatrix.size() != 9)
+                    throw std::runtime_error("Invalid relative white balance matrix");
+                for (double value : wb.captrawRelativeMatrix) if (!std::isfinite(value))
+                    throw std::runtime_error("Invalid relative white balance matrix value");
+            }`));
+ patch('improcfun.h','void captrawRelativeWhiteBalance(',s=>s.replace('    void captrawCalibration(Imagefloat *img);','    void captrawCalibration(Imagefloat *img);\n    void captrawRelativeWhiteBalance(Imagefloat *img);'));
+ patch('improcfun.cc','STEP_(captrawRelativeWhiteBalance,',s=>s.replace('        STEP_(channelMixer, !params->chmixer.enabled);','        STEP_(captrawRelativeWhiteBalance, params->wb.captrawRelativeMatrix.empty());\n        STEP_(channelMixer, !params->chmixer.enabled);'));
+}
+
+export function patchHDREditMode(upstream){
+ const edit=(file,marker,changes)=>{const path=join(upstream,'src/engine',file),source=readFileSync(path,'utf8');if(source.includes(marker))return;let result=source;for(const [anchor,replacement] of changes){if(!result.includes(anchor))throw new Error('ART HDR edit anchor mismatch: '+file);result=result.replace(anchor,replacement);}writeFileSync(path,result);};
+ edit('procparams.h','bool captrawHDREditMode = false;',[
+  ['    double whitePoint;','    double whitePoint;\n    bool captrawHDREditMode = false;']
+ ]);
+ edit('procparams.cc','// CaptRAW: explicit peak-relative HDR grading domain.',[
+  ['           whitePoint == other.whitePoint;','           captrawHDREditMode == other.captrawHDREditMode &&\n           whitePoint == other.whitePoint;'],
+  ['            saveToKeyfile("ToneCurve", "WhitePoint", toneCurve.whitePoint,','            // CaptRAW: explicit peak-relative HDR grading domain.\n            if (toneCurve.captrawHDREditMode) saveToKeyfile("ToneCurve", "CaptRAWHDREditMode", true, keyFile);\n            saveToKeyfile("ToneCurve", "WhitePoint", toneCurve.whitePoint,'],
+  ['                assignFromKeyfile(keyFile, "ToneCurve", "WhitePoint",','                toneCurve.captrawHDREditMode = false;\n                assignFromKeyfile(keyFile, "ToneCurve", "CaptRAWHDREditMode", toneCurve.captrawHDREditMode);\n                assignFromKeyfile(keyFile, "ToneCurve", "WhitePoint",']
+ ]);
 }
 
 export function patchLensStatus(upstream){
@@ -593,4 +661,11 @@ export function patchLensStatus(upstream){
   if(!body.includes(anchor))throw new Error('ART lens focal length patch anchor mismatch');
   writeFileSync(cpp,body.replace(anchor,anchor+'\n    // CaptRAW: missing focal length cannot select a calibration.\n    if (focallen <= 0.f) return nullptr;'));
  }
+}
+
+export function patchOutputMetadata(upstream){
+ const path=join(upstream,'src/engine/imageio.h'),source=readFileSync(path,'utf8'),marker='const Exiv2Metadata &outputMetadata() const';
+ if(source.includes(marker))return;const anchor='    void setMetadata(const Exiv2Metadata &info) { metadataInfo = info; }';
+ if(!source.includes(anchor))throw new Error('ART output metadata anchor mismatch');
+ writeFileSync(path,source.replace(anchor,anchor+'\n    '+marker+' { return metadataInfo; }'));
 }

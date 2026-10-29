@@ -1,9 +1,10 @@
 from pathlib import Path
+import os
 import json
 import numpy as np
 import tifffile
 from PIL import Image,ImageCms
-root=Path(__file__).resolve().parents[1]/'artifacts/native-acceptance'
+root=Path(os.environ.get('CAPTRAW_ACCEPTANCE_OUT',Path(__file__).resolve().parents[1]/'artifacts/native-acceptance')).resolve()
 report=json.loads((root/'report.json').read_text())
 for item in report['images']:
  model={'nikon-d850.NEF':'D850','canon-r5.CR3':'EOS R5','fuji-xt4.RAF':'X-T4'}[item['source']]

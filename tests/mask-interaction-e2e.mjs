@@ -5,8 +5,9 @@ import {EngineClient} from './engine-client.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
 import {XMP} from '@captraw/desktop-core/xmp';
 import {ENGINE_VERSION} from '@captraw/contracts';
-import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,existsSync,statSync,copyFileSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,existsSync,statSync,copyFileSync,rmSync} from 'node:fs';
 import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 
@@ -15,23 +16,13 @@ assert([0,90,180,270].includes(rotation),'CAPTRAW_MASK_INTERACTION_ROTATION must
 assert(['0','1'].includes(process.env.CAPTRAW_MASK_INTERACTION_CROP||'0'),'CAPTRAW_MASK_INTERACTION_CROP must be 0 or 1');
 const crop=process.env.CAPTRAW_MASK_INTERACTION_CROP==='1'?{x:.08,y:.08,width:.84,height:.84}:null;
 const root=resolve(process.env.CAPTRAW_MASK_INTERACTION_OUT||'artifacts/mask-interaction-gui');mkdirSync(root,{recursive:true});
-const out=mkdtempSync(join(root,'run-')),source=join(out,'interaction.png'),other=join(out,'other.png');
-const fixture=[process.env.CAPTRAW_MASK_INTERACTION_IMAGE,'artifacts/mask-reference-verified/source.png','artifacts/coordinates/target.png'].filter(Boolean).map(p=>resolve(p)).find(existsSync);
-assert(fixture,'Generate mask-reference-verified or coordinates fixtures first');
-const hash=file=>createHash('sha256').update(readFileSync(file)).digest('hex'),fixtureHash=hash(fixture);
-// Keep all generated assets private to this run. Supply real Lensfun metadata.
-execFileSync(resolve('build/qa-venv/bin/python'),['-c',String.raw`
-from PIL import Image,TiffImagePlugin
-import sys
-im=Image.open(sys.argv[1]).convert('RGB');exif=Image.Exif()
-exif[271]='NIKON CORPORATION';exif[272]='NIKON D500'
-exif[34665]={42036:'AF-S DX Nikkor 10-24mm f/3.5-4.5G ED',37386:TiffImagePlugin.IFDRational(10),33437:TiffImagePlugin.IFDRational(7,2),41989:15}
-im.save(sys.argv[2],exif=exif)
-`,fixture,source]);copyFileSync(source,other);
-const sourceHash=hash(source),documents=new Documents(new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp')));
-const core=new EngineClient({cache:join(out,'oracle')}),checks=[],metrics=[],errors=[];
-core.on('error',e=>errors.push('native: '+e.message));
-let app,page,passed=false,revision=0,sequence=0,canvasDimensions;
+const out=mkdtempSync(join(root,'run-')),fixtureDirectory=mkdtempSync(join(tmpdir(),'captraw-mask-interaction-'));
+const source=join(fixtureDirectory,'interaction.png'),other=join(fixtureDirectory,'other.png');
+const fixture=process.env.CAPTRAW_MASK_INTERACTION_IMAGE?resolve(process.env.CAPTRAW_MASK_INTERACTION_IMAGE):join(fixtureDirectory,'fixture.png');
+const hash=file=>createHash('sha256').update(readFileSync(file)).digest('hex');
+const documents=new Documents(new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp')));
+const checks=[],metrics=[],errors=[];
+let app,page,core,fixtureHash,sourceHash,passed=false,revision=0,sequence=0,canvasDimensions;
 const pass=name=>{checks.push(name);console.log('PASS',name);};
 function section(profile,name,body){const start=profile.indexOf('['+name+']');assert(start>=0,name);const end=profile.indexOf('\n[',start);return profile.slice(0,start)+`[${name}]\n${body}\n`+(end<0?'':profile.slice(end));}
 const leaf=(id,type)=>({id,name:id,type,enabled:true,inverted:false,initialized:true,referenceAngle:7,feather:0,points:[],start:{x:.37,y:.33},end:{x:.64,y:.64},operation:'add'});
@@ -113,6 +104,27 @@ async function held(){await expect.poll(()=>app.evaluate(()=>globalThis.__maskRP
 async function release(){await app.evaluate(()=>{const r=globalThis.__maskRPC;for(const resolve of r.held.splice(0))resolve();});await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));}
 
 try{
+ if(process.env.CAPTRAW_MASK_INTERACTION_IMAGE){
+  assert(existsSync(fixture),`CAPTRAW_MASK_INTERACTION_IMAGE does not exist: ${fixture}`);fixtureHash=hash(fixture);
+ }
+ // Match the reference test's size and midtone texture so every mask gesture
+ // can change pixels without clipping. Supply real Lensfun metadata as before.
+ execFileSync(resolve('build/qa-venv/bin/python'),['-c',String.raw`
+from PIL import Image,TiffImagePlugin
+import sys
+if sys.argv[3]=='external':
+    with Image.open(sys.argv[1]) as original:
+        im=original.convert('RGB')
+else:
+    pixels=bytes(c for y in range(768) for x in range(1024) for c in (65+x%97,70+y%83,90+(x+y)%79))
+    im=Image.frombytes('RGB',(1024,768),pixels)
+    im.save(sys.argv[1])
+exif=Image.Exif();exif[271]='NIKON CORPORATION';exif[272]='NIKON D500'
+exif[34665]={42036:'AF-S DX Nikkor 10-24mm f/3.5-4.5G ED',37386:TiffImagePlugin.IFDRational(10),33437:TiffImagePlugin.IFDRational(7,2),41989:15}
+im.save(sys.argv[2],exif=exif)
+`,fixture,source,process.env.CAPTRAW_MASK_INTERACTION_IMAGE?'external':'generated']);copyFileSync(source,other);
+ fixtureHash??=hash(fixture);sourceHash=hash(source);
+ core=new EngineClient({cache:join(out,'oracle')});core.on('error',e=>errors.push('native: '+e.message));
  const image=await core.call('open',{path:source,sessionId:'oracle'});
  let profile=section(image.artProfile,'Rotation','Enabled=true\nDegree=23\nCaptRAWMaskCoordinates=true\nCaptRAWMaskReferenceDegree=7');
  profile=section(profile,'Common Properties for Transformations','AutoFill=true');
@@ -296,9 +308,10 @@ try{
 finally{
  const diagnostics=app?electronDiagnostics(app):undefined;
  if(app){await release().catch(()=>{});await closeElectron(app).catch(e=>{errors.push(String(e));passed=false;});}
- await core.stop().catch(e=>{errors.push(String(e));passed=false;});
- const report={status:passed?'passed':'failed',rotation,crop,canvasDimensions,raceChecks:rotation===0,checks,metrics,errors,backgroundWindow:true,packaged:!!process.env.CAPTRAW_APP,fixture,sourceHash,out,
+ if(core)await core.stop().catch(e=>{errors.push(String(e));passed=false;});
+ if(passed){try{rmSync(fixtureDirectory,{recursive:true});}catch(e){errors.push(String(e));passed=false;}}
+ const report={status:passed?'passed':'failed',rotation,crop,canvasDimensions,raceChecks:rotation===0,checks,metrics,errors,backgroundWindow:true,packaged:!!process.env.CAPTRAW_APP,fixture,fixtureDirectory,fixtureHash,sourceHash,out,
   binaries:{app:process.env.CAPTRAW_APP,engine:process.env.CAPTRAW_ENGINE,resources:process.env.CAPTRAW_RESOURCES,xmp:process.env.CAPTRAW_XMP_BINARY},diagnostics};
  writeFileSync(join(out,'report.json'),JSON.stringify(report,null,2)+'\n');writeFileSync(join(root,'latest.json'),JSON.stringify({out,status:report.status},null,2)+'\n');
- console.log('REPORT',join(out,'report.json'));if(!passed)process.exitCode=1;
+ console.log('REPORT',join(out,'report.json'));if(!passed){console.error('FIXTURES RETAINED',fixtureDirectory);process.exitCode=1;}
 }

@@ -1,8 +1,16 @@
 #include "core.h"
 #include "recipe.h"
+#include "brush.h"
 #include "white-balance.h"
 #include "input-profile.h"
 #include "geometry-map.h"
+#include "geometry-reference.h"
+#include "source-frame.h"
+#include "repair-source.h"
+#include "float-preview.h"
+#include "tat-sample.h"
+#include "hdr-avif.h"
+#include "output-metadata.h"
 #include "engine/perspectivecorrection.h"
 #include "engine/rtengine.h"
 #include "engine/image8.h"
@@ -13,6 +21,7 @@
 #include "engine/settings.h"
 #include "engine/curves.h"
 #include "engine/imagedata.h"
+#include "engine/metadata.h"
 #include "engine/dcp.h"
 #include "engine/iccstore.h"
 #include <fstream>
@@ -20,6 +29,7 @@
 #include "engine/rtlensfun.h"
 #include "engine/improcfun.h"
 #include <giomm.h>
+#include <glibmm/checksum.h>
 #include <filesystem>
 #include <chrono>
 #include <mutex>
@@ -39,6 +49,10 @@ namespace ae=art::engine;
 namespace pp=art::engine::procparams;
 namespace captraw {
 static void resolveWhiteBalance(pp::ProcParams &params,ae::ImageSource *source,const Json &adjustments){
+    if(adjustments.contains("incrementalTemperature")||adjustments.contains("incrementalTint")||adjustments.contains("relativeWBModel")){
+        if(source->isRAW())throw std::runtime_error("相对白平衡仅适用于已渲染图像，不能将偏移作为 RAW 色温。");
+        return;
+    }
     if(params.wb.method!=pp::WBParams::CUSTOM_TEMP)return;
     // recipe.cc validates CRS units; exact camera coefficients enter ART's existing path.
     const auto m=whiteBalanceMultipliers(source,params.icm,adjustments.value("temperature",6500.),adjustments.value("tint",0.));
@@ -49,6 +63,14 @@ static bool isRaw(const std::string &path) {
     auto ext=fs::path(path).extension().string();
     std::transform(ext.begin(),ext.end(),ext.begin(),[](unsigned char c){return std::tolower(c);});
     return ext!=".tif"&&ext!=".tiff"&&ext!=".png"&&ext!=".jpg"&&ext!=".jpeg";
+}
+static const char *classifyInputKind(const ae::ImageSource &source){
+    // Query the successfully decoded source, not the filename's loader hint.
+    if(!source.isRAW())return "rendered";
+    const auto sensor=source.getSensorType();
+    if(sensor==ae::ST_BAYER||sensor==ae::ST_FUJI_XTRANS)return "mosaic-raw";
+    // RawImageSource also handles non-CFA LinearRaw DNG and stacked/mono data.
+    return "linear-raw";
 }
 static void writePreview(ae::IImage8 *image,const std::string &file) {
     FILE *fp=fopen(file.c_str(),"wb");if(!fp)throw std::runtime_error("Cannot create preview");
@@ -61,19 +83,25 @@ static void writePreview(ae::IImage8 *image,const std::string &file) {
     for(int y=0;y<image->getHeight();++y)png_write_row(png,const_cast<png_bytep>(image->getData()+y*image->getWidth()*3));
     png_write_end(png,info);png_destroy_write_struct(&png,&info);fclose(fp);
 }
-struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::ProgressListener,ae::MaskPreviewListener,ae::HistogramListener {
-    EventSink sink; std::string cache,path,id; ae::InitialImage *initial=nullptr;
+struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::ProgressListener,ae::MaskPreviewListener,ae::HistogramListener,ae::FloatPreviewListener {
+    EventSink sink; std::string cache,path,id,cacheId; ae::InitialImage *initial=nullptr;
     ae::StagedImageProcessor *processor=nullptr;ae::DetailedCrop *detail=nullptr;ae::IImage8 *preview=nullptr;
     pp::ProcParams params,baseline;Json adjustments;long revision=0;int baseWidth=0,baseHeight=0;
+    Json documentFrame;
+    Json geometryIdentity;
     std::unique_ptr<ae::GeometryMap> displayCoordinates,referenceCoordinates;
     double coordinateReferenceAngle=0;
+    std::string coordinateReferenceKey;
     std::vector<std::string> maskIds;std::string selectedMask;Json fitMask,detailMask;
     std::unique_ptr<ae::Image8> fullDetailImage;std::unique_ptr<ae::array2D<float>> fullDetailCoverage;int coverageX=0,coverageY=0;double coverageScale=1;
     int dx=0,dy=0,dw=1024,dh=1024; std::string kind="fit";
     Json presetDB=Json::array(),presets=Json::array(),profileOptions=Json::array();bool previewAvailable=false;
     Json curveHistogram=nullptr;bool previewPending=false;
+    std::unique_ptr<CurveSampler> curveSampler;
     std::atomic<bool> maskFailure{false};
     bool colorEnabled=false,samplingColor=false;std::unique_ptr<ae::Imagefloat> sampleColorCache;int colorX=0,colorY=0;
+    bool linearEnabled=false,linearFailure=false;Json fitLinear,detailLinear;
+    std::unique_ptr<LinearPixels> fullDetailLinear;
     bool luminanceEnabled=false,samplingLuminance=false;Json fitLuminance,detailLuminance;
     std::unique_ptr<ae::PlanarWhateverData<float>> fullDetailLuminance,sampleLuminanceCache;
     int luminanceX=0,luminanceY=0,sampleX=0,sampleY=0;double luminanceScale=1;
@@ -102,11 +130,34 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
     ~Impl(){close();ae::cleanup();}
     void emit(const Json &j){std::lock_guard<std::mutex> lock(eventMutex);sink(j);}
     void close(){
+        if(processor)processor->stopProcessing();curveSampler.reset();
         displayCoordinates.reset();referenceCoordinates.reset();
         if(processor){processor->stopProcessing();if(detail){detail->setListener(nullptr);detail=nullptr;}
-            processor->setHistogramListener(nullptr);processor->setMaskPreviewListener(nullptr);processor->setPreviewImageListener(nullptr);ae::StagedImageProcessor::destroy(processor);processor=nullptr;preview=nullptr;}
+            processor->setHistogramListener(nullptr);processor->setFloatPreviewListener(nullptr);processor->setMaskPreviewListener(nullptr);processor->setPreviewImageListener(nullptr);ae::StagedImageProcessor::destroy(processor);processor=nullptr;preview=nullptr;}
         if(initial){initial->decreaseRef();initial=nullptr;}
         fullDetailImage.reset();fullDetailCoverage.reset();fullDetailLuminance.reset();sampleLuminanceCache.reset();sampleColorCache.reset();colorEnabled=false;luminanceEnabled=false;fitLuminance=nullptr;detailLuminance=nullptr;luminanceFingerprint.clear();
+        fullDetailLinear.reset();linearEnabled=false;linearFailure=false;fitLinear=nullptr;detailLinear=nullptr;
+    }
+    bool wantsFloatPreview()const override{return linearEnabled&&!samplingColor&&!samplingLuminance;}
+    void linearWindow(const LinearPixels &image,bool detailed,int sx=0,int sy=0,int width=0,int height=0){
+        if(!width)width=image.width;if(!height)height=image.height;
+        const auto file=cache+"/"+cacheId+"-linear-"+std::to_string(++frameSequence)+".rgba16f";
+        try{writeLinearPixels(image,file,sx,sy,width,height);}
+        catch(...){fs::remove(file);throw;}
+        (detailed?detailLinear:fitLinear)={{"file",file},{"width",width},{"height",height},{"rowBytes",width*8},{"encoding","rgba16float-le"},{"colorSpace","rec709-linear"}};
+        if(params.toneCurve.whitePoint>1.){
+            const double headroom=std::log2(params.toneCurve.whitePoint);const auto histogram=linearHistogram(image,sx,sy,width,height,headroom);
+            (detailed?detailLinear:fitLinear)["histogram"]={{"bins",histogram.bins},{"headroom",headroom},{"below",histogram.below},{"above",histogram.above}};
+        }
+    }
+    void floatPreviewReady(ae::Imagefloat &image,int,int,int sx,int sy,int width,int height,bool detailed)override{
+        try{
+            auto pixels=linearPixels(image,params.icm,sx,sy,width,height);
+            if(detailed&&fullDetailContext()){
+                fullDetailLinear=std::make_unique<LinearPixels>(std::move(pixels));
+                linearWindow(*fullDetailLinear,true,dx,dy,dw,dh);
+            }else linearWindow(pixels,detailed);
+        }catch(const std::exception &e){linearFailure=true;error(std::string("浮点预览失败，未发布图像：")+e.what());}
     }
     bool wantsColorSample()const override{return samplingColor;}
     bool wantsMask(int region)const override{return !selectedMask.empty()&&region>=0&&region<int(maskIds.size())&&maskIds[region]==selectedMask;}
@@ -129,7 +180,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         if(w<=0||h<=0)return;
         ae::Image8 gray(w,h);auto *data=const_cast<unsigned char *>(gray.getData());
         for(int row=0;row<h;++row)for(int col=0;col<w;++col){const auto v=std::lround(std::clamp(values.v(row+sy,col+sx),0.f,1.f)*255.f);for(int c=0;c<3;++c)data[(row*w+col)*3+c]=v;}
-        const auto file=cache+"/"+id+"-luminance-"+std::to_string(++frameSequence)+".png";writePreview(&gray,file);
+        const auto file=cache+"/"+cacheId+"-luminance-"+std::to_string(++frameSequence)+".png";writePreview(&gray,file);
         Json plane={{"file",file},{"x",(x+sx)*scale},{"y",(y+sy)*scale},{"width",w*scale},{"height",h*scale}};
         if(!detailRegion){plane["x"]=0;plane["y"]=0;plane["width"]=processor->getFullWidth();plane["height"]=processor->getFullHeight();}
         (detailRegion?detailLuminance:fitLuminance)=plane;
@@ -143,7 +194,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         const int sx=detailRegion?std::clamp(int(dx/scale)-x,0,coverage.width()):0,sy=detailRegion?std::clamp(int(dy/scale)-y,0,coverage.height()):0;
         const int w=detailRegion?std::min(int(dw/scale),coverage.width()-sx):coverage.width(),h=detailRegion?std::min(int(dh/scale),coverage.height()-sy):coverage.height();
         if(w<=0||h<=0)return;
-        const auto file=cache+"/"+id+"-mask-"+std::to_string(++frameSequence)+".png";
+        const auto file=cache+"/"+cacheId+"-mask-"+std::to_string(++frameSequence)+".png";
         FILE *fp=fopen(file.c_str(),"wb");if(!fp)throw std::runtime_error("Cannot create mask preview");
         auto png=png_create_write_struct(PNG_LIBPNG_VER_STRING,nullptr,nullptr,nullptr);auto info=png_create_info_struct(png);
         if(setjmp(png_jmpbuf(png))){png_destroy_write_struct(&png,&info);fclose(fp);throw std::runtime_error("Cannot encode mask preview");}
@@ -160,8 +211,8 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
     void setImage(ae::IImage8 *image,double,const pp::CropParams &)override{preview=image;}
     void delImage(ae::IImage8 *image)override{if(preview==image)preview=nullptr;delete image;}
     void publish(ae::IImage8 *image,const std::string &type,int x=0,int y=0){
-        if(!image||maskFailure)return;
-        std::string name=id+"-"+std::to_string(revision)+"-"+type+"-"+std::to_string(++frameSequence)+".png";
+        if(!image||maskFailure||linearFailure)return;
+        std::string name=cacheId+"-"+std::to_string(revision)+"-"+type+"-"+std::to_string(++frameSequence)+".png";
         std::string file=cache+"/"+name;
         std::array<std::array<unsigned,256>,3> histogram{};
         {art::utils::MyMutex::MyLock lock(image->getMutex());
@@ -173,7 +224,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         emit({{"event","preview"},{"frame",{{"sessionId",id},{"revision",revision},{"file",file},
             {"width",image->getWidth()},{"height",image->getHeight()},
             {"fullWidth",processor->getFullWidth()},{"fullHeight",processor->getFullHeight()},
-            {"kind",type},{"x",x},{"y",y},{"mask",mask},{"luminance",luminanceEnabled&&type!="before"?(type=="detail"?detailLuminance:fitLuminance):Json(nullptr)},{"histogram",histogram},{"curveHistogram",type=="detail"?Json(nullptr):curveHistogram},{"elapsedMs",elapsed}}}});
+            {"kind",type},{"x",x},{"y",y},{"mask",mask},{"linear",linearEnabled?(type=="detail"?detailLinear:fitLinear):Json(nullptr)},{"luminance",luminanceEnabled&&type!="before"?(type=="detail"?detailLuminance:fitLuminance):Json(nullptr)},{"histogram",histogram},{"curveHistogram",type=="detail"?Json(nullptr):curveHistogram},{"elapsedMs",elapsed}}}});
     }
     void imageReady(const pp::CropParams &)override{previewAvailable=true;previewPending=true;{std::lock_guard<std::mutex> lock(previewMutex);++previewGeneration;}previewCondition.notify_all();}
     void setObservable(ae::HistogramObservable *)override{}
@@ -191,6 +242,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         if(previewPending){previewPending=false;publish(preview,kind);}
     }
     bool fullDetailContext()const{
+        if(!params.captrawGlow.empty())return true;
         if(adjustments.value("texture",0.)!=0||adjustments.value("clarity",0.)!=0)return true;
         for(const auto &m:adjustments["masks"])if(m.value("enabled",true)&&m.contains("tone")){const auto &t=m.at("tone");for(const char *key:{"highlights","shadows","whites","blacks"})if(t.value(key,0.)!=0)return true;}
         for(const auto &m:adjustments["masks"])if(m.value("enabled",true)&&m.contains("details")){const auto &d=m.at("details");if(d.value("texture",0.)!=0||d.value("clarity",0.)!=0||d.value("noise",0.)!=0)return true;}
@@ -256,7 +308,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
                 {"baselineExposure",p->getHasBaselineExposureOffset()},{"illuminants",lights}};
         };
         Json choices=Json::array();
-        if(isRaw(path)){
+        if(source->isRAW()){
             auto *dcp=ae::DCPStore::getInstance()->getCameraProfile(camera);
             const auto icc=dcp?nullptr:ae::ICCStore::getInstance()->getCameraProfile(camera);
             Json automatic={{"id","auto"},{"kind",dcp?"dcp":icc?"icc":"matrix"},{"name",dcp?"相机 DCP · "+camera:icc?"相机 ICC · "+camera:"自动 · 相机矩阵"}};
@@ -264,7 +316,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             choices.push_back(automatic);choices.push_back({{"id","matrix"},{"kind","matrix"},{"name","相机矩阵"}});
         }else choices.push_back({{"id","auto"},{"kind",source->getEmbeddedProfile()?"icc":"srgb"},{"name",source->getEmbeddedProfile()?"嵌入 ICC":"sRGB（无嵌入配置文件）"}});
         if(source->getEmbeddedProfile())choices.push_back({{"id","embedded"},{"kind","icc"},{"name","嵌入 ICC"}});
-        else if(isRaw(path)&&Glib::ustring(fs::path(path).extension().string()).lowercase()==".dng"){
+        else if(source->isRAW()&&Glib::ustring(fs::path(path).extension().string()).lowercase()==".dng"){
             auto *embedded=ae::DCPStore::getInstance()->getProfile(path);
             if(embedded)choices.push_back({{"id","embedded"},{"kind","dcp"},{"name","嵌入 DNG 配置文件"},{"dcp",describeDCP(embedded)}});
         }
@@ -273,25 +325,72 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
     Json open(const Json &a){
         if(a.contains("baselineVersion")&&a.at("baselineVersion")!=4)throw std::runtime_error("Unsupported baseline version");
         close();previewAvailable=false;previewPending=false;curveHistogram=nullptr;presets=Json::array();initialized=false;showingBefore=false;selectedMask.clear();fitMask=nullptr;detailMask=nullptr;maskIds.clear();path=a.at("path");id=a.at("sessionId");int err=0;
+        // Session IDs are opaque RPC identifiers, never filesystem path components.
+        cacheId=Glib::Checksum::compute_checksum(Glib::Checksum::CHECKSUM_SHA256,id);
         maskFailure=false;
         started=std::chrono::steady_clock::now();
-        initial=ae::InitialImage::load(path,isRaw(path),&err,this);
+        pp::ProcParams frameParams;frameParams.setDefaults();loadProfile(frameParams,a.value("artProfile",std::string()));
+        Json requestedFrame=a.value("sourceFrame",Json());
+        if(requestedFrame.is_null()&&!frameParams.commonTrans.captrawSourceFrame.empty())
+            requestedFrame=ae::checkedSourceFrame(Json::parse(frameParams.commonTrans.captrawSourceFrame));
+        const auto framePolicy=requestedFrame.is_null()?
+            (a.value("artProfile",std::string()).empty()?a.value("sourceFramePolicy",std::string("legacy")):std::string("legacy")):
+            ae::checkedSourceFrame(requestedFrame).at("policy").get<std::string>();
+        if(framePolicy!="legacy"&&framePolicy!="active-area-v1")throw std::runtime_error("Invalid source frame policy");
+        const bool decodeFrame=framePolicy=="active-area-v1"&&
+            (requestedFrame.is_null()||requestedFrame.value("decoderModel",std::string())=="sensor-crop-v1");
+        geometryIdentity=ae::sourceContentIdentity(path);
+        initial=ae::InitialImage::load(path,isRaw(path),&err,this,decodeFrame);
         if(!initial)throw std::runtime_error("无法解码照片：文件损坏，或当前核心不支持此格式/压缩模式。请重试其他照片（错误码 "+std::to_string(err)+"）。");
+        if(ae::sourceContentIdentity(path)!=geometryIdentity)throw std::runtime_error("Geometry source changed during decoding");
         initial->getImageSource()->getFullSize(baseWidth,baseHeight);
+        auto *frameSource=initial->getImageSource();
+        const int originalBorder=frameSource->getDecodedSourceFrame().border;
+        if(framePolicy=="legacy")ae::applySourceFrame(frameSource,frameParams);
+        documentFrame=ae::sourceFrame(frameSource,frameParams,framePolicy=="active-area-v1",
+            framePolicy=="legacy"?baseWidth:0,framePolicy=="legacy"?baseHeight:0);
+        if(!requestedFrame.is_null()){
+            // The snapshot belongs to this decoded source, never to a target
+            // selected for synchronization. Reject a mismatched frame early.
+            for(const char *key:{"sensor","fullWidth","fullHeight","decoded","border","width","height","layoutWidth","layoutHeight"})
+                if(requestedFrame.at(key)!=documentFrame.at(key))throw std::runtime_error("Source frame does not match the decoded photo");
+        }
+        if(framePolicy=="active-area-v1"){
+            baseWidth=documentFrame.at("layoutWidth");baseHeight=documentFrame.at("layoutHeight");
+        }else frameSource->setBorder(originalBorder);
         // StagedImageProcessor takes ownership of one ImageSource reference.
         initial->increaseRef();
         processor=ae::StagedImageProcessor::create(initial);
-        processor->setPreviewImageListener(this);processor->setHistogramListener(this);processor->setMaskPreviewListener(this);processor->setProgressListener(this);
+        processor->setPreviewImageListener(this);processor->setHistogramListener(this);processor->setMaskPreviewListener(this);processor->setFloatPreviewListener(this);processor->setProgressListener(this);
         processor->setMonitorProfile("RTv4_sRGB",ae::RI_RELATIVE);
         processor->setPreviewScale(std::max(1,int(std::ceil(std::max(baseWidth,baseHeight)/2048.0))));
         ae::ColorTemp wb;processor->getCamWB(wb);
         adjustments=defaults();params.setDefaults();
+        if(framePolicy=="active-area-v1")adjustments["sourceFrame"]=documentFrame;
+        ae::attachSourceFrame(params,framePolicy=="active-area-v1"?documentFrame:
+            ae::sourceFrame(frameSource,params,false,baseWidth,baseHeight));
+        // The caller knows whether a sidecar/recipe will be merged after open.
+        // Missing policy deliberately retains legacy behavior for existing clients.
+        const auto effectsDefaults=a.value("effectsDefaults",std::string("legacy"));
+        if(effectsDefaults!="legacy"&&effectsDefaults!="current")throw std::runtime_error("Invalid effects defaults policy");
+        if(effectsDefaults=="current"){
+            adjustments["grainModel"]="procedural-v1";adjustments["grainSize"]=25;adjustments["grainRoughness"]=50;
+            adjustments["postCropVignetteStyle"]="highlight-priority";adjustments["postCropVignetteMidpoint"]=50;
+            adjustments["postCropVignetteRoundness"]=0;adjustments["postCropVignetteFeather"]=50;adjustments["postCropVignetteHighlights"]=0;
+        }
         int cx=0,cy=0,cw=0,ch=0;Json cameraCrop=nullptr;
-        if(initial->getImageSource()->getCameraCrop(cx,cy,cw,ch))cameraCrop={{"x",double(cx)/baseWidth},{"y",double(cy)/baseHeight},{"width",double(cw)/baseWidth},{"height",double(ch)/baseHeight}};
+        if(framePolicy=="active-area-v1"?frameSource->getDefaultCrop(cx,cy,cw,ch):frameSource->getCameraCrop(cx,cy,cw,ch))
+            if(framePolicy=="legacy"||cx||cy||cw!=baseWidth||ch!=baseHeight)cameraCrop={{"x",double(cx)/baseWidth},{"y",double(cy)/baseHeight},{"width",double(cw)/baseWidth},{"height",double(ch)/baseHeight}};
         adjustments["crop"]=cameraCrop;
         if(wb.getTemp()>0){auto exact=wbResult(wb,"camera");for(auto it=exact.begin();it!=exact.end();++it)adjustments[it.key()]=it.value();}
         else adjustments["wbMode"]="custom";
-        applyAdjustments(params,adjustments,baseWidth,baseHeight);resolveWhiteBalance(params,initial->getImageSource(),adjustments);baseline=params;
+        const auto wbDefaults=a.value("whiteBalanceDefaults",std::string("legacy"));
+        if(wbDefaults!="legacy"&&wbDefaults!="current")throw std::runtime_error("Invalid white balance defaults policy");
+        if(wbDefaults=="current"&&!initial->getImageSource()->isRAW()){
+            adjustments["relativeWBModel"]="art-ctl-v1";adjustments["incrementalTemperature"]=0;adjustments["incrementalTint"]=0;
+            adjustments["wbMode"]="camera";adjustments["wbMultipliers"]=nullptr;adjustments["wbApproximate"]=false;
+        }
+        applyAdjustments(params,adjustments,baseWidth,baseHeight);params.commonTrans.captrawSourceIdentity=geometryIdentity.dump();resolveWhiteBalance(params,initial->getImageSource(),adjustments);baseline=params;
         adjustments["colorProfile"]=inputProfileSettings(params.icm);
         adjustments["blackWhite"]=blackWhiteSettings(params);
         adjustments["colorGrading"]=colorGradingSettings(params);
@@ -315,17 +414,28 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             auto *dcp=ae::DCPStore::getInstance()->getProfile(path);
             if(dcp&&!dcp->getCameraModel().empty())profileCamera=dcp->getCameraModel();
         }
-        Json result={{"lensCatalog",lensCatalog()},{"lensStatus",lensStatus()},{"cameraCrop",cameraCrop},{"inputProfiles",profileOptions},{"baselineVersion",4},{"whiteBalancePresets",options},{"id",id},{"path",path},{"name",fs::path(path).filename().string()},
-            {"width",baseWidth},{"height",baseHeight},{"camera",md->getCamera()},{"profileCamera",profileCamera},{"lens",md->getLens()},
-            {"iso",md->getISOSpeed()},{"aperture",md->getFNumber()},{"shutter",md->getShutterSpeed()},{"focalLength",md->getFocalLen()},{"exposureCompensation",md->getExpComp()},{"adjustments",adjustments},{"artProfile",profileText(params)}};
-        const int rating=md->getRating();if(rating==-1||(rating>=1&&rating<=5))result["rating"]=rating;
+        Json result={{"sourceFrame",documentFrame},{"lensCatalog",lensCatalog()},{"lensStatus",lensStatus()},{"cameraCrop",cameraCrop},{"inputProfiles",profileOptions},{"baselineVersion",4},{"whiteBalancePresets",options},{"id",id},{"path",path},{"name",fs::path(path).filename().string()},
+            {"width",baseWidth},{"height",baseHeight},{"inputKind",classifyInputKind(*initial->getImageSource())},{"camera",md->getCamera()},{"profileCamera",profileCamera},{"lens",md->getLens()},
+            {"iso",md->getISOSpeed()},{"aperture",md->getFNumber()},{"shutter",md->getShutterSpeed()},{"focalLength",md->getFocalLen()},{"exposureCompensation",md->getExpComp()},{"adjustments",adjustments},{"effectiveGeometry",geometryProjection(params)},{"artProfile",profileText(params)}};
+        // ART's metadata wrapper rejects images without EXIF before reading XMP.
+        auto metadata=Exiv2::ImageFactory::open(path);metadata->readMetadata();const auto &xmp=metadata->xmpData();
+        const auto entry=xmp.findKey(Exiv2::XmpKey("Xmp.xmp.Rating"));
+        if(entry!=xmp.end()){
+            std::istringstream value(entry->toString());value.imbue(std::locale::classic());double rating=0;
+            if(value>>rating&&(value>>std::ws).eof()&&std::isfinite(rating)&&(rating==-1||(rating>=0&&rating<=5)))result["rating"]=rating;
+        }else{const int rating=md->getRating();if(rating==-1||(rating>=1&&rating<=5))result["rating"]=rating;}
+        const auto label=xmp.findKey(Exiv2::XmpKey("Xmp.xmp.Label"));
+        if(label!=xmp.end())result["label"]=label->toString();
         return result;
     }
     Json update(const Json &a,bool before=false){
         if(!processor)throw std::runtime_error("No image is open");
-        processor->stopProcessing();revision=a.at("revision");kind=before?"before":"fit";
+        if(a.contains("linearPreview")&&!a.at("linearPreview").is_boolean())throw std::runtime_error("Invalid float preview request");
+        processor->stopProcessing();curveSampler.reset();revision=a.at("revision");kind=before?"before":"fit";
         const Json previous=adjustments;
         const auto previousGrading=params.captrawGrading;
+        const auto previousEffects=params.captrawEffects;
+        const auto previousGlow=params.captrawGlow;
         bool profileChanged=false;
         if(!before){
             pp::ProcParams candidate=params;const Json next=a.at("adjustments");
@@ -333,9 +443,36 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
                 const auto mode=next.at("colorProfile").at("mode").get<std::string>();
                 if(mode!="inherited"&&std::none_of(profileOptions.begin(),profileOptions.end(),[&](const Json &p){return p.at("id")==mode;}))throw std::runtime_error("当前照片没有所选输入配置文件。请选择相机配置或矩阵。");
             }
-            loadProfile(candidate,a.value("artProfile",std::string()));
+            const auto profile=a.value("artProfile",std::string());
+            loadProfile(candidate,profile);
+            if(documentFrame.at("policy")=="active-area-v1"){
+                if(next.contains("sourceFrame")&&ae::checkedSourceFrame(next.at("sourceFrame"))!=documentFrame)
+                    throw std::runtime_error("The document source frame is immutable");
+                ae::attachSourceFrame(candidate,documentFrame);
+            }else{
+                if(next.contains("sourceFrame")&&next.at("sourceFrame").at("policy")!="legacy")
+                    throw std::runtime_error("Cannot reinterpret a legacy document source frame");
+                ae::applySourceFrame(initial->getImageSource(),candidate);
+                ae::attachSourceFrame(candidate,ae::sourceFrame(initial->getImageSource(),candidate,false,baseWidth,baseHeight));
+            }
+            // History may restore absent new flip controls. With no ARP,
+            // inherit the original canvas rather than the previous edit.
+            // A nonempty ARP remains authoritative for inherited coarse flips.
+            if(profile.empty()){
+                if(!next.contains("perspective"))candidate.perspective=baseline.perspective;
+                // An old history snapshot without calibration restores its native baseline.
+                if(!next.contains("calibration"))candidate.chmixer.captrawShadowTint=baseline.chmixer.captrawShadowTint;
+                if(!next.contains("flipHorizontal"))candidate.coarse.hflip=baseline.coarse.hflip;
+                if(!next.contains("flipVertical"))candidate.coarse.vflip=baseline.coarse.vflip;
+                if(!next.contains("flipHorizontal")&&!next.contains("flipVertical")){
+                    candidate.rotate.captrawSourceBasisSet=baseline.rotate.captrawSourceBasisSet;
+                    candidate.rotate.captrawSourceBasisHorizontal=baseline.rotate.captrawSourceBasisHorizontal;
+                    candidate.rotate.captrawSourceBasisVertical=baseline.rotate.captrawSourceBasisVertical;
+                }
+            }
             profileChanged=candidate!=params;
             std::vector<std::string> nextMaskIds;applyAdjustments(candidate,next,baseWidth,baseHeight,&nextMaskIds);
+            candidate.commonTrans.captrawSourceIdentity=geometryIdentity.dump();
             resolveWhiteBalance(candidate,initial->getImageSource(),next);
             maskIds=std::move(nextMaskIds);
             params=candidate;adjustments=next;
@@ -347,16 +484,22 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         if(!luminanceEnabled||fingerprint!=luminanceFingerprint){sampleLuminanceCache.reset();fitLuminance=nullptr;detailLuminance=nullptr;}
         luminanceFingerprint=fingerprint;
         fullDetailImage.reset();fullDetailCoverage.reset();fullDetailLuminance.reset();
+        fullDetailLinear.reset();linearEnabled=!before&&(params.toneCurve.captrawHDREditMode||a.value("linearPreview",false));linearFailure=false;fitLinear=nullptr;detailLinear=nullptr;
         const auto previousMask=selectedMask;selectedMask=before?std::string():a.value("maskId",std::string());
         if(selectedMask!=previousMask||previous["masks"]!=adjustments["masks"]||previous["rotation"]!=adjustments["rotation"]||previous.value("fineRotation",Json())!=adjustments.value("fineRotation",Json())||previous.value("perspective",Json())!=adjustments.value("perspective",Json())){fitMask=nullptr;detailMask=nullptr;}
+        const bool flipsChanged=previous.value("flipHorizontal",Json())!=adjustments.value("flipHorizontal",Json())||previous.value("flipVertical",Json())!=adjustments.value("flipVertical",Json());
+        if(flipsChanged){fitMask=nullptr;detailMask=nullptr;}
         started=std::chrono::steady_clock::now();
         auto *target=processor->beginUpdateParams();*target=before?baseline:params;
         int flags=ae::FIRST;
         if(initialized && !before && !showingBefore){
             flags=ae::M_MONITOR;
-            if(previous["temperature"]!=adjustments["temperature"] || previous["tint"]!=adjustments["tint"] || previous.value("wbMultipliers",Json())!=adjustments.value("wbMultipliers",Json()))flags|=ae::WHITEBALANCE;
+            // RAW scaling and highlight recovery depend on WB even at fit scale.
+            // Invalidate those caches on WB edits so reopening preserves pixels.
+            if(previous["temperature"]!=adjustments["temperature"] || previous["tint"]!=adjustments["tint"] || previous.value("wbMultipliers",Json())!=adjustments.value("wbMultipliers",Json())||previous.value("incrementalTemperature",Json())!=adjustments.value("incrementalTemperature",Json())||previous.value("incrementalTint",Json())!=adjustments.value("incrementalTint",Json())||previous.value("relativeWBModel",Json())!=adjustments.value("relativeWBModel",Json()))flags|=ae::WHITEBALANCE|ae::FIRST;
             if(previous["exposure"]!=adjustments["exposure"])flags|=ae::HDR;
-            if(previous["contrast"]!=adjustments["contrast"] || previous["curve"]!=adjustments["curve"] || previous["saturation"]!=adjustments["saturation"] || previous["vibrance"]!=adjustments["vibrance"])flags|=ae::RGBCURVE;
+            if(previous.value("hdrEnabled",Json())!=adjustments.value("hdrEnabled",Json())||previous.value("hdrHeadroom",Json())!=adjustments.value("hdrHeadroom",Json()))flags|=ae::ALLNORAW;
+            if(previous["contrast"]!=adjustments["contrast"] || previous["curve"]!=adjustments["curve"] || previous["saturation"]!=adjustments["saturation"] || previous["vibrance"]!=adjustments["vibrance"] || previous.value("curveRefineModel",Json())!=adjustments.value("curveRefineModel",Json()) || previous.value("curveRefineSaturation",Json())!=adjustments.value("curveRefineSaturation",Json()))flags|=ae::RGBCURVE;
             if(previous["masks"]!=adjustments["masks"] || previous["rotation"]!=adjustments["rotation"]||previous.value("fineRotation",Json())!=adjustments.value("fineRotation",Json())||previous.value("perspective",Json())!=adjustments.value("perspective",Json()) || previous["crop"]!=adjustments["crop"])flags|=ae::ALLNORAW;
             if(previous.value("spots",Json())!=adjustments.value("spots",Json()))flags|=ae::SPOTADJUST;
             for(const auto *key:{"highlights","shadows","whites","blacks","sharpening","sharpenRadius","sharpenDetail","sharpenEdgeMask","luminanceNoise","luminanceNoiseDetail","luminanceNoiseContrast","colorNoise","colorNoiseDetail","colorNoiseSmoothness","dehaze","texture","clarity","vignette","postCropVignetteFeather","postCropVignetteRoundness","grain","lensCorrections","lensManualDistortion","defringe","redCurve","greenCurve","blueCurve","hsl","calibration","parametricCurve","wbMultipliers","colorProfile","blackWhite","colorGrading"})if(previous.value(key,Json())!=adjustments.value(key,Json()))flags|=ae::ALLNORAW;
@@ -365,12 +508,20 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         if(previous.value("lensCorrections",Json())!=adjustments.value("lensCorrections",Json())||previous.value("lensProfile",Json())!=adjustments.value("lensProfile",Json())||previous.value("lensVignette",Json())!=adjustments.value("lensVignette",Json()))flags|=ae::FIRST;
         if(selectedMask!=previousMask||luminanceEnabled!=previousLuminance)flags|=ae::ALLNORAW;
         if(previousGrading!=params.captrawGrading)flags|=ae::ALLNORAW;
+        if(previousEffects!=params.captrawEffects||previousGlow!=params.captrawGlow)flags|=ae::ALLNORAW;
+        if(flipsChanged)flags|=ae::FIRST;
         if(profileChanged||maskFailure)flags|=ae::FIRST;
         showingBefore=before;initialized=true;
         const auto optics=lensStatus();maskFailure=false;
         processor->endUpdateParams(flags);
         return {{"artProfile",profileText(params)},{"lensStatus",optics},
-            {"geometry",{{"rotation",params.coarse.rotate},{"angle",params.rotate.enabled?params.rotate.degree:0}}}};
+            {"geometry",geometryProjection(params)}};
+    }
+    static Json geometryProjection(const pp::ProcParams &p){
+        const auto basis=ae::geometrySourceBasis(p);
+        return {{"rotation",p.coarse.rotate},{"angle",p.rotate.enabled?p.rotate.degree:0},
+            {"flipHorizontal",p.coarse.hflip},{"flipVertical",p.coarse.vflip},
+            {"sourceFlipHorizontal",basis.first},{"sourceFlipVertical",basis.second}};
     }
     Json coordinates(const Json &request){
         if(!processor||!initial)throw std::runtime_error("No image is open");
@@ -390,14 +541,34 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         const double reference=request.contains("referenceAngle")?request.at("referenceAngle").get<double>():
             geometry.rotate.captrawMaskCoordinates?geometry.rotate.captrawMaskReferenceDegree:angle;
         if(!std::isfinite(reference)||std::abs(reference)>45)throw std::runtime_error("Invalid reference angle");
+        // New leaves snapshot all authoring transforms; explicit legacy angles
+        // keep the old appearance when an existing leaf is edited.
+        Json snapshot=request.value("geometryReference",Json());
+        if(snapshot=="current")snapshot=maskGeometryReference(geometry);
+        const std::string referenceKey=snapshot.is_null()?std::string():maskGeometryReferenceData(snapshot);
+        auto referenceGeometry=referenceKey.empty()?geometry:ae::geometryReferenceParams(referenceKey);
+        if(referenceGeometry.commonTrans.captrawSourceFrame.empty())referenceGeometry.commonTrans.captrawSourceFrame=geometry.commonTrans.captrawSourceFrame;
+        if(referenceKey.empty()){referenceGeometry.rotate.degree=reference;referenceGeometry.rotate.enabled=reference!=0;}
+        const int referenceRotation=referenceGeometry.coarse.rotate-geometry.coarse.rotate;
+        const bool mirrorReference=referenceKey.empty()&&(geometry.rotate.captrawSourceBasisSet||adjustments.contains("flipHorizontal")||adjustments.contains("flipVertical"));
+        if(mirrorReference){const auto basis=ae::geometrySourceBasis(geometry);referenceGeometry.coarse.hflip=basis.first;referenceGeometry.coarse.vflip=basis.second;}
         const int width=processor->getFullWidth(),height=processor->getFullHeight();
+        int referenceWidth=referenceRotation%180?height:width,referenceHeight=referenceRotation%180?width:height;
+        if(!geometry.commonTrans.captrawSourceFrame.empty()&&!referenceGeometry.commonTrans.captrawSourceFrame.empty()){
+            const auto currentFrame=ae::checkedSourceFrame(Json::parse(geometry.commonTrans.captrawSourceFrame));
+            const auto refFrame=ae::checkedSourceFrame(Json::parse(referenceGeometry.commonTrans.captrawSourceFrame));
+            const char *x=referenceGeometry.coarse.rotate%180?"height":"width",*y=referenceGeometry.coarse.rotate%180?"width":"height";
+            referenceWidth=std::max(2,int(std::lround(referenceWidth*refFrame.at(x).get<double>()/currentFrame.at(x).get<double>())));
+            referenceHeight=std::max(2,int(std::lround(referenceHeight*refFrame.at(y).get<double>()/currentFrame.at(y).get<double>())));
+        }
+        const int authorWidth=referenceRotation%180?referenceHeight:referenceWidth,authorHeight=referenceRotation%180?referenceWidth:referenceHeight;
         const auto map=[&](const std::string &space)->ae::GeometryMap *{
             if(space=="source")return nullptr;
-            if(space=="reference"&&reference!=angle){
-                if(!referenceCoordinates||coordinateReferenceAngle!=reference){
-                    auto p=geometry;p.rotate.degree=reference;p.rotate.enabled=reference!=0;
-                    referenceCoordinates=std::make_unique<ae::GeometryMap>(p,width,height,initial->getMetaData(),initial->getImageSource()->getRotateDegree());
+            if(space=="reference"&&(!referenceKey.empty()||reference!=angle||mirrorReference)){
+                if(!referenceCoordinates||coordinateReferenceAngle!=reference||coordinateReferenceKey!=referenceKey){
+                    referenceCoordinates=std::make_unique<ae::GeometryMap>(referenceGeometry,referenceWidth,referenceHeight,initial->getMetaData(),initial->getImageSource()->getRotateDegree());
                     coordinateReferenceAngle=reference;
+                    coordinateReferenceKey=referenceKey;
                 }
                 return referenceCoordinates.get();
             }
@@ -409,11 +580,76 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         for(const auto &point:points){
             ae::Coord2D value(point.at("x").get<double>(),point.at("y").get<double>());
             bool valid=true;
-            if(input!=output){if(input)value=input->toSource(value);if(output){ae::Coord2D converted;valid=output->toDisplay(value,converted);if(valid)value=converted;}}
+            if(input!=output){
+                if(from=="reference")value=ae::maskCanvasRotation({value.x*authorWidth/width,value.y*authorHeight/height},authorWidth,authorHeight,referenceRotation);
+                if(input)value=input->toSource(value);
+                if(from=="reference")value=ae::sourceFramePoint(value,referenceWidth,referenceHeight,width,height,referenceGeometry,geometry);
+                if(to=="reference")value=ae::sourceFramePoint(value,width,height,referenceWidth,referenceHeight,geometry,referenceGeometry);
+                if(output){ae::Coord2D converted;valid=output->toDisplay(value,converted);if(valid)value=converted;}
+                if(to=="reference"&&valid){value=ae::maskCanvasRotation(value,referenceWidth,referenceHeight,-referenceRotation);value.x*=double(width)/authorWidth;value.y*=double(height)/authorHeight;}
+            }
             if(valid&&std::isfinite(value.x)&&std::isfinite(value.y))result.push_back({{"x",value.x},{"y",value.y}});
             else result.push_back(nullptr);
         }
-        return {{"sessionId",id},{"revision",revision},{"width",width},{"height",height},{"referenceAngle",reference},{"points",result}};
+        Json response={{"sessionId",id},{"revision",revision},{"width",width},{"height",height},{"referenceAngle",reference},{"points",result}};
+        if(!snapshot.is_null())response["geometryReference"]=snapshot;
+        return response;
+    }
+    Json repairSource(const Json &request){
+        if(!processor||!initial||!initialized)throw std::runtime_error("请先完成照片预览，再自动选择修复来源。");
+        if(!request.contains("sessionId")||request.at("sessionId")!=id||!request.contains("revision")||
+           !request.at("revision").is_number_integer()||request.at("revision")!=revision)
+            throw std::runtime_error("Stale repair source request");
+        if(showingBefore)throw std::runtime_error("请退出原图对比后再选择修复来源。");
+        const auto number=[&](const char *key,double low,double high){
+            const auto &v=request.at(key);
+            if(!v.is_number()||!std::isfinite(v.get<double>())||v.get<double>()<low||v.get<double>()>high)
+                throw std::runtime_error(std::string("Invalid repair source ")+key);
+            return v.get<double>();
+        };
+        const auto point=[](const Json &p){
+            if(!p.is_object())throw std::runtime_error("Invalid repair source point");
+            for(const char *axis:{"x","y"})if(!p.contains(axis)||!p.at(axis).is_number()||
+               !std::isfinite(p.at(axis).get<double>())||p.at(axis).get<double>()<0||p.at(axis).get<double>()>1)
+                throw std::runtime_error("Invalid repair source point");
+            return ae::Coord2D(p.at("x").get<double>(),p.at("y").get<double>());
+        };
+        const auto &path=request.at("path");
+        if(!path.is_array()||path.empty()||path.size()>32768)throw std::runtime_error("Expected 1-32768 repair source points");
+        RepairSourceSearch search;
+        for(const auto &p:path)search.path.push_back(point(p));
+        search.radius=number("radius",2,200);search.feather=number("feather",0,100);
+        if(!request.at("seed").is_number_integer())throw std::runtime_error("Invalid repair source seed");
+        search.seed=uint64_t(number("seed",0,9007199254740991.));
+        if(request.contains("exclude"))search.exclude=point(request.at("exclude"));
+        // Join ART's updater before borrowing its preview pointer. This also
+        // avoids reading/replacing IImage8 while ART reallocates the fit image.
+        processor->stopProcessing();
+        if(!previewAvailable||!preview||maskFailure||linearFailure)throw std::runtime_error("请等待当前照片显影完成后再选择修复来源。");
+        pp::ProcParams rendered;processor->getParams(&rendered);
+        // ART projects exact WB multipliers back to display coordinates, and
+        // fills the automatic deconvolution radius during rendering. Compare
+        // authored settings without mistaking these derived values for a stale frame.
+        if(params.wb.method==pp::WBParams::CUSTOM_MULT&&rendered.wb.method==pp::WBParams::CUSTOM_MULT){
+            rendered.wb.temperature=params.wb.temperature;rendered.wb.green=params.wb.green;
+        }
+        if(params.sharpening.deconvAutoRadius&&rendered.sharpening.deconvAutoRadius)
+            rendered.sharpening.deconvradius=params.sharpening.deconvradius;
+        if(rendered!=params)throw std::runtime_error("当前修复预览尚未就绪，请等待显影后重试。");
+        const auto frozen=params;
+        const int fullWidth=processor->getFullWidth(),fullHeight=processor->getFullHeight();
+        int width=0,height=0;std::vector<unsigned char> rgb;
+        {art::utils::MyMutex::MyLock lock(preview->getMutex());
+            width=preview->getWidth();height=preview->getHeight();
+            if(width<1||height<1)throw std::runtime_error("Empty repair source preview");
+            const auto *pixels=preview->getData();rgb.assign(pixels,pixels+size_t(width)*height*3);
+        }
+        ae::GeometryMap geometry(frozen,fullWidth,fullHeight,initial->getMetaData(),initial->getImageSource()->getRotateDegree());
+        int sourceWidth=baseWidth,sourceHeight=baseHeight;
+        if(frozen.coarse.rotate%180)std::swap(sourceWidth,sourceHeight);
+        const auto match=findRepairSource({rgb.data(),width,height,fullWidth,fullHeight},search,geometry,sourceWidth,sourceHeight,frozen.coarse.rotate);
+        return {{"sessionId",id},{"revision",revision},
+            {"source",{{"x",match.source.x},{"y",match.source.y}}},{"offset",{{"x",match.offset.x},{"y",match.offset.y}}}};
     }
     Json autoPerspective(const Json &request){
         if(!processor||!initial||!initialized)throw std::runtime_error("请先完成照片预览，再自动校正透视。");
@@ -586,13 +822,50 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         Json mult=exactCamera;
         if(!mult.is_array()){double r,g,b;wb.getMultipliers(r,g,b);initial->getImageSource()->wbMul2Camera(r,g,b);mult=Json::array({r,g,b});}
         const auto coordinates=whiteBalanceCoordinates(initial->getImageSource(),profile?*profile:params.icm,{mult[0],mult[1],mult[2]});
-        const double temp=std::clamp(coordinates[0],2000.,50000.),tint=std::clamp(coordinates[1],-150.,150.);
+        const double temp=std::clamp(coordinates[0],1500.,50000.),tint=std::clamp(coordinates[1],-150.,150.);
         const bool approximate=temp!=coordinates[0]||tint!=coordinates[1];
         return {{"temperature",int(std::round(temp))},{"tint",int(std::round(tint))},{"wbMode",mode},{"wbMultipliers",mult},{"wbApproximate",approximate}};
+    }
+    Json relativeWhiteBalance(const Json &a,const std::string &mode){
+        Json result={{"temperature",adjustments.value("temperature",6500.)},{"tint",adjustments.value("tint",0.)},{"wbMode",mode},{"wbMultipliers",nullptr},{"wbApproximate",false},{"relativeWBModel","art-ctl-v1"},{"incrementalTemperature",0},{"incrementalTint",0}};
+        if(mode=="camera")return result;
+        if(mode!="auto"&&mode!="sample")throw std::runtime_error("已渲染图像不使用相机色温预设。");
+        auto *source=initial->getImageSource();int width,height;source->getFullSize(width,height);
+        int left=0,top=0,right=width-1,bottom=height-1,skip=std::max(1,int(std::ceil(std::max(width,height)/1024.)));
+        std::vector<ae::Coord2D> samples;
+        if(mode=="sample"){
+            double x=a.at("x").get<double>(),y=a.at("y").get<double>();const int size=a.value("size",11);
+            if(!std::isfinite(x)||!std::isfinite(y)||x<0||x>1||y<0||y>1||size<3||size>51||size%2!=1)throw std::runtime_error("Invalid relative WB sample");
+            const double ox=x;switch(params.coarse.rotate){case 90:x=1-y;y=ox;break;case 180:x=1-x;y=1-y;break;case 270:x=y;y=1-ox;break;}
+            const int dw=processor->getFullWidth(),dh=processor->getFullHeight();
+            ae::GeometryMap geometry(params,dw,dh,initial->getMetaData(),source->getRotateDegree());const auto basis=ae::geometrySourceBasis(params);
+            left=width;top=height;right=bottom=-1;skip=1;
+            for(int yy=-size/2;yy<=size/2;++yy)for(int xx=-size/2;xx<=size/2;++xx){
+                auto q=geometry.toSource({x*(dw-1)+xx,y*(dh-1)+yy});q=ae::geometrySourceFlip(q,dw,dh,basis.first,basis.second);q=ae::maskSourceRotation(q,dw,dh,-params.coarse.rotate);
+                if(!std::isfinite(q.x)||!std::isfinite(q.y)||q.x<0||q.y<0||q.x>width-1||q.y>height-1)continue;
+                samples.push_back(q);left=std::min(left,int(std::floor(q.x)));top=std::min(top,int(std::floor(q.y)));right=std::max(right,int(std::ceil(q.x)));bottom=std::max(bottom,int(std::ceil(q.y)));
+            }
+            if(samples.empty())throw std::runtime_error("白平衡取样位于图像透明边界之外。");
+        }
+        ae::PreviewProps region(left,top,right-left+1,bottom-top+1,skip);int w,h;source->getSize(region,w,h);
+        ae::Imagefloat pixels(w,h);source->getImage(ae::ColorTemp(),TR_NONE,&pixels,region,params.exposure,params.raw);
+        auto icm=params.icm;icm.workingProfile="Rec2020";source->convertColorSpace(&pixels,icm,ae::ColorTemp());
+        std::array<double,3> mean{};
+        if(mode=="auto")pixels.getAutoWBMultipliers(mean[0],mean[1],mean[2]);
+        else{
+            for(const auto &q:samples){
+                const double x=q.x-left,y=q.y-top;const int x0=int(std::floor(x)),y0=int(std::floor(y)),x1=std::min(x0+1,w-1),y1=std::min(y0+1,h-1);const double fx=x-x0,fy=y-y0;
+                for(int c=0;c<3;++c){const auto at=[&](int yy,int xx){return c==0?pixels.r(yy,xx):c==1?pixels.g(yy,xx):pixels.b(yy,xx);};mean[c]+=(1-fy)*((1-fx)*at(y0,x0)+fx*at(y0,x1))+fy*((1-fx)*at(y1,x0)+fx*at(y1,x1));}
+            }
+            for(double &v:mean)v/=samples.size();
+        }
+        const auto solved=solveRelativeWhiteBalance(mean);result["incrementalTemperature"]=int(solved[0]);result["incrementalTint"]=int(solved[1]);result["wbApproximate"]=solved[2]>1e-5;
+        return result;
     }
     Json whiteBalance(const Json &a){
         if(!processor||!previewAvailable)throw std::runtime_error("请等待照片预览完成后再设置白平衡。");
         processor->stopProcessing();const auto mode=a.at("mode").get<std::string>();ae::ColorTemp wb;
+        if(!initial->getImageSource()->isRAW()&&mode!="profile")return relativeWhiteBalance(a,mode);
         if(mode=="profile"){
             if(!adjustments.contains("wbMultipliers")||adjustments.at("wbMultipliers").is_null())throw std::runtime_error("当前白平衡没有固定系数，请重新选择配置文件。");
             auto next=adjustments;next["colorProfile"]=a.at("colorProfile");auto candidate=params;
@@ -643,6 +916,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         dw=std::clamp(a.value("width",1024),1,processor->getFullWidth()-dx);dh=std::clamp(a.value("height",1024),1,processor->getFullHeight()-dy);
         started=std::chrono::steady_clock::now();
         if(fullDetailContext()&&fullDetailImage){
+            if(linearEnabled&&fullDetailLinear)linearWindow(*fullDetailLinear,true,dx,dy,dw,dh);
             if(fullDetailCoverage){const auto it=std::find(maskIds.begin(),maskIds.end(),selectedMask);if(it!=maskIds.end())maskReady(int(it-maskIds.begin()),*fullDetailCoverage,coverageX,coverageY,coverageScale,true);}
             if(fullDetailLuminance)luminanceReady(*fullDetailLuminance,luminanceX,luminanceY,luminanceScale,true);
             publishDetailWindow(fullDetailImage.get());return Json::object();
@@ -655,6 +929,35 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             processor->startProcessing(ae::M_HIGHQUAL);processor->setHighQualComputed();
         }else detail->fullUpdate();
         return Json::object();
+    }
+    Json prepareBrush(const Json &a){
+        if(!processor||a.at("sessionId")!=id||a.at("revision")!=revision||showingBefore)
+            throw std::runtime_error("Stale brush preparation");
+        const auto &stroke=a.at("stroke");
+        ae::validateBrushProgram({{"version",1},{"strokes",Json::array({stroke})}},true);
+        // A dedicated worker enables color sampling and removes owned local masks.
+        // Capture full-resolution pre-colorcorrection pixels once, before selection.
+        sampleLuminance({{"revision",revision},{"start",stroke.at("points").at(0)}},true);
+        if(colorX!=0||colorY!=0||sampleColorCache->getWidth()!=processor->getFullWidth()||sampleColorCache->getHeight()!=processor->getFullHeight())
+            throw std::runtime_error("Incomplete brush authoring guide");
+        if(maskGeometryReferenceData(stroke.at("geometryReference"))!=maskGeometryReferenceData(maskGeometryReference(params)))
+            throw std::runtime_error("Brush authoring geometry changed");
+        return ae::prepareBrushCoverage(stroke,*sampleColorCache,params.coarse.rotate,a.at("output"));
+    }
+    Json sampleCurve(const Json &a){
+        if(!processor||showingBefore||a.at("sessionId")!=id||a.at("revision")!=revision)throw std::runtime_error("照片已更新，请重新取样。");
+        processor->stopProcessing();
+        if(!curveSampler)curveSampler=std::make_unique<CurveSampler>(processor,params);
+        curveSampler->prepare(a.at("channel"));
+        if(!processor->getHighQualComputed()){
+            unsigned long generation;{std::lock_guard<std::mutex> lock(previewMutex);generation=previewGeneration;}
+            processor->startProcessing(ae::M_HIGHQUAL);
+            bool ready;{std::unique_lock<std::mutex> lock(previewMutex);ready=previewCondition.wait_for(lock,std::chrono::seconds(90),[&]{return previewGeneration>generation;});}
+            processor->stopProcessing();
+            if(!ready)throw std::runtime_error("曲线高质量取样准备超时，请重试。");
+            processor->setHighQualComputed();
+        }
+        auto result=curveSampler->sample(a.at("point"));result["revision"]=revision;result["sessionId"]=id;return result;
     }
     Json sampleLuminance(const Json &a,bool color=false){
         if(!processor||!(color?colorEnabled:luminanceEnabled)||showingBefore)throw std::runtime_error("请先启用范围取样。");
@@ -701,11 +1004,17 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         return {{"minimum",low*100},{"maximum",high*100},{"pixels",(x1-x0+1)*(y1-y0+1)},{"x",x0},{"y",y0},{"width",x1-x0+1},{"height",y1-y0+1},{"revision",revision},{"reused",reused}};
     }
     Json exportImage(const Json &a){
+        if(a.contains("rating")&&(!a.at("rating").is_number()||!std::isfinite(a.at("rating").get<double>())||!(a.at("rating")==-1||(a.at("rating")>=0&&a.at("rating")<=5))))throw std::runtime_error("Invalid output rating");
         pp::ProcParams p;p.setDefaults();loadProfile(p,a.at("artProfile"));validateInputProfile(p.icm);validateExternalMasks(p);int err=0;
         if(processor)processor->stopProcessing();maskFailure=false;
         const std::string output=a.at("output"),format=a.at("format");
-        if(format!="tiff"&&format!="jpeg")throw std::runtime_error("Unsupported export format");
-        if(a.contains("colorSpace")){
+        if(format!="tiff"&&format!="jpeg"&&format!="avif")throw std::runtime_error("Unsupported export format");
+        if(format!="avif"&&p.toneCurve.whitePoint>1.)throw std::runtime_error("JPEG 与整数 TIFF 仅支持 SDR。请选择 HDR AVIF，或先保存 XMP 再关闭 HDR 导出；尚未生成输出文件。");
+        if(format=="avif"){
+            if(a.value("colorSpace",std::string("rec2020"))!="rec2020")throw std::runtime_error("HDR AVIF requires Rec.2020 / PQ");
+            p.icm.outputProfile="RTv4_Linear_Rec2020";p.icm.outputIntent=ae::RI_RELATIVE;p.icm.outputBPC=false;
+            if(!ae::ICCStore::getInstance()->getProfile(p.icm.outputProfile))throw std::runtime_error("Linear Rec.2020 ICC profile is missing");
+        }else if(a.contains("colorSpace")){
             const std::string space=a.at("colorSpace");
             const std::pair<const char*,const char*> profiles[]={{"srgb","RTv4_sRGB"},{"adobe-rgb","RTv4_Medium"},{"prophoto-rgb","RTv4_Large"},{"display-p3","RTv4_DisplayP3"},{"rec2020","RTv4_Rec2020"}};
             const auto found=std::find_if(std::begin(profiles),std::end(profiles),[&](const auto &v){return space==v.first;});
@@ -714,22 +1023,40 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             p.icm.outputProfile=found->second;p.icm.outputIntent=ae::RI_RELATIVE;p.icm.outputBPC=true;
         }
         const auto input=a.at("path").get<std::string>();
+        std::error_code aliasError;
+        if(fs::equivalent(input,output,aliasError))
+            throw std::runtime_error("禁止将导出写入原始照片或其文件别名。");
+        const auto exportIdentity=ae::sourceContentIdentity(input);
+        p.commonTrans.captrawSourceIdentity=exportIdentity.dump();
+        int jpegQuality=95,resolution=0;bool tiffUncompressed=false;
         const auto release=[](ae::InitialImage *im){if(im)im->decreaseRef();};
         std::unique_ptr<ae::InitialImage,decltype(release)> loaded(nullptr,release);
         if(a.contains("options")){
             const auto &o=a.at("options"),&s=o.at("size"),&sharp=o.at("sharpen");
             const auto integer=[](const Json &v,int low,int high){return v.is_number_integer()&&v>=low&&v<=high;};
+            if(o.contains("resolution")){
+                if(!integer(o.at("resolution"),1,999))throw std::runtime_error("Invalid output resolution");
+                resolution=o.at("resolution");
+            }
+            if(o.contains("jpegQuality")){
+                if(!integer(o.at("jpegQuality"),0,12))throw std::runtime_error("Invalid JPEG quality");
+                jpegQuality=std::max(1,int(std::round(o.at("jpegQuality").get<double>()*100./12.)));
+            }
+            if(o.contains("tiffCompression")){
+                const auto compression=o.at("tiffCompression").get<std::string>();
+                if(compression!="zip"&&compression!="none")throw std::runtime_error("Invalid TIFF compression");
+                tiffUncompressed=compression=="none";
+            }
             const auto mode=s.at("mode").get<std::string>();
             if((mode!="original"&&mode!="long-edge"&&mode!="short-edge"&&mode!="bounds")||!integer(s.at("width"),1,65000)||!integer(s.at("height"),1,65000)||!s.at("dontEnlarge").is_boolean())throw std::runtime_error("Invalid output size");
             if(!sharp.at("enabled").is_boolean()||!integer(sharp.at("amount"),0,300)||!sharp.at("radius").is_number())throw std::runtime_error("Invalid output sharpening");
             const double radius=sharp.at("radius");
             if(!std::isfinite(radius)||radius<.1||radius>3)throw std::runtime_error("Invalid output sharpening radius");
-            loaded.reset(ae::InitialImage::load(input,isRaw(input),&err));
+            loaded.reset(ae::InitialImage::load(input,isRaw(input),&err,nullptr,ae::sourceFrameDecode(p)));
             if(err||!loaded)throw std::runtime_error("Cannot decode export source ("+std::to_string(err)+")");
             auto *source=loaded->getImageSource();
             // Match ART's full-quality stage_init dimensions, including sensor border and coarse rotation.
-            if(source->getSensorType()==ae::ST_BAYER)source->setBorder(p.raw.bayersensor.method==pp::RAWParams::BayerSensor::Method::PIXELSHIFT?std::max(p.raw.bayersensor.border,2):p.raw.bayersensor.border);
-            else if(source->getSensorType()==ae::ST_FUJI_XTRANS)source->setBorder(p.raw.xtranssensor.border);
+            ae::applySourceFrame(source,p);
             int fw=0,fh=0;source->getFullSize(fw,fh,ae::getCoarseBitMask(p.coarse));
             if(!p.crop.hasGeometry())p.crop.setDefaultGeometry(fw,fh);
             if(p.crop.x>fw||p.crop.y>fh){p.crop.enabled=false;p.crop.x=p.crop.y=0;p.crop.w=fw;p.crop.h=fh;}
@@ -752,19 +1079,51 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             p.prsharpening.amount=sharp.at("amount");p.prsharpening.radius=radius;
         }
         auto *job=loaded?ae::ProcessingJob::create(loaded.get(),p,false):ae::ProcessingJob::create(input,isRaw(input),p);
-        auto *image=ae::processImage(job,err,this);
+        std::unique_ptr<ae::IImagefloat> image(ae::processImage(job,err,this));
         if(!image)throw std::runtime_error("Export processing failed ("+std::to_string(err)+")");
-        if(maskFailure){delete image;throw std::runtime_error("蒙版处理失败，未写入导出文件。请检查设置或资产后重试。");}
+        if(maskFailure)throw std::runtime_error("蒙版处理失败，未写入导出文件。请检查设置或资产后重试。");
+        if(ae::sourceContentIdentity(input)!=exportIdentity)throw std::runtime_error("Geometry source changed during export");
         const int width=image->getWidth(),height=image->getHeight();
-        err=format=="tiff"?image->saveAsTIFF(output,16,false,false):image->saveAsJPEG(output,95,3);
-        delete image;
+        if(format=="tiff"){
+            auto *io=dynamic_cast<ae::ImageIO *>(image.get());
+            if(!io)throw std::runtime_error("TIFF encoder options unavailable");
+            io->setOutputResolution(resolution);
+        }
+        Json hdr=nullptr;
+        if(format=="avif"){
+            auto *floating=dynamic_cast<ae::Imagefloat *>(image.get());if(!floating)throw std::runtime_error("HDR AVIF requires ART floating output");
+            setProgress(.85);hdr=saveHDRAVIF(*floating,output,a.value("rating",Json()));setProgress(.98);
+        }else err=format=="tiff"?image->saveAsTIFF(output,16,false,tiffUncompressed):image->saveAsJPEG(output,jpegQuality,3);
+        image.reset();
         if(err)throw std::runtime_error("Cannot write export ("+std::to_string(err)+")");
-        return {{"path",output},{"outputProfile",std::string(p.icm.outputProfile)},{"width",width},{"height",height}};
+        if(format!="avif"&&(a.contains("rating")||resolution)){
+            auto metadata=Exiv2::ImageFactory::open(output);metadata->readMetadata();
+            if(a.contains("rating"))metadata->xmpData()["Xmp.xmp.Rating"]=a.at("rating").dump();
+            if(resolution){
+                auto &exif=metadata->exifData();
+                exif["Exif.Image.XResolution"]=Exiv2::URational(resolution,1);
+                exif["Exif.Image.YResolution"]=Exiv2::URational(resolution,1);
+                exif["Exif.Image.ResolutionUnit"]=uint16_t(2);
+                auto &xmp=metadata->xmpData();
+                xmp["Xmp.tiff.XResolution"]=std::to_string(resolution)+"/1";
+                xmp["Xmp.tiff.YResolution"]=std::to_string(resolution)+"/1";
+                xmp["Xmp.tiff.ResolutionUnit"]="2";
+            }
+            // A stale EXIF integer must not override the current standard XMP value.
+            if(a.contains("rating"))for(const auto *key:{"Exif.Image.Rating","Exif.Image.RatingPercent"}){
+                auto &exif=metadata->exifData();const auto found=exif.findKey(Exiv2::ExifKey(key));if(found!=exif.end())exif.erase(found);
+            }
+            metadata->writeMetadata();
+        }
+        Json result={{"path",output},{"outputProfile",format=="avif"?"Rec.2020/PQ":std::string(p.icm.outputProfile)},{"width",width},{"height",height}};
+        if(!hdr.is_null())result["hdr"]=hdr;return result;
     }
 };
 Engine::Engine(const std::string &r,const std::string &c,EventSink sink):impl(std::make_unique<Impl>(r,c,sink)){}
 Engine::~Engine()=default;
 Json Engine::call(const std::string &method,const Json &p){
+    if(method=="metadataPacket")return metadataPacket(p);
+    if(method=="outputMetadata")return outputMetadata(p);
     if(method=="inspectInputProfile")return inspectInputProfile(p.at("path"));
     if(method=="inputProfileAsset"){
         pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
@@ -798,10 +1157,13 @@ Json Engine::call(const std::string &method,const Json &p){
         if(width<1||height<1||width>200000||height>200000)throw std::runtime_error("Invalid image dimensions");
         pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
         applyAdjustments(params,p.at("adjustments"),width,height);validateInputProfile(params.icm);
-        if(params.wb.method==pp::WBParams::CUSTOM_TEMP){
-            int error=0;auto *image=ae::InitialImage::load(p.at("path").get<std::string>(),isRaw(p.at("path")),&error);
+        if(params.wb.method==pp::WBParams::CUSTOM_TEMP||params.commonTrans.captrawSourceFrameSaved){
+            int error=0;auto *image=ae::InitialImage::load(p.at("path").get<std::string>(),isRaw(p.at("path")),&error,nullptr,ae::sourceFrameDecode(params));
             if(!image||error){if(image)image->decreaseRef();throw std::runtime_error("无法读取原片以转换白平衡。");}
-            try{resolveWhiteBalance(params,image->getImageSource(),p.at("adjustments"));}catch(...){image->decreaseRef();throw;}
+            try{
+                ae::applySourceFrame(image->getImageSource(),params);
+                if(params.wb.method==pp::WBParams::CUSTOM_TEMP)resolveWhiteBalance(params,image->getImageSource(),p.at("adjustments"));
+            }catch(...){image->decreaseRef();throw;}
             image->decreaseRef();
         }
         return {{"artProfile",profileText(params)}};
@@ -822,8 +1184,21 @@ Json Engine::call(const std::string &method,const Json &p){
     }
     if(method=="validate"){
         pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
-        auto a=p.at("adjustments");a["masks"]=referencedMasks(a,params);
-        applyAdjustments(params,a,1000,1000);return {{"colorProfile",inputProfileSettings(params.icm)},{"blackWhite",blackWhiteSettings(params)},{"colorGrading",colorGradingSettings(params)},{"fineRotation",params.rotate.enabled?params.rotate.degree:0},{"perspective",perspectiveSettings(params)},{"masks",a["masks"]}};
+        auto a=p.at("adjustments");
+        if(a.contains("sourceFrame"))ae::attachSourceFrame(params,a.at("sourceFrame"));
+        else if(p.contains("sourceFrame"))ae::attachSourceFrame(params,p.at("sourceFrame"));
+        Json bindingIdentity;
+        if(p.value("bindSourceFrame",false)&&p.contains("sourcePath")){
+            bindingIdentity=ae::sourceContentIdentity(p.at("sourcePath"));
+            if(p.contains("sourceIdentity")&&ae::checkedContentIdentity(p.at("sourceIdentity"))!=bindingIdentity)
+                throw std::runtime_error("Geometry binding source identity changed");
+            params.commonTrans.captrawSourceIdentity=bindingIdentity.dump();
+        }
+        a["masks"]=referencedMasks(a,params,p.value("bindSourceFrame",false));
+        applyAdjustments(params,a,1000,1000);
+        if(!bindingIdentity.is_null()&&ae::sourceContentIdentity(p.at("sourcePath"))!=bindingIdentity)
+            throw std::runtime_error("Geometry binding source changed during validation");
+        return {{"colorProfile",inputProfileSettings(params.icm)},{"blackWhite",blackWhiteSettings(params)},{"colorGrading",colorGradingSettings(params)},{"fineRotation",params.rotate.enabled?params.rotate.degree:0},{"perspective",perspectiveSettings(params)},{"masks",a["masks"]}};
     }
     if(method=="adjustmentBase"){
         pp::ProcParams params;params.setDefaults();loadProfile(params,p.at("artProfile"));
@@ -843,10 +1218,13 @@ Json Engine::call(const std::string &method,const Json &p){
     if(method=="before")return impl->update(p,true);
     if(method=="whiteBalance")return impl->whiteBalance(p);
     if(method=="coordinates")return impl->coordinates(p);
+    if(method=="repairSource")return impl->repairSource(p);
     if(method=="straighten")return impl->straighten(p);
     if(method=="autoPerspective")return impl->autoPerspective(p);
     if(method=="sampleLuminance")return impl->sampleLuminance(p);
     if(method=="sampleColor")return impl->sampleLuminance(p,true);
+    if(method=="sampleCurve")return impl->sampleCurve(p);
+    if(method=="prepareBrush")return impl->prepareBrush(p);
     if(method=="viewport")return impl->viewport(p);
     if(method=="export")return impl->exportImage(p);
     if(method=="close"){impl->close();return Json::object();}

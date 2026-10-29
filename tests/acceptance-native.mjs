@@ -4,16 +4,16 @@ import { readFileSync,writeFileSync,mkdirSync,cpSync,symlinkSync,existsSync } fr
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-const root=process.cwd(),out=resolve('artifacts/native-acceptance');mkdirSync(out,{recursive:true});
-const engine=new EngineClient({cache:'build/acceptance-cache',executable:process.env.CAPTRAW_ENGINE,resources:process.env.CAPTRAW_RESOURCES});
+const root=process.cwd(),out=resolve(process.env.CAPTRAW_ACCEPTANCE_OUT||'artifacts/native-acceptance');mkdirSync(out,{recursive:true});
+const engine=new EngineClient({cache:join(out,'core-cache'),executable:process.env.CAPTRAW_ENGINE,resources:process.env.CAPTRAW_RESOURCES});
 engine.on('error',()=>{});
 const checksum=path=>createHash('sha256').update(readFileSync(path)).digest('hex');
-const reference=resolve('build/reference/Contents/MacOS/captraw-art-reference');
-mkdirSync(resolve('build/reference/Contents/MacOS'),{recursive:true});
+const reference=join(out,'reference/Contents/MacOS/captraw-art-reference');
+mkdirSync(join(out,'reference/Contents/MacOS'),{recursive:true});
 cpSync(resolve('build/native/captraw-art-reference'),reference);
-mkdirSync(resolve('build/reference/settings'),{recursive:true});
-cpSync(resolve('build/upstream/ART-1e0e12c62e4f329d30bb5624d62a23a663ffbe6b/data/options/options.osx'),resolve('build/reference/settings/options'));
-if(!existsSync(resolve('build/reference/Contents/Resources')))symlinkSync(resolve('build/native/resources'),resolve('build/reference/Contents/Resources'));
+mkdirSync(join(out,'reference/settings'),{recursive:true});
+cpSync(resolve('build/upstream/ART-1e0e12c62e4f329d30bb5624d62a23a663ffbe6b/data/options/options.osx'),join(out,'reference/settings/options'));
+if(!existsSync(join(out,'reference/Contents/Resources')))symlinkSync(resolve('build/native/resources'),join(out,'reference/Contents/Resources'));
 const report={engine:process.env.CAPTRAW_ENGINE||'development native',platform:process.platform,arch:process.arch,images:[]};
 let peakRSSKiB=0;
 const sampler=setInterval(()=>{
@@ -36,7 +36,7 @@ try{
   const output=join(out,`${fixture.model}.tiff`),profile=join(out,`${fixture.model}.arp`),ref=join(out,`${fixture.model}-reference.tif`);
   writeFileSync(profile,first.profile);
   await engine.call('export',{path:source,artProfile:first.profile,output,format:'tiff'});
-  execFileSync(reference,['-o',ref,'-p',profile,'-t','-b16','-Y','-c',source],{env:{...process.env,ART_SETTINGS:resolve('build/reference/settings'),ART_CACHE:resolve('build/reference/cache')},stdio:['ignore','pipe','pipe']});
+  execFileSync(reference,['-o',ref,'-p',profile,'-t','-b16','-Y','-c',source],{env:{...process.env,ART_SETTINGS:join(out,'reference/settings'),ART_CACHE:join(out,'reference/cache')},stdio:['ignore','pipe','pipe']});
   if(fixture.model==='D850'){
    for(let i=0;i<20;i++)item.updates.push((await render({...image.adjustments,exposure:(i%5)*.2})).ms);
    item.updateP95Ms=[...item.updates].sort((a,b)=>a-b)[Math.ceil(item.updates.length*.95)-1];

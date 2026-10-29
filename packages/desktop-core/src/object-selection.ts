@@ -2,6 +2,7 @@ import {mkdir,mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {NativeEngine} from './engine.js';
+import {sourceFrameOpenSnapshot} from '@captraw/contracts';
 import {Segmenter,type SegmentationResult,type PersonPartsSegmentationResult,type SemanticMasksSegmentationResult,type SkyMaskSegmentationResult} from './segmentation.js';
 import type {Adjustments,ImageSession,ObjectMaskResult,ObjectCandidateResult,ObjectPrompt,ObjectBox,PersonPart,PersonPartsResult,SemanticMaskPart,SemanticMasksResult,SkyMaskResult} from '@captraw/contracts';
 const sha=(bytes:Buffer)=>createHash('sha256').update(bytes).digest('hex');
@@ -24,7 +25,7 @@ export class ObjectSelection {
   try{
    await mkdir(join(this.cache,'objects'),{recursive:true});check();c.directory=await mkdtemp(join(this.cache,'objects','selection-'));check();
    const worker=new NativeEngine(this.binary,this.resources,join(c.directory,'render'));c.worker=worker;c.closed=new Promise<void>(done=>worker.child.once('close',()=>done()));
-   this.progress(c.id,'正在准备完整照片…');await worker.call('open',{path:image.path,sessionId:c.id});check();
+   this.progress(c.id,'正在准备完整照片…');await worker.call('open',{path:image.path,sessionId:c.id,...sourceFrameOpenSnapshot(adjustments,artProfile,image.sourceFrame)});check();
    let listener:(message:any)=>void=()=>{},timer:ReturnType<typeof setTimeout>|undefined;
    const preview=new Promise<any>((accept,reject)=>{listener=m=>{if(m.event==='preview'&&m.frame.sessionId===c.id&&m.frame.revision===1&&m.frame.kind==='fit')accept(m.frame);else if(m.event==='error')reject(new Error(m.message));};worker.on('engine-event',listener);timer=setTimeout(()=>reject(new Error('对象选择的显影快照超时。')),120000);});
    let frame,applied;try{[applied,frame]=await Promise.all([worker.call('update',{revision:1,adjustments:{...structuredClone(adjustments),crop:null},artProfile}),preview]);}finally{worker.off('engine-event',listener);clearTimeout(timer);}

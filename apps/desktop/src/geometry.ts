@@ -1,8 +1,5 @@
 import type { Adjustments, Point } from '@captraw/contracts';
-export interface CanvasEditTransaction {
-  sessionId:string;revision:number;valid:()=>boolean;release:()=>void;
-  apply:(change:(a:Adjustments)=>Adjustments)=>boolean;
-}
+export type {CanvasEditTransaction} from '@captraw/contracts';
 export type Transform = { x: number; y: number; scale: number; width: number; height: number };
 export function imageTransform(width: number, height: number, canvasWidth: number, canvasHeight: number, crop: Adjustments['crop'], zoom: number, pan: Point, actualSize: boolean, dpr = 1): Transform {
   const c = crop || { x: 0, y: 0, width: 1, height: 1 };

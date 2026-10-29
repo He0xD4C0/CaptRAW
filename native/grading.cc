@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Experimental SDR color grading. Range/tint semantics are not Adobe's algorithm.
+// Experimental color grading. HDR range weights are relative to the ART peak.
+// Range/tint semantics are not Adobe's algorithm; legacy profiles retain SDR behavior.
 #include "engine/improcfun.h"
 #include "engine/color.h"
 #include "engine/iccstore.h"
@@ -45,6 +46,53 @@ void multiply(const float m[3][3],const float *v,float *out) {
 }
 }
 
+// Versioned relative-WB matrix in the current linear working space.
+void ImProcFunctions::captrawRelativeWhiteBalance(Imagefloat *img)
+{
+    const auto &m=params->wb.captrawRelativeMatrix;
+    if(m.empty())return;
+    img->setMode(Imagefloat::Mode::RGB,multiThread);
+    const int width=img->getWidth(),height=img->getHeight();
+#ifdef _OPENMP
+#pragma omp parallel for if(multiThread) schedule(static)
+#endif
+    for(int y=0;y<height;++y)for(int x=0;x<width;++x){
+        const double v[]={img->r(y,x),img->g(y,x),img->b(y,x)};
+        img->r(y,x)=m[0]*v[0]+m[1]*v[1]+m[2]*v[2];
+        img->g(y,x)=m[3]*v[0]+m[4]*v[1]+m[5]*v[2];
+        img->b(y,x)=m[6]*v[0]+m[7]*v[1]+m[8]*v[2];
+    }
+}
+
+// Shadow calibration: ART-ctlscripts wbchmix.ctl / _artlib.ctl, GPL-3.0-or-later,
+// Copyright 2023 Alberto Griggio. Revision 958935312489710b17dc4792d0677bdacf43a95c.
+// https://github.com/artraweditor/ART-ctlscripts/blob/958935312489710b17dc4792d0677bdacf43a95c/wbchmix.ctl
+// Uses its zero-luminance Rec2020 chroma lift, restricted to the green/magenta
+// axis (hue 135/315 degrees, saturation abs(tint)/100, maximum chroma .02).
+// This is ART's additive shadow tint, not an Adobe pixel-equivalence claim.
+void ImProcFunctions::captrawCalibration(Imagefloat *img)
+{
+    const int amount=params->chmixer.captrawShadowTint;
+    if(!amount)return; // Old recipes and explicit zero do not even change image mode.
+    auto *store=ICCStore::getInstance();
+    const auto rec2020=store->workingSpaceMatrix("Rec2020");
+    const auto inv=store->workingSpaceInverseMatrix(params->icm.workingProfile);
+    const float chroma=float(amount)*(.02f/100.f)*std::sqrt(.5f);
+    float lift[3],xyz[3],offset[3];
+    Color::yuv2rgb(0.f,-chroma,chroma,lift[0],lift[1],lift[2],rec2020);
+    multiply(rec2020,lift,xyz);multiply(inv,xyz,offset);
+    img->setMode(Imagefloat::Mode::RGB,multiThread);
+    const int width=img->getWidth(),height=img->getHeight();
+#ifdef _OPENMP
+#pragma omp parallel for if(multiThread) schedule(static)
+#endif
+    for(int y=0;y<height;++y)for(int x=0;x<width;++x){
+        img->r(y,x)+=offset[0]*65535.f;
+        img->g(y,x)+=offset[1]*65535.f;
+        img->b(y,x)+=offset[2]*65535.f;
+    }
+}
+
 void ImProcFunctions::captrawColorGrading(Imagefloat *img)
 {
     const auto &settings=params->captrawGrading;
@@ -58,18 +106,24 @@ void ImProcFunctions::captrawColorGrading(Imagefloat *img)
     const auto work=store->workingSpaceMatrix(params->icm.workingProfile);
     const auto inv=store->workingSpaceInverseMatrix(params->icm.workingProfile);
     const auto srgb=store->workingSpaceMatrix("sRGB"),srgbInv=store->workingSpaceInverseMatrix("sRGB");
+    const bool hdr=params->toneCurve.captrawHDREditMode;
+    const float peak=params->toneCurve.whitePoint;
     const int width=img->getWidth(),height=img->getHeight();
 #ifdef _OPENMP
 #pragma omp parallel for if(multiThread) schedule(static)
 #endif
     for(int y=0;y<height;++y)for(int x=0;x<width;++x){
         float rgb[]={img->r(y,x)/65535.f,img->g(y,x)/65535.f,img->b(y,x)/65535.f},xyz[3],v[3];
-        multiply(work,rgb,xyz);multiply(srgbInv,xyz,v);for(float &c:v)c=encode(c);
+        multiply(work,rgb,xyz);multiply(srgbInv,xyz,v);
+        if(hdr)for(float &c:v)c/=peak;
+        for(float &c:v)c=encode(c);
         float w[3];weights(lightness(v),p[12],p[13],w);
         float lum=0.f,total=0.f;for(int i=0;i<3;++i){lum+=w[i]*p[3*i+2]/100.f;total+=w[i];}
         luminance(v,lum/std::max(1.f,total));tint(v,p,w,3);
         luminance(v,p[11]/100.f);const float global=1.f;tint(v,p+9,&global,1);
-        for(float &c:v)c=decode(c);multiply(srgb,v,xyz);multiply(inv,xyz,rgb);
+        for(float &c:v)c=decode(c);
+        if(hdr)for(float &c:v)c*=peak;
+        multiply(srgb,v,xyz);multiply(inv,xyz,rgb);
         img->r(y,x)=rgb[0]*65535.f;img->g(y,x)=rgb[1]*65535.f;img->b(y,x)=rgb[2]*65535.f;
     }
 }

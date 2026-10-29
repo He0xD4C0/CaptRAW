@@ -6,7 +6,9 @@
 namespace art { namespace engine {
 class FramesMetaData;
 // Pixel centers in the full, coarse-rotated image, before/after ART's geometric
-// stages. Crop offsets and normalized UI coordinates belong at the call site.
+// stages. Source retains the document's inherited source canvas; display
+// includes current ART coarse flips. Crop offsets and normalized UI coordinates
+// belong at the call site.
 class GeometryMap {
 public:
     GeometryMap(const procparams::ProcParams &, int width, int height,

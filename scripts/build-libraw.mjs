@@ -2,6 +2,7 @@ import {resolve} from 'node:path';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+if(process.platform!=='darwin'||process.arch!=='arm64')throw new Error('LibRaw dependency build currently targets macOS ARM64.');
 const root=resolve(import.meta.dirname,'..'),commit='3b20539d3faa766a370e93a529a3b87edffbf0f6';
 const source=resolve(root,`build/upstream/redlamp-libraw-${commit}`),prefix=resolve(root,'build/vendor/libraw');
 const run=(command,args,cwd=root,extra={})=>{const r=spawnSync(command,args,{cwd,stdio:'inherit',env:{...process.env,...extra}});if(r.status!==0)throw new Error(`${command} failed: ${r.status}`);};

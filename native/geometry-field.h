@@ -15,7 +15,11 @@ public:
 class GeometryField {
 public:
     GeometryField(GeometryMap &current, GeometryMap &reference,
-                  int width, int height, double tolerance = .02);
+                  int width, int height, double tolerance = .02, int referenceRotation = 0,
+                  bool referenceHorizontalFlip = false, bool referenceVerticalFlip = false,
+                  int referenceWidth = 0, int referenceHeight = 0,
+                  const procparams::ProcParams *currentParams = nullptr,
+                  const procparams::ProcParams *referenceParams = nullptr);
     ~GeometryField();
     bool map(Coord2D current, Coord2D &reference) const;
     // Offsets are pixel-center coordinates in the two processing canvases.
@@ -27,6 +31,8 @@ public:
               array2D<float> &output, Coord2D outputOrigin, bool multithread,
               float outside = 0) const;
     bool isIdentity() const;
+    int referenceWidth() const;
+    int referenceHeight() const;
     size_t nodeCount() const;
     size_t exactCellCount() const;
 private:
@@ -44,7 +50,8 @@ public:
                    int fullWidth,int fullHeight);
     const GeometryField *get(const procparams::ProcParams &);
     // Explicit leaf reference overrides the global opt-in/reference settings.
-    const GeometryField *get(const procparams::ProcParams &, double referenceAngle);
+    const GeometryField *get(const procparams::ProcParams &, double referenceAngle, bool mirrorLegacy = false);
+    const GeometryField *get(const procparams::ProcParams &, const std::string &reference, bool mirrorLegacy = false);
 private:
     struct Impl;
     std::unique_ptr<Impl> impl;

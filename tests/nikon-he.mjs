@@ -9,6 +9,9 @@ const bench=join(upstream,'redlamp/bench'),out=resolve(process.env.CAPTRAW_NIKON
 mkdirSync(out,{recursive:true});mkdirSync(cache,{recursive:true});
 const manifest=JSON.parse(readFileSync(join(bench,'samples.json'))),goldens=JSON.parse(readFileSync(join(bench,'goldens.json')));
 const hash=file=>createHash('sha256').update(readFileSync(file)).digest('hex');
+const openPolicy=process.env.CAPTRAW_NIKON_OPEN_POLICY||'legacy';
+assert(['legacy','current'].includes(openPolicy),'CAPTRAW_NIKON_OPEN_POLICY must be legacy or current');
+const openOptions=openPolicy==='current'?{sourceFramePolicy:'active-area-v1',effectsDefaults:'current',whiteBalanceDefaults:'current'}:{};
 const staticMirrors={
  'be91bac25573adf7ec6320a542105d87b4fb9c956d7b620ec90d57ac2ae6c3f0':'https://raw.pixls.us/download/data/Nikon/Z%209/Nikon_-_NIKON_Z_9_-_14bit_compressed_(Lossy_High_Efficiency).NEF',
  'e113deb305d84153b26251ce259d1f839be1f36b048cbe83a4548cbda806c0f5':'https://raw.pixls.us/download/data/Nikon/Z%209/Nikon_-_NIKON_Z_9_-_14bit_compressed_(Lossy_High_Efficiency_Star).NEF',
@@ -22,7 +25,7 @@ const fixtures=available.filter(s=>(!process.env.CAPTRAW_NIKON_FILTER||s.name.in
 assert(fixtures.length,'No HE fixtures match the selected filter');
 writeFileSync(join(out,'samples.json'),JSON.stringify({source:manifest.source,samples:fixtures},null,2)+'\n');
 const downloads=new Map(),failures=[];
-const base={engine:process.env.CAPTRAW_ENGINE||'development native',offlineAndHomebrewDenied:!!process.env.CAPTRAW_SANDBOX_PROFILE,availableSamples:available.length,selectedSamples:fixtures.length,cachedOnly:!!process.env.CAPTRAW_NIKON_CACHED_ONLY,commit:'3b20539d3faa766a370e93a529a3b87edffbf0f6',decoder:'fully local LGPL-2.1 LibRaw fork'};
+const base={engine:process.env.CAPTRAW_ENGINE||'development native',openPolicy:{name:openPolicy,request:openOptions,effective:openPolicy==='current'?openOptions:{sourceFramePolicy:'legacy',effectsDefaults:'legacy',whiteBalanceDefaults:'legacy'}},offlineAndHomebrewDenied:!!process.env.CAPTRAW_SANDBOX_PROFILE,availableSamples:available.length,selectedSamples:fixtures.length,cachedOnly:!!process.env.CAPTRAW_NIKON_CACHED_ONLY,commit:'3b20539d3faa766a370e93a529a3b87edffbf0f6',decoder:'fully local LGPL-2.1 LibRaw fork'};
 const results=[];let complete=false;
 function report(){writeFileSync(join(out,'report.json'),JSON.stringify({...base,complete,downloads:[...downloads.values()],failures,results},null,2)+'\n');}
 async function download(url,file,sha){
@@ -33,12 +36,12 @@ async function download(url,file,sha){
  if(response.code)throw new Error(`Download ${response.code}: ${url}: ${response.diagnostic}`);
  assert.equal(hash(partial),sha,'Downloaded sample checksum mismatch');renameSync(partial,file);
 }
-const dump=resolve('build/nikon-dump');
+const dump=join(out,'nikon-dump');
 const bundled=process.env.CAPTRAW_RESOURCES?resolve(process.env.CAPTRAW_RESOURCES,'../lib/libraw_r.26.dylib'):undefined;
 execFileSync('clang++',['-std=c++17','-O2','-Wl,-headerpad_max_install_names',join(bench,'tools/dump_raw.cpp'),'-I'+resolve('build/vendor/libraw/include'),...(bundled?[bundled]:['-L'+resolve('build/vendor/libraw/lib'),'-lraw_r','-Wl,-rpath,'+resolve('build/vendor/libraw/lib')]),'-o',dump]);
 if(bundled){execFileSync('install_name_tool',['-change','@loader_path/libraw_r.26.dylib',bundled,dump]);execFileSync('codesign',['--force','--sign','-',dump]);base.decoderLibrary={path:bundled,sha256:hash(bundled)};}
 const runDump=args=>execFileSync(process.env.CAPTRAW_SANDBOX_PROFILE?'/usr/bin/sandbox-exec':dump,process.env.CAPTRAW_SANDBOX_PROFILE?['-f',process.env.CAPTRAW_SANDBOX_PROFILE,dump,...args]:args,{encoding:'utf8'});
-const engine=new EngineClient({cache:'build/nikon-he-cache'});engine.on('error',()=>{});
+const engine=new EngineClient({cache:join(out,'core-cache')});engine.on('error',()=>{});
 try{
  await engine.ready;
  async function verify(s){
@@ -48,10 +51,10 @@ try{
   const mosaicSHA256=hash(mosaic);assert.equal(mosaicSHA256,goldens[s.name].sha256,'Sensor mosaic differs from pinned upstream golden');
   let adobeIdentical;
   if(s.adobe){const ref=join(out,'adobe.u16');runDump([join(cache,s.name+'.dng'),ref]);adobeIdentical=hash(ref)===mosaicSHA256;assert(adobeIdentical,'Adobe reference mosaic differs');rmSync(ref);}
-  const image=await engine.call('open',{path,sessionId:s.name});const pending=engine.preview(1);
+  const image=await engine.call('open',{path,sessionId:s.name,...openOptions});const pending=engine.preview(1);
   await engine.call('update',{revision:1,adjustments:image.adjustments});const frame=await pending;
   assert(frame.histogram?.every(channel=>channel.filter(n=>n>0).length>64),'Decoded preview is not a full tonal image');
-  results.push({name:s.name,camera:s.camera,mode:s.mode,crop:s.crop,source:s.source||manifest.source,licence:s.licence||'CC0',sourceSHA256:s.sha256,meta,mosaicSHA256,goldenIdentical:true,adobeIdentical,frame,sourceUnchanged:hash(path)===s.sha256});rmSync(mosaic);
+  results.push({name:s.name,camera:s.camera,mode:s.mode,crop:s.crop,source:s.source||manifest.source,licence:s.licence||'CC0',sourceSHA256:s.sha256,meta,mosaicSHA256,goldenIdentical:true,adobeIdentical,frame,sourceFrame:image.adjustments.sourceFrame,sourceUnchanged:hash(path)===s.sha256});rmSync(mosaic);
   report();
   console.log('PASS',s.name,meta.unpack_ms,frame.elapsedMs,adobeIdentical??'golden');
  }

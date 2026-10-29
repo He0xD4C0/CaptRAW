@@ -1,0 +1,43 @@
+{
+  "repository": "https://github.com/pch/rawmakase",
+  "commit": "e0251f9da4b8b70678388f4ec357ba88f416ac32",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "accaa7d72f35ed1c41e9463921d0fbdfc7aba030811cb4bb737c3e89dc5cf8e0"
+    },
+    {
+      "path": "crates/rawmakase-model/src/camera_profiles/rgb_table.rs",
+      "sha256": "08b66f0897f292350473c5bfb605246b828e9c91d8bffc30b8e1edbc479b2ba0"
+    },
+    {
+      "path": "crates/rawmakase-model/src/camera_profiles/enhanced.rs",
+      "sha256": "ba985ec9c13ff8dce3aca71461ae9765e5c292bfc6e82c17c373e04dcaf0bd13"
+    },
+    {
+      "path": "crates/rawmakase-model/src/camera_profiles/mod.rs",
+      "sha256": "eae38d375e29661aff74158957ca8bd8ad819aa61c60e1436787241cdf36022d"
+    },
+    {
+      "path": "scripts/corpus/synthetic-looks.py",
+      "sha256": "24ef5a33dba2af26a4b1da4ed6b38f920bf1cb0db1b4fa74b91258797cdf1285"
+    },
+    {
+      "path": "crates/rawmakase-model/src/color/curve.rs",
+      "sha256": "f357bad4e0f15a4a79520afd93bb3f0ce1564be6bfe1376983b5db00809a5951"
+    },
+    {
+      "path": "crates/rawmakase-model/src/camera_profiles/look_settings.rs",
+      "sha256": "b688041f884c0bde761070899b5f0159062aa58884d241d5cf2657e233b49e38"
+    },
+    {
+      "path": "crates/rawmakase-model/src/color/mod.rs",
+      "sha256": "36ceea087a82085682f6ee568049eec9befb682c81e757b54da9b30b9e3d53be"
+    },
+    {
+      "path": "crates/rawmakase-model/src/camera_profiles/library.rs",
+      "sha256": "802ef0102e0b41da1a2c3b3aab0625178a4233ecca4540c3f62ed586b446b471"
+    }
+  ]
+}

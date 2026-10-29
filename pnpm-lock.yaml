@@ -69,6 +69,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.0.0
         version: 19.3.0(@types/react@19.3.0)
+      '@types/web':
+        specifier: 0.0.352
+        version: 0.0.352
       '@vitejs/plugin-react':
         specifier: 6.1.2
         version: 6.1.2(vite@8.3.5(@types/node@22.20.5)(esbuild@0.27.7)(jiti@2.7.0))
@@ -699,6 +702,9 @@ packages:
 
   '@types/responselike@1.0.3':
     resolution: {integrity: sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==}
+
+  '@types/web@0.0.352':
+    resolution: {integrity: sha512-UOZDC0FwpYm4zgRK/98jFGXgRirawQYN2TIkhpFbTW4dbQie/GNHJ9uMwJ/BkFxPIhgAEdkIF3AE6qNVaJn1NA==}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -2431,6 +2437,8 @@ snapshots:
   '@types/responselike@1.0.3':
     dependencies:
       '@types/node': 22.20.5
+
+  '@types/web@0.0.352': {}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true

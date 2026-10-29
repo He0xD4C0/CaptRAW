@@ -1,0 +1,230 @@
+{
+  "baselineEngineSHA256": "ae787565e446bf1edccc13c2897f2f384d4884b0c21e063708892981fc6b1124",
+  "sourceFile": "linear-gradient-uniform.tif",
+  "sourceSHA256": "e98290bb6993d38d1f6e7cc5e8c771636d3258c74fa715f4a0762d4caf261931",
+  "legacyPixelSHA256": "3c04ed0b8825f6eca00b15a20e63b187bf04339e2c288de458cbeabb598f8114",
+  "legacyProfile": "[Version]\nAppVersion=1.26.10\nVersion=1045\n\n[General]\nColorLabel=0\nInTrash=false\n\n[Exposure]\nEnabled=true\nCompensation=0\nBlack=0\nHLRecovery=Balanced\nHLRecoveryBlur=0\n\n[Saturation]\nEnabled=true\nSaturation=0\nVibrance=0\n\n[ToneCurve]\nEnabled=true\nContrast=0\nHistogramMatching=false\nCurveFromHistogramMatching=false\nCurveMode=Standard\nCurveMode2=Neutral\nCurve=1;0;0;1;1;\nCurve2=0;\nSaturation=0;\nSaturation2=0;\nWhitePoint=1\nBaseCurve=Linear\n\n[Local Contrast]\nEnabled=false\nContrast=0\nCurve=1;0;0.5;0;0;1;0.5;0;0;\nCaptRAWComponentCount=0\nMaskEnabled=true\nMaskInverted=false\nMaskName=\nMaskCurve=0;\nMaskPosterization=0\nMaskSmoothing=0\nMaskOpacity=100\nParametricMaskEnabled=false\nHueMask=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;\nChromaticityMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMaskDetail=0\nContrastThresholdMask=0\nParametricMaskBlur=0\nAreaMaskEnabled=false\nAreaMaskFeather=0\nAreaMaskBlur=0\nAreaMaskContrast=0;\nDeltaEMaskEnabled=false\nDeltaEMaskL=0\nDeltaEMaskC=0\nDeltaEMaskH=0\nDeltaEMaskRange=1\nDeltaEMaskDecay=1\nDeltaEMaskStrength=100\nDeltaEMaskWeightL=50\nDeltaEMaskWeightC=75\nDeltaEMaskWeightH=100\nDrawnMaskEnabled=false\nDrawnMaskFeather=0\nDrawnMaskOpacity=1\nDrawnMaskSmoothness=0\nDrawnMaskContrast=0;\nDrawnMaskMode=0\nCaptRAWDrawnMaskStrokes=\nDrawnMaskStrokes=\nLinkedMaskEnabled=false\nLinkedMaskInverted=false\nLinkedMask=\nExternalMaskEnabled=false\nExternalMaskInverted=false\nExternalMaskFilename=\nExternalMaskFeather=0\nShowMask=-1\nSelectedRegion=0\n\n[Channel Mixer]\nEnabled=false\nMode=0\nRed=1000;0;0;\nGreen=0;1000;0;\nBlue=0;0;1000;\nHueTweak=0;0;0;\nSatTweak=0;0;0;\n\n[Black & White]\nEnabled=false\nSetting=RGB-Rel\nFilter=None\nMixerRed=33\nMixerGreen=33\nMixerBlue=33\nGammaRed=0\nGammaGreen=0\nGammaBlue=0\nColorCast=0;0;\n\n[HSL Equalizer]\nEnabled=true\nHCurve=1;0;0.5;0;0;0.083333333333333329;0.5;0;0;0.16666666666666666;0.5;0;0;0.33333333333333331;0.5;0;0;0.5;0.5;0;0;0.66666666666666663;0.5;0;0;0.75;0.5;0;0;0.83333333333333337;0.5;0;0;\nSCurve=1;0;0.5;0;0;0.083333333333333329;0.5;0;0;0.16666666666666666;0.5;0;0;0.33333333333333331;0.5;0;0;0.5;0.5;0;0;0.66666666666666663;0.5;0;0;0.75;0.5;0;0;0.83333333333333337;0.5;0;0;\nLCurve=1;0;0.5;0;0;0.083333333333333329;0.5;0;0;0.16666666666666666;0.5;0;0;0.33333333333333331;0.5;0;0;0.5;0.5;0;0;0.66666666666666663;0.5;0;0;0.75;0.5;0;0;0.83333333333333337;0.5;0;0;\nSmoothing=0\n\n[Luminance Curve]\nEnabled=false\nBrightness=0\nContrast=0\nChromaticity=0\nLCurve=0;\naCurve=0;\nbCurve=0;\n\n[Sharpening]\nEnabled=false\nContrast=20\nMethod=usm\nRadius=1\nAmount=0\nThreshold=20;80;2000;1200;\nOnlyEdges=false\nEdgedetectionRadius=1.8999999999999999\nEdgeTolerance=1800\nHalocontrolEnabled=false\nHalocontrolAmount=85\nDeconvRadius=0.75\nDeconvAmount=100\nDeconvAutoRadius=true\nDeconvCornerBoost=0\nDeconvCornerLatitude=25\nPSFKernel=\nPSFIterations=10\n\n[White Balance]\nEnabled=true\nSetting=CustomMult\nTemperature=6500\nGreen=1\nMultipliers=1;1;1;\n\n[Impulse Denoising]\nEnabled=false\nThreshold=50\n\n[Defringing]\nEnabled=false\nRadius=2\nThreshold=13\nHueCurve=1;0.16666666699999999;0;0.34999999999999998;0.34999999999999998;0.34699999999999998;0;0.34999999999999998;0.34999999999999998;0.51366742600000004;0;0.34999999999999998;0.34999999999999998;0.66894457100000004;0;0.34999999999999998;0.34999999999999998;0.82877752459999998;0.97835991;0.34999999999999998;0.34999999999999998;0.99088838270000001;0;0.34999999999999998;0.34999999999999998;\n\n[Dehaze]\nEnabled=false\nStrength=1;0;0.5;0;0;1;0.5;0;0;\nBlackpoint=0\nLuminance=false\n\n[Denoise]\nEnabled=false\nColorSpace=RGB\nAggressive=false\nGamma=1.7\nLuminance=0\nLuminanceDetail=0\nLuminanceDetailThreshold=0\nChrominanceMethod=0\nChrominanceAutoFactor=1\nChrominance=0\nChrominanceRedGreen=0\nChrominanceBlueYellow=0\nSmoothingEnabled=false\nGuidedChromaRadius=3\nNLDetail=80\nNLStrength=0\n\n[TextureBoost]\nEnabled=false\nStrength=0\nDetailThreshold=0.20000000000000001\nIterations=1\nCaptRAWComponentCount=0\nMaskEnabled=true\nMaskInverted=false\nMaskName=\nMaskCurve=0;\nMaskPosterization=0\nMaskSmoothing=0\nMaskOpacity=100\nParametricMaskEnabled=false\nHueMask=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;\nChromaticityMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMaskDetail=0\nContrastThresholdMask=0\nParametricMaskBlur=0\nAreaMaskEnabled=false\nAreaMaskFeather=0\nAreaMaskBlur=0\nAreaMaskContrast=0;\nDeltaEMaskEnabled=false\nDeltaEMaskL=0\nDeltaEMaskC=0\nDeltaEMaskH=0\nDeltaEMaskRange=1\nDeltaEMaskDecay=1\nDeltaEMaskStrength=100\nDeltaEMaskWeightL=50\nDeltaEMaskWeightC=75\nDeltaEMaskWeightH=100\nDrawnMaskEnabled=false\nDrawnMaskFeather=0\nDrawnMaskOpacity=1\nDrawnMaskSmoothness=0\nDrawnMaskContrast=0;\nDrawnMaskMode=0\nCaptRAWDrawnMaskStrokes=\nDrawnMaskStrokes=\nLinkedMaskEnabled=false\nLinkedMaskInverted=false\nLinkedMask=\nExternalMaskEnabled=false\nExternalMaskInverted=false\nExternalMaskFilename=\nExternalMaskFeather=0\nShowMask=-1\nSelectedRegion=0\n\n[FattalToneMapping]\nEnabled=false\nThreshold=30\nAmount=20\nSaturationControl=false\n\n[LogEncoding]\nEnabled=false\nAuto=false\nAutoGain=false\nGain=0\nTargetGray=18\nBlackEv=-13.5\nWhiteEv=2.5\nRegularization=60\nSaturationControl=true\nHighlightCompression=0\n\n[ToneEqualizer]\nEnabled=false\nBand0=0\nBand1=0\nBand2=0\nBand3=0\nBand4=0\nRegularization=4\nPivot=0\n\n[Crop]\nEnabled=false\nX=-1\nY=-1\nW=-1\nH=-1\nFixedRatio=true\nRatio=As Image\nOrientation=As Image\nGuide=Frame\n\n[Coarse Transformation]\nRotate=0\nHorizontalFlip=false\nVerticalFlip=false\n\n[Common Properties for Transformations]\nAutoFill=true\n\n[Rotation]\nEnabled=false\nDegree=0\nCaptRAWMaskCoordinates=false\nCaptRAWMaskReferenceDegree=0\n\n[Distortion]\nEnabled=false\nAmount=0\nAuto=false\n\n[LensProfile]\nLcMode=none\nLCPFile=\nUseDistortion=true\nUseVignette=true\nUseCA=true\nLFCameraMake=\nLFCameraModel=\nLFLens=\n\n[Perspective]\nEnabled=false\nHorizontal=0\nVertical=0\nAngle=0\nShear=0\nFocalLength=0\nCropFactor=1\nAspect=1\nControlLines=\n\n[Gradient]\nEnabled=false\nDegree=0\nFeather=25\nStrength=0.59999999999999998\nCenterX=0\nCenterY=0\n\n[PCVignette]\nEnabled=false\nStrength=-0\nFeather=50\nRoundness=50\nCenterX=0\nCenterY=0\n\n[CACorrection]\nEnabled=false\nRed=0\nBlue=0\n\n[Vignetting Correction]\nEnabled=false\nAmount=0\nRadius=50\nStrength=1\nCenterX=0\nCenterY=0\n\n[Resize]\nEnabled=false\nScale=1\nAppliesTo=Cropped area\nDataSpecified=3\nWidth=900\nHeight=900\nAllowUpscaling=false\nPPI=300\nCopyPPIToExif=false\nUnit=px\n\n[OutputSharpening]\nEnabled=false\nContrast=25\nMethod=usm\nRadius=0.5\nAmount=200\nThreshold=20;80;2000;1200;\nOnlyEdges=false\nEdgedetectionRadius=1.8999999999999999\nEdgeTolerance=1800\nHalocontrolEnabled=false\nHalocontrolAmount=85\nDeconvRadius=0.75\nDeconvAmount=100\n\n[Color Management]\nCaptRAWEnhancedProfile=\nInputProfile=(cameraICC)\nToneCurve=false\nApplyLookTable=false\nApplyBaselineExposureOffset=true\nApplyHueSatMap=true\nDCPIlluminant=0\nDCPLookEarly=false\nWorkingProfile=Rec2020\nOutputProfile=RTv4_sRGB\nOutputProfileIntent=Relative\nOutputBPC=true\nInputProfileCAT=false\n\n[SoftLight]\nEnabled=false\nStrength=30\n\n[Film Simulation]\nEnabled=false\nClutFilename=\nStrength=100\nClutParams=\n\n[RGB Curves]\nEnabled=true\nrCurve=1;0;0;1;1;\ngCurve=1;0;0;1;1;\nbCurve=1;0;0;1;1;\n\n[Grain]\nEnabled=false\nISO=400\nStrength=0\nColor=false\n\n[Smoothing]\nEnabled=false\nMode_1=0\nChannel_1=2\nRadius_1=0\nSigma_1=0\nEpsilon_1=0\nIterations_1=1\nFalloff_1=1\nNLStrength_1=0\nNLDetail_1=50\nNumBlades_1=9\nAngle_1=0\nCurvature_1=0\nOffset_1=0\nNoiseStrength_1=10\nNoiseCoarseness_1=30\nHalationSize_1=1\nHalationColor_1=0\nWavStrength_1=0\nWavLevels_1=5\nWavGamma_1=2.2000000000000002\nCaptRAWComponentCount_1=0\nMaskEnabled_1=true\nMaskInverted_1=false\nMaskName_1=\nMaskCurve_1=0;\nMaskPosterization_1=0\nMaskSmoothing_1=0\nMaskOpacity_1=100\nParametricMaskEnabled_1=false\nHueMask_1=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;\nChromaticityMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMaskDetail_1=0\nContrastThresholdMask_1=0\nParametricMaskBlur_1=0\nAreaMaskEnabled_1=false\nAreaMaskFeather_1=0\nAreaMaskBlur_1=0\nAreaMaskContrast_1=0;\nDeltaEMaskEnabled_1=false\nDeltaEMaskL_1=0\nDeltaEMaskC_1=0\nDeltaEMaskH_1=0\nDeltaEMaskRange_1=1\nDeltaEMaskDecay_1=1\nDeltaEMaskStrength_1=100\nDeltaEMaskWeightL_1=50\nDeltaEMaskWeightC_1=75\nDeltaEMaskWeightH_1=100\nDrawnMaskEnabled_1=false\nDrawnMaskFeather_1=0\nDrawnMaskOpacity_1=1\nDrawnMaskSmoothness_1=0\nDrawnMaskContrast_1=0;\nDrawnMaskMode_1=0\nCaptRAWDrawnMaskStrokes_1=\nDrawnMaskStrokes_1=\nLinkedMaskEnabled_1=false\nLinkedMaskInverted_1=false\nLinkedMask_1=\nExternalMaskEnabled_1=false\nExternalMaskInverted_1=false\nExternalMaskFilename_1=\nExternalMaskFeather_1=0\nShowMask=-1\nSelectedRegion=0\n\n[ColorCorrection]\nEnabled=true\nMode_1=RGB\nSlopeH_1=0\nSlopeS_1=0\nSlopeL_1=0\nOffsetH_1=0\nOffsetS_1=0\nOffsetL_1=0\nPowerH_1=0\nPowerS_1=0\nPowerL_1=0\nSlopeR_1=2\nOffsetR_1=0\nPowerR_1=1\nPivotR_1=0.17999999999999999\nCompressionR_1=0\nSlopeG_1=2\nOffsetG_1=0\nPowerG_1=1\nPivotG_1=0.17999999999999999\nCompressionG_1=0\nSlopeB_1=2\nOffsetB_1=0\nPowerB_1=1\nPivotB_1=0.17999999999999999\nCompressionB_1=0\nA_1=0\nB_1=0\nABScale_1=1\nInSaturation_1=0\nOutSaturation_1=0\nSlope_1=2\nOffset_1=0\nPower_1=1\nPivot_1=0.17999999999999999\nCompression_1=0\nRGBLuminance_1=false\nHueShift_1=0\nLUTFilename_1=\nLUTParams_1=\nHSLGamma_1=2.3999999999999999\nCaptRAWComponentCount_1=1\nCaptRAWComponent0_CaptRAWComponentCount_1=0\nCaptRAWComponent0_MaskEnabled_1=true\nCaptRAWComponent0_MaskInverted_1=false\nCaptRAWComponent0_MaskName_1=线性渐变 1\nCaptRAWComponent0_MaskCurve_1=0;\nCaptRAWComponent0_MaskPosterization_1=0\nCaptRAWComponent0_MaskSmoothing_1=0\nCaptRAWComponent0_MaskOpacity_1=100\nCaptRAWComponent0_ParametricMaskEnabled_1=false\nCaptRAWComponent0_HueMask_1=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;\nCaptRAWComponent0_ChromaticityMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nCaptRAWComponent0_LightnessMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nCaptRAWComponent0_LightnessMaskDetail_1=0\nCaptRAWComponent0_ContrastThresholdMask_1=0\nCaptRAWComponent0_ParametricMaskBlur_1=0\nCaptRAWComponent0_AreaMaskEnabled_1=true\nCaptRAWComponent0_AreaMaskFeather_1=0\nCaptRAWComponent0_AreaMaskBlur_1=0\nCaptRAWComponent0_AreaMaskContrast_1=0;\nCaptRAWComponent0_AreaMaskType_1=gradient\nCaptRAWComponent0_AreaMaskX_1=-1.6213999999999951\nCaptRAWComponent0_AreaMaskY_1=-0.14310000000000711\nCaptRAWComponent0_AreaMaskStrengthStart_1=100\nCaptRAWComponent0_AreaMaskStrengthEnd_1=0\nCaptRAWComponent0_AreaMaskAngle_1=180\nCaptRAWComponent0_AreaMaskMode_1=add\nCaptRAWComponent0_AreaMaskShapeFeather_1=13.490558387285873\nCaptRAWComponent0_AreaMaskShapeBlur_1=0\nCaptRAWComponent0_DeltaEMaskEnabled_1=false\nCaptRAWComponent0_DeltaEMaskL_1=0\nCaptRAWComponent0_DeltaEMaskC_1=0\nCaptRAWComponent0_DeltaEMaskH_1=0\nCaptRAWComponent0_DeltaEMaskRange_1=1\nCaptRAWComponent0_DeltaEMaskDecay_1=1\nCaptRAWComponent0_DeltaEMaskStrength_1=100\nCaptRAWComponent0_DeltaEMaskWeightL_1=50\nCaptRAWComponent0_DeltaEMaskWeightC_1=75\nCaptRAWComponent0_DeltaEMaskWeightH_1=100\nCaptRAWComponent0_DrawnMaskEnabled_1=false\nCaptRAWComponent0_DrawnMaskFeather_1=0\nCaptRAWComponent0_DrawnMaskOpacity_1=1\nCaptRAWComponent0_DrawnMaskSmoothness_1=0\nCaptRAWComponent0_DrawnMaskContrast_1=0;\nCaptRAWComponent0_DrawnMaskMode_1=0\nCaptRAWComponent0_CaptRAWDrawnMaskStrokes_1=\nCaptRAWComponent0_DrawnMaskStrokes_1=\nCaptRAWComponent0_LinkedMaskEnabled_1=false\nCaptRAWComponent0_LinkedMaskInverted_1=false\nCaptRAWComponent0_LinkedMask_1=\nCaptRAWComponent0_ExternalMaskEnabled_1=false\nCaptRAWComponent0_ExternalMaskInverted_1=false\nCaptRAWComponent0_ExternalMaskFilename_1=\nCaptRAWComponent0_ExternalMaskFeather_1=0\nCaptRAWComponent0_Operation_1=0\nMaskEnabled_1=true\nMaskInverted_1=false\nMaskName_1=蒙版 1\nMaskCurve_1=0;\nMaskPosterization_1=0\nMaskSmoothing_1=0\nMaskOpacity_1=100\nParametricMaskEnabled_1=false\nHueMask_1=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;\nChromaticityMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMaskDetail_1=0\nContrastThresholdMask_1=0\nParametricMaskBlur_1=0\nAreaMaskEnabled_1=false\nAreaMaskFeather_1=0\nAreaMaskBlur_1=0\nAreaMaskContrast_1=0;\nDeltaEMaskEnabled_1=false\nDeltaEMaskL_1=0\nDeltaEMaskC_1=0\nDeltaEMaskH_1=0\nDeltaEMaskRange_1=1\nDeltaEMaskDecay_1=1\nDeltaEMaskStrength_1=100\nDeltaEMaskWeightL_1=50\nDeltaEMaskWeightC_1=75\nDeltaEMaskWeightH_1=100\nDrawnMaskEnabled_1=false\nDrawnMaskFeather_1=0\nDrawnMaskOpacity_1=1\nDrawnMaskSmoothness_1=0\nDrawnMaskContrast_1=0;\nDrawnMaskMode_1=0\nCaptRAWDrawnMaskStrokes_1=\nDrawnMaskStrokes_1=\nLinkedMaskEnabled_1=false\nLinkedMaskInverted_1=false\nLinkedMask_1=\nExternalMaskEnabled_1=false\nExternalMaskInverted_1=false\nExternalMaskFilename_1=\nExternalMaskFeather_1=0\nShowMask=-1\nSelectedRegion=0\n\n[RAW]\nDarkFrameEnabled=false\nDarkFrame=\nDarkFrameAuto=false\nFlatFieldEnabled=false\nFlatFieldFile=\nFlatFieldAutoSelect=false\nFlatFieldBlurRadius=32\nFlatFieldBlurType=Area Flatfield\nFlatFieldAutoClipControl=false\nFlatFieldClipControl=0\nFlatFieldUseEmbedded=false\nCAEnabled=false\nCA=false\nCAAvoidColourshift=true\nCAAutoIterations=2\nCARed=0\nCABlue=0\nHotDeadPixelEnabled=false\nHotPixelFilter=false\nDeadPixelFilter=false\nHotDeadPixelThresh=100\nPreExposureEnabled=false\nPreExposure=1\n\n[RAW Bayer]\nMethod=rcd\nBorder=4\nImageNum=1\nCcSteps=0\nPreBlackEnabled=false\nPreBlack0=0\nPreBlack1=0\nPreBlack2=0\nPreBlack3=0\nPreTwoGreen=true\nPreprocessingEnabled=false\nLineDenoise=0\nLineDenoiseDirection=3\nGreenEqThreshold=0\nLMMSEIterations=2\nDualDemosaicAutoContrast=true\nDualDemosaicContrast=20\nPixelShiftMotionCorrectionMethod=1\nPixelShiftEperIso=0\nPixelShiftSigma=1\nPixelShiftShowMotion=false\nPixelShiftShowMotionMaskOnly=false\npixelShiftHoleFill=true\npixelShiftMedian=false\npixelShiftGreen=true\npixelShiftBlur=true\npixelShiftSmoothFactor=0.69999999999999996\npixelShiftEqualBright=false\npixelShiftEqualBrightChannel=false\npixelShiftNonGreenCross=true\npixelShiftDemosaicMethod=amaze\nPDAFLinesFilter=false\nDynamicRowNoiseFilter=false\n\n[RAW X-Trans]\nMethod=3-pass (best)\nDualDemosaicAutoContrast=true\nDualDemosaicContrast=20\nBorder=7\nCcSteps=0\nPreBlackEnabled=false\nPreBlackRed=0\nPreBlackGreen=0\nPreBlackBlue=0\n\n[Film Negative]\nEnabled=false\nRedRatio=1.3600000000000001\nGreenExponent=1.5\nBlueRatio=0.85999999999999999\nColorSpace=1\nRefInput=0;0;0;\nRefOutput=0;0;0;\n\n[MetaData]\nMode=1\nExifKeys=Exif.Image.Copyright;Exif.Image.Artist;Exif.Image.ImageDescription;Exif.Photo.UserComment;Exif.Image.Make;Exif.Image.Model;Exif.Photo.LensModel;Exif.Photo.FNumber;Exif.Photo.ExposureTime;Exif.Photo.FocalLength;Exif.Photo.ISOSpeedRatings;Exif.Photo.ExposureBiasValue;Exif.Photo.Flash;Exif.Photo.DateTimeOriginal;Exif.Image.XResolution;Exif.Image.YResolution;\nNotes=\n\n[Spot Removal]\nEnabled=false\n",
+  "baseProfile": "[Version]\nAppVersion=1.26.10\nVersion=1045\n\n[General]\nColorLabel=0\nInTrash=false\n\n[Exposure]\nEnabled=true\nCompensation=0\nBlack=0\nHLRecovery=Balanced\nHLRecoveryBlur=0\n\n[Saturation]\nEnabled=true\nSaturation=0\nVibrance=0\n\n[ToneCurve]\nEnabled=true\nContrast=0\nHistogramMatching=false\nCurveFromHistogramMatching=false\nCurveMode=Standard\nCurveMode2=Neutral\nCurve=1;0;0;1;1;\nCurve2=0;\nSaturation=0;\nSaturation2=0;\nWhitePoint=1\nBaseCurve=Linear\n\n[Local Contrast]\nEnabled=false\nContrast=0\nCurve=1;0;0.5;0;0;1;0.5;0;0;\nCaptRAWComponentCount=0\nMaskEnabled=true\nMaskInverted=false\nMaskName=\nMaskCurve=0;\nMaskPosterization=0\nMaskSmoothing=0\nMaskOpacity=100\nParametricMaskEnabled=false\nHueMask=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;\nChromaticityMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMaskDetail=0\nContrastThresholdMask=0\nParametricMaskBlur=0\nAreaMaskEnabled=false\nAreaMaskFeather=0\nAreaMaskBlur=0\nAreaMaskContrast=0;\nDeltaEMaskEnabled=false\nDeltaEMaskL=0\nDeltaEMaskC=0\nDeltaEMaskH=0\nDeltaEMaskRange=1\nDeltaEMaskDecay=1\nDeltaEMaskStrength=100\nDeltaEMaskWeightL=50\nDeltaEMaskWeightC=75\nDeltaEMaskWeightH=100\nDrawnMaskEnabled=false\nDrawnMaskFeather=0\nDrawnMaskOpacity=1\nDrawnMaskSmoothness=0\nDrawnMaskContrast=0;\nDrawnMaskMode=0\nCaptRAWDrawnMaskStrokes=\nDrawnMaskStrokes=\nLinkedMaskEnabled=false\nLinkedMaskInverted=false\nLinkedMask=\nExternalMaskEnabled=false\nExternalMaskInverted=false\nExternalMaskFilename=\nExternalMaskFeather=0\nShowMask=-1\nSelectedRegion=0\n\n[Channel Mixer]\nEnabled=false\nMode=0\nRed=1000;0;0;\nGreen=0;1000;0;\nBlue=0;0;1000;\nHueTweak=0;0;0;\nSatTweak=0;0;0;\n\n[Black & White]\nEnabled=false\nSetting=RGB-Rel\nFilter=None\nMixerRed=33\nMixerGreen=33\nMixerBlue=33\nGammaRed=0\nGammaGreen=0\nGammaBlue=0\nColorCast=0;0;\n\n[HSL Equalizer]\nEnabled=true\nHCurve=1;0;0.5;0;0;0.083333333333333329;0.5;0;0;0.16666666666666666;0.5;0;0;0.33333333333333331;0.5;0;0;0.5;0.5;0;0;0.66666666666666663;0.5;0;0;0.75;0.5;0;0;0.83333333333333337;0.5;0;0;\nSCurve=1;0;0.5;0;0;0.083333333333333329;0.5;0;0;0.16666666666666666;0.5;0;0;0.33333333333333331;0.5;0;0;0.5;0.5;0;0;0.66666666666666663;0.5;0;0;0.75;0.5;0;0;0.83333333333333337;0.5;0;0;\nLCurve=1;0;0.5;0;0;0.083333333333333329;0.5;0;0;0.16666666666666666;0.5;0;0;0.33333333333333331;0.5;0;0;0.5;0.5;0;0;0.66666666666666663;0.5;0;0;0.75;0.5;0;0;0.83333333333333337;0.5;0;0;\nSmoothing=0\n\n[Luminance Curve]\nEnabled=false\nBrightness=0\nContrast=0\nChromaticity=0\nLCurve=0;\naCurve=0;\nbCurve=0;\n\n[Sharpening]\nEnabled=false\nContrast=20\nMethod=usm\nRadius=1\nAmount=0\nThreshold=20;80;2000;1200;\nOnlyEdges=false\nEdgedetectionRadius=1.8999999999999999\nEdgeTolerance=1800\nHalocontrolEnabled=false\nHalocontrolAmount=85\nDeconvRadius=0.75\nDeconvAmount=100\nDeconvAutoRadius=true\nDeconvCornerBoost=0\nDeconvCornerLatitude=25\nPSFKernel=\nPSFIterations=10\n\n[White Balance]\nEnabled=true\nSetting=CustomMult\nTemperature=6500\nGreen=1\nMultipliers=1;1;1;\n\n[Impulse Denoising]\nEnabled=false\nThreshold=50\n\n[Defringing]\nEnabled=false\nRadius=2\nThreshold=13\nHueCurve=1;0.16666666699999999;0;0.34999999999999998;0.34999999999999998;0.34699999999999998;0;0.34999999999999998;0.34999999999999998;0.51366742600000004;0;0.34999999999999998;0.34999999999999998;0.66894457100000004;0;0.34999999999999998;0.34999999999999998;0.82877752459999998;0.97835991;0.34999999999999998;0.34999999999999998;0.99088838270000001;0;0.34999999999999998;0.34999999999999998;\n\n[Dehaze]\nEnabled=false\nStrength=1;0;0.5;0;0;1;0.5;0;0;\nBlackpoint=0\nLuminance=false\n\n[Denoise]\nEnabled=false\nColorSpace=RGB\nAggressive=false\nGamma=1.7\nLuminance=0\nLuminanceDetail=0\nLuminanceDetailThreshold=0\nChrominanceMethod=0\nChrominanceAutoFactor=1\nChrominance=0\nChrominanceRedGreen=0\nChrominanceBlueYellow=0\nSmoothingEnabled=false\nGuidedChromaRadius=3\nNLDetail=80\nNLStrength=0\n\n[TextureBoost]\nEnabled=false\nStrength=0\nDetailThreshold=0.20000000000000001\nIterations=1\nCaptRAWComponentCount=0\nMaskEnabled=true\nMaskInverted=false\nMaskName=\nMaskCurve=0;\nMaskPosterization=0\nMaskSmoothing=0\nMaskOpacity=100\nParametricMaskEnabled=false\nHueMask=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;\nChromaticityMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMaskDetail=0\nContrastThresholdMask=0\nParametricMaskBlur=0\nAreaMaskEnabled=false\nAreaMaskFeather=0\nAreaMaskBlur=0\nAreaMaskContrast=0;\nDeltaEMaskEnabled=false\nDeltaEMaskL=0\nDeltaEMaskC=0\nDeltaEMaskH=0\nDeltaEMaskRange=1\nDeltaEMaskDecay=1\nDeltaEMaskStrength=100\nDeltaEMaskWeightL=50\nDeltaEMaskWeightC=75\nDeltaEMaskWeightH=100\nDrawnMaskEnabled=false\nDrawnMaskFeather=0\nDrawnMaskOpacity=1\nDrawnMaskSmoothness=0\nDrawnMaskContrast=0;\nDrawnMaskMode=0\nCaptRAWDrawnMaskStrokes=\nDrawnMaskStrokes=\nLinkedMaskEnabled=false\nLinkedMaskInverted=false\nLinkedMask=\nExternalMaskEnabled=false\nExternalMaskInverted=false\nExternalMaskFilename=\nExternalMaskFeather=0\nShowMask=-1\nSelectedRegion=0\n\n[FattalToneMapping]\nEnabled=false\nThreshold=30\nAmount=20\nSaturationControl=false\n\n[LogEncoding]\nEnabled=false\nAuto=false\nAutoGain=false\nGain=0\nTargetGray=18\nBlackEv=-13.5\nWhiteEv=2.5\nRegularization=60\nSaturationControl=true\nHighlightCompression=0\n\n[ToneEqualizer]\nEnabled=false\nBand0=0\nBand1=0\nBand2=0\nBand3=0\nBand4=0\nRegularization=4\nPivot=0\n\n[Crop]\nEnabled=false\nX=-1\nY=-1\nW=-1\nH=-1\nFixedRatio=true\nRatio=As Image\nOrientation=As Image\nGuide=Frame\n\n[Coarse Transformation]\nRotate=0\nHorizontalFlip=false\nVerticalFlip=false\n\n[Common Properties for Transformations]\nAutoFill=true\n\n[Rotation]\nEnabled=false\nDegree=0\nCaptRAWMaskCoordinates=false\nCaptRAWMaskReferenceDegree=0\n\n[Distortion]\nEnabled=false\nAmount=0\nAuto=false\n\n[LensProfile]\nLcMode=none\nLCPFile=\nUseDistortion=true\nUseVignette=true\nUseCA=true\nLFCameraMake=\nLFCameraModel=\nLFLens=\n\n[Perspective]\nEnabled=false\nHorizontal=0\nVertical=0\nAngle=0\nShear=0\nFocalLength=0\nCropFactor=1\nAspect=1\nControlLines=\n\n[Gradient]\nEnabled=false\nDegree=0\nFeather=25\nStrength=0.59999999999999998\nCenterX=0\nCenterY=0\n\n[PCVignette]\nEnabled=false\nStrength=-0\nFeather=50\nRoundness=50\nCenterX=0\nCenterY=0\n\n[CACorrection]\nEnabled=false\nRed=0\nBlue=0\n\n[Vignetting Correction]\nEnabled=false\nAmount=0\nRadius=50\nStrength=1\nCenterX=0\nCenterY=0\n\n[Resize]\nEnabled=false\nScale=1\nAppliesTo=Cropped area\nDataSpecified=3\nWidth=900\nHeight=900\nAllowUpscaling=false\nPPI=300\nCopyPPIToExif=false\nUnit=px\n\n[OutputSharpening]\nEnabled=false\nContrast=25\nMethod=usm\nRadius=0.5\nAmount=200\nThreshold=20;80;2000;1200;\nOnlyEdges=false\nEdgedetectionRadius=1.8999999999999999\nEdgeTolerance=1800\nHalocontrolEnabled=false\nHalocontrolAmount=85\nDeconvRadius=0.75\nDeconvAmount=100\n\n[Color Management]\nCaptRAWEnhancedProfile=\nInputProfile=(cameraICC)\nToneCurve=false\nApplyLookTable=false\nApplyBaselineExposureOffset=true\nApplyHueSatMap=true\nDCPIlluminant=0\nDCPLookEarly=false\nWorkingProfile=Rec2020\nOutputProfile=RTv4_sRGB\nOutputProfileIntent=Relative\nOutputBPC=true\nInputProfileCAT=false\n\n[SoftLight]\nEnabled=false\nStrength=30\n\n[Film Simulation]\nEnabled=false\nClutFilename=\nStrength=100\nClutParams=\n\n[RGB Curves]\nEnabled=true\nrCurve=1;0;0;1;1;\ngCurve=1;0;0;1;1;\nbCurve=1;0;0;1;1;\n\n[Grain]\nEnabled=false\nISO=400\nStrength=0\nColor=false\n\n[Smoothing]\nEnabled=false\nMode_1=0\nChannel_1=2\nRadius_1=0\nSigma_1=0\nEpsilon_1=0\nIterations_1=1\nFalloff_1=1\nNLStrength_1=0\nNLDetail_1=50\nNumBlades_1=9\nAngle_1=0\nCurvature_1=0\nOffset_1=0\nNoiseStrength_1=10\nNoiseCoarseness_1=30\nHalationSize_1=1\nHalationColor_1=0\nWavStrength_1=0\nWavLevels_1=5\nWavGamma_1=2.2000000000000002\nCaptRAWComponentCount_1=0\nMaskEnabled_1=true\nMaskInverted_1=false\nMaskName_1=\nMaskCurve_1=0;\nMaskPosterization_1=0\nMaskSmoothing_1=0\nMaskOpacity_1=100\nParametricMaskEnabled_1=false\nHueMask_1=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;\nChromaticityMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;\nLightnessMaskDetail_1=0\nContrastThresholdMask_1=0\nParametricMaskBlur_1=0\nAreaMaskEnabled_1=false\nAreaMaskFeather_1=0\nAreaMaskBlur_1=0\nAreaMaskContrast_1=0;\nDeltaEMaskEnabled_1=false\nDeltaEMaskL_1=0\nDeltaEMaskC_1=0\nDeltaEMaskH_1=0\nDeltaEMaskRange_1=1\nDeltaEMaskDecay_1=1\nDeltaEMaskStrength_1=100\nDeltaEMaskWeightL_1=50\nDeltaEMaskWeightC_1=75\nDeltaEMaskWeightH_1=100\nDrawnMaskEnabled_1=false\nDrawnMaskFeather_1=0\nDrawnMaskOpacity_1=1\nDrawnMaskSmoothness_1=0\nDrawnMaskContrast_1=0;\nDrawnMaskMode_1=0\nCaptRAWDrawnMaskStrokes_1=\nDrawnMaskStrokes_1=\nLinkedMaskEnabled_1=false\nLinkedMaskInverted_1=false\nLinkedMask_1=\nExternalMaskEnabled_1=false\nExternalMaskInverted_1=false\nExternalMaskFilename_1=\nExternalMaskFeather_1=0\nShowMask=-1\nSelectedRegion=0\n\n[ColorCorrection]\nEnabled=false\nShowMask=-1\nSelectedRegion=0\n\n[RAW]\nDarkFrameEnabled=false\nDarkFrame=\nDarkFrameAuto=false\nFlatFieldEnabled=false\nFlatFieldFile=\nFlatFieldAutoSelect=false\nFlatFieldBlurRadius=32\nFlatFieldBlurType=Area Flatfield\nFlatFieldAutoClipControl=false\nFlatFieldClipControl=0\nFlatFieldUseEmbedded=false\nCAEnabled=false\nCA=false\nCAAvoidColourshift=true\nCAAutoIterations=2\nCARed=0\nCABlue=0\nHotDeadPixelEnabled=false\nHotPixelFilter=false\nDeadPixelFilter=false\nHotDeadPixelThresh=100\nPreExposureEnabled=false\nPreExposure=1\n\n[RAW Bayer]\nMethod=rcd\nBorder=4\nImageNum=1\nCcSteps=0\nPreBlackEnabled=false\nPreBlack0=0\nPreBlack1=0\nPreBlack2=0\nPreBlack3=0\nPreTwoGreen=true\nPreprocessingEnabled=false\nLineDenoise=0\nLineDenoiseDirection=3\nGreenEqThreshold=0\nLMMSEIterations=2\nDualDemosaicAutoContrast=true\nDualDemosaicContrast=20\nPixelShiftMotionCorrectionMethod=1\nPixelShiftEperIso=0\nPixelShiftSigma=1\nPixelShiftShowMotion=false\nPixelShiftShowMotionMaskOnly=false\npixelShiftHoleFill=true\npixelShiftMedian=false\npixelShiftGreen=true\npixelShiftBlur=true\npixelShiftSmoothFactor=0.69999999999999996\npixelShiftEqualBright=false\npixelShiftEqualBrightChannel=false\npixelShiftNonGreenCross=true\npixelShiftDemosaicMethod=amaze\nPDAFLinesFilter=false\nDynamicRowNoiseFilter=false\n\n[RAW X-Trans]\nMethod=3-pass (best)\nDualDemosaicAutoContrast=true\nDualDemosaicContrast=20\nBorder=7\nCcSteps=0\nPreBlackEnabled=false\nPreBlackRed=0\nPreBlackGreen=0\nPreBlackBlue=0\n\n[Film Negative]\nEnabled=false\nRedRatio=1.3600000000000001\nGreenExponent=1.5\nBlueRatio=0.85999999999999999\nColorSpace=1\nRefInput=0;0;0;\nRefOutput=0;0;0;\n\n[MetaData]\nMode=1\nExifKeys=Exif.Image.Copyright;Exif.Image.Artist;Exif.Image.ImageDescription;Exif.Photo.UserComment;Exif.Image.Make;Exif.Image.Model;Exif.Photo.LensModel;Exif.Photo.FNumber;Exif.Photo.ExposureTime;Exif.Photo.FocalLength;Exif.Photo.ISOSpeedRatings;Exif.Photo.ExposureBiasValue;Exif.Photo.Flash;Exif.Photo.DateTimeOriginal;Exif.Image.XResolution;Exif.Image.YResolution;\nNotes=\n\n[Spot Removal]\nEnabled=false\n",
+  "legacyAdjustments": {
+    "blackWhite": {
+      "base": {
+        "filter": "None",
+        "gamma": [
+          0,
+          0,
+          0
+        ],
+        "preset": "RGB-Rel",
+        "tint": {
+          "amount": 0,
+          "hue": 0
+        },
+        "weights": [
+          33,
+          33,
+          33
+        ]
+      },
+      "enabled": false,
+      "mixer": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "blacks": 0,
+    "blueCurve": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "colorGrading": {
+      "balance": 0,
+      "blending": 50,
+      "global": {
+        "hue": 0,
+        "luminance": 0,
+        "saturation": 0
+      },
+      "highlights": {
+        "hue": 0,
+        "luminance": 0,
+        "saturation": 0
+      },
+      "midtones": {
+        "hue": 0,
+        "luminance": 0,
+        "saturation": 0
+      },
+      "shadows": {
+        "hue": 0,
+        "luminance": 0,
+        "saturation": 0
+      }
+    },
+    "colorNoise": 0,
+    "colorProfile": {
+      "baselineExposure": true,
+      "hueSatMap": true,
+      "illuminant": 0,
+      "lookTable": false,
+      "mode": "auto",
+      "toneCurve": false
+    },
+    "contrast": 0,
+    "crop": null,
+    "curve": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "dehaze": 0,
+    "exposure": 0,
+    "fineRotation": 0,
+    "grain": 0,
+    "greenCurve": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "highlights": 0,
+    "hsl": {
+      "hue": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "luminance": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "saturation": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "lensCorrections": false,
+    "lensManualDistortion": 0,
+    "lensVignette": 0,
+    "luminanceNoise": 0,
+    "masks": [
+      {
+        "id": "adobe-F4B85958EC764DE4AD469DE35A2DEB41",
+        "name": "蒙版 1",
+        "type": "linear",
+        "enabled": true,
+        "inverted": false,
+        "feather": 0,
+        "points": [],
+        "start": {
+          "x": 0.491893,
+          "y": 0.742489
+        },
+        "end": {
+          "x": 0.491893,
+          "y": 0.25608
+        },
+        "brightness": 1,
+        "contrast": 0,
+        "saturation": 0,
+        "components": [
+          {
+            "id": "adobe-CA9C584F12F44A06A7F547BC8C2C256F",
+            "name": "线性渐变 1",
+            "enabled": true,
+            "inverted": false,
+            "feather": 0,
+            "points": [],
+            "start": {
+              "x": 0.491893,
+              "y": 0.742489
+            },
+            "end": {
+              "x": 0.491893,
+              "y": 0.25608
+            },
+            "operation": "add",
+            "initialized": true,
+            "type": "linear"
+          }
+        ]
+      }
+    ],
+    "perspective": {
+      "angle": 0,
+      "aspect": 1,
+      "cropFactor": 1,
+      "enabled": false,
+      "focalLength": 0,
+      "horizontal": 0,
+      "shear": 0,
+      "vertical": 0
+    },
+    "redCurve": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "rotation": 0,
+    "saturation": 0,
+    "shadows": 0,
+    "sharpenRadius": 1,
+    "sharpening": 0,
+    "spots": [],
+    "temperature": 6502,
+    "tint": 10,
+    "vibrance": 0,
+    "vignette": 0,
+    "wbApproximate": false,
+    "wbMode": "camera",
+    "wbMultipliers": [
+      1,
+      1,
+      1
+    ],
+    "whites": 0,
+    "glow": 0
+  }
+}

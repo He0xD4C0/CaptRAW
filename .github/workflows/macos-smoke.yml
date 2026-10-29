@@ -54,7 +54,7 @@ jobs:
         run: pnpm install --frozen-lockfile 2>&1 | tee artifacts/monorepo/e2e/install.log
       - name: Install native build dependencies
         run: |
-          brew install cmake ninja pkgconf autoconf automake libtool gtkmm3 exiv2 lensfun libomp nlohmann-json librsvg jpeg-turbo fftw little-cms2 2>&1 | tee artifacts/monorepo/e2e/brew.log
+          brew install cmake ninja pkgconf autoconf automake libtool gtkmm3 exiv2 lensfun libomp nlohmann-json librsvg jpeg-turbo fftw little-cms2 aom 2>&1 | tee artifacts/monorepo/e2e/brew.log
       - name: Build native engine, XMP and UI
         run: pnpm build 2>&1 | tee artifacts/monorepo/e2e/build.log
       - name: Fetch D850 fixture

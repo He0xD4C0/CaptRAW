@@ -8,6 +8,7 @@ const executablePath=process.env.CAPTRAW_APP,app=await electron.launch({executab
 async function settle(action){const n=await page.evaluate(()=>window.__frames.length);await action();await page.waitForFunction(n=>window.__frames.length>n,n);await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__frames.filter(f=>f.kind!=='detail').at(-1)?.url);}
 const pixels=()=>page.locator('canvas').evaluate(c=>c.toDataURL());
 try{
+ await app.evaluate(({session})=>session.defaultSession.webRequest.onBeforeRequest({urls:['http://*/*','https://*/*']},(_request,done)=>done({cancel:true})));
  await page.evaluate(()=>{window.__frames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__frames.push(e.frame);});});
  for(const s of fixtures){
  const file=resolve('build/samples/nikon-he',s.name+'.NEF');await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},file);const started=Date.now();await settle(()=>page.getByRole('button',{name:'打开',exact:true}).click());
@@ -15,7 +16,7 @@ try{
  const adjustmentStarted=Date.now();await settle(async()=>{const exposure=page.getByRole('spinbutton',{name:'曝光',exact:true});await exposure.fill('.5');await exposure.press('Tab');});const adjustmentLatencyMs=Date.now()-adjustmentStarted;expect(await pixels()).not.toBe(baseline);
  const recipe=join(out,s.name+'.xmp');rmSync(recipe,{force:true});await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},recipe);await page.getByRole('button',{name:'保存',exact:true}).click();await expect.poll(()=>existsSync(recipe)).toBe(true);const saved=(await readDocument(recipe));expect(saved.source.sha256).toBe(s.sha256);expect(saved.adjustments.exposure).toBe(.5);expect(hash(file)).toBe(s.sha256);
  await page.screenshot({path:join(out,s.name+'.png')});results.push({name:s.name,camera:s.camera,mode:s.mode,crop:s.crop,sourceSHA256:s.sha256,sourceUnchanged:true,firstVisibleMs,adjustmentLatencyMs,visiblePreviewAndExposure:true,recipe});console.log('PASS GUI',s.name,firstVisibleMs,adjustmentLatencyMs);
- writeFileSync(join(out,'report.json'),JSON.stringify({executablePath,backgroundWindow:true,packaged:!!executablePath,selectedSamples:fixtures.length,results,errors},null,2)+'\n');
+ writeFileSync(join(out,'report.json'),JSON.stringify({executablePath,backgroundWindow:true,httpBlocked:true,packaged:!!executablePath,selectedSamples:fixtures.length,results,errors},null,2)+'\n');
  }
  expect(errors).toEqual([]);
-}finally{writeFileSync(join(out,'report.json'),JSON.stringify({executablePath,backgroundWindow:true,packaged:!!executablePath,selectedSamples:fixtures.length,results,errors},null,2)+'\n');await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});}).catch(()=>{});await app.close();}
+}finally{writeFileSync(join(out,'report.json'),JSON.stringify({executablePath,backgroundWindow:true,httpBlocked:true,packaged:!!executablePath,selectedSamples:fixtures.length,results,errors},null,2)+'\n');await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});}).catch(()=>{});await app.close();}

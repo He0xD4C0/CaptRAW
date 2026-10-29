@@ -281,4 +281,69 @@ using MaskGeometryResolver = std::function<const GeometryField *(const procparam
    ['maskErrorListener ? maskErrorListener : plistener, maskGeometry())) {',`maskErrorListener ? maskErrorListener : plistener, nullptr,
                 [this](const procparams::Mask &mask) { return maskGeometry(mask); })) {`]
   ]);
+ // Full authoring geometry is independent of the legacy angle-only reference.
+ patch('procparams.h','std::string captrawGeometryReference;',[
+  ['    bool captrawReferenceAngleSet = false;','    std::string captrawGeometryReference;\n    bool captrawReferenceAngleSet = false;']
+ ]);
+ patch('procparams.cc','// CaptRAW: full authoring geometry reference (v1).',[
+  ['    return captrawReferenceAngleSet == other.captrawReferenceAngleSet &&',
+   '    return captrawGeometryReference == other.captrawGeometryReference &&\n           captrawReferenceAngleSet == other.captrawReferenceAngleSet &&'],
+  ['    captrawReferenceAngleSet=keyfile.has_key(group_name,prefix + "CaptRAWReferenceAngle" + suffix);',`    // CaptRAW: full authoring geometry reference (v1).
+    captrawGeometryReference.clear();
+    if(keyfile.has_key(group_name,prefix + "CaptRAWGeometryReferenceV1" + suffix))
+        captrawGeometryReference=keyfile.get_string(group_name,prefix + "CaptRAWGeometryReferenceV1" + suffix);
+    captrawReferenceAngleSet=keyfile.has_key(group_name,prefix + "CaptRAWReferenceAngle" + suffix);`],
+  ['    bool ret = count > 0 || captrawReferenceAngleSet;',
+   '    bool ret = count > 0 || captrawReferenceAngleSet || !captrawGeometryReference.empty();'],
+  ['    if(captrawReferenceAngleSet)\n        putToKeyfile(group_name,prefix + "CaptRAWReferenceAngle" + suffix,captrawReferenceAngle,keyfile);',`    if(!captrawGeometryReference.empty())
+        putToKeyfile(group_name,prefix + "CaptRAWGeometryReferenceV1" + suffix,captrawGeometryReference,keyfile);
+    if(captrawReferenceAngleSet)
+        putToKeyfile(group_name,prefix + "CaptRAWReferenceAngle" + suffix,captrawReferenceAngle,keyfile);`]
+ ]);
+
+ // Explicit new flip controls opt legacy leaves into unflipped mask coverage.
+ // Missing fields keep inherited ARP coverage exactly as authored.
+ patch('procparams.h','bool captrawMirrorCoordinates = false;',[
+  ['    bool captrawReferenceAngleSet = false;','    bool captrawMirrorCoordinates = false;\n    bool captrawReferenceAngleSet = false;']
+ ]);
+ patch('procparams.cc','// CaptRAW: explicit mirrored legacy coordinates.',[
+  ['           captrawReferenceAngleSet == other.captrawReferenceAngleSet &&',
+   '           captrawMirrorCoordinates == other.captrawMirrorCoordinates &&\n           captrawReferenceAngleSet == other.captrawReferenceAngleSet &&'],
+  ['    captrawReferenceAngleSet=keyfile.has_key(group_name,prefix + "CaptRAWReferenceAngle" + suffix);',`    // CaptRAW: explicit mirrored legacy coordinates.
+    captrawMirrorCoordinates=false;
+    if(keyfile.has_key(group_name,prefix + "CaptRAWMirrorCoordinates" + suffix))
+        captrawMirrorCoordinates=keyfile.get_boolean(group_name,prefix + "CaptRAWMirrorCoordinates" + suffix);
+    captrawReferenceAngleSet=keyfile.has_key(group_name,prefix + "CaptRAWReferenceAngle" + suffix);`],
+  ['    if(captrawReferenceAngleSet)\n        putToKeyfile(group_name,prefix + "CaptRAWReferenceAngle" + suffix,captrawReferenceAngle,keyfile);',`    if(captrawMirrorCoordinates)
+        putToKeyfile(group_name,prefix + "CaptRAWMirrorCoordinates" + suffix,true,keyfile);
+    if(captrawReferenceAngleSet)
+        putToKeyfile(group_name,prefix + "CaptRAWReferenceAngle" + suffix,captrawReferenceAngle,keyfile);`]
+ ]);
+
+ // The anchor canvas is native-only metadata; absent legacy fields retain their canvas.
+ patch('procparams.h','bool captrawSourceBasisSet = false;',[
+  ['    double captrawMaskReferenceDegree = 0;',`    double captrawMaskReferenceDegree = 0;
+    bool captrawSourceBasisSet = false;
+    bool captrawSourceBasisHorizontal = false, captrawSourceBasisVertical = false;`]
+ ]);
+ patch('procparams.cc','// CaptRAW: stable inherited source canvas.',[
+  ['        captrawMaskReferenceDegree == other.captrawMaskReferenceDegree;',`        captrawMaskReferenceDegree == other.captrawMaskReferenceDegree &&
+        captrawSourceBasisSet == other.captrawSourceBasisSet &&
+        captrawSourceBasisHorizontal == other.captrawSourceBasisHorizontal &&
+        captrawSourceBasisVertical == other.captrawSourceBasisVertical;`],
+  ['            saveToKeyfile("Rotation", "CaptRAWMaskReferenceDegree", rotate.captrawMaskReferenceDegree, keyFile);',`            saveToKeyfile("Rotation", "CaptRAWMaskReferenceDegree", rotate.captrawMaskReferenceDegree, keyFile);
+            if(rotate.captrawSourceBasisSet){
+                saveToKeyfile("Rotation", "CaptRAWSourceBasis", true, keyFile);
+                saveToKeyfile("Rotation", "CaptRAWSourceBasisHorizontal", rotate.captrawSourceBasisHorizontal, keyFile);
+                saveToKeyfile("Rotation", "CaptRAWSourceBasisVertical", rotate.captrawSourceBasisVertical, keyFile);
+            }`],
+  ['            rotate.captrawMaskCoordinates=false;rotate.captrawMaskReferenceDegree=0;',`            // CaptRAW: stable inherited source canvas.
+            rotate.captrawSourceBasisSet=false;rotate.captrawSourceBasisHorizontal=false;rotate.captrawSourceBasisVertical=false;
+            rotate.captrawMaskCoordinates=false;rotate.captrawMaskReferenceDegree=0;`],
+  ['            assignFromKeyfile(keyFile, "Rotation", "CaptRAWMaskReferenceDegree", rotate.captrawMaskReferenceDegree);',`            assignFromKeyfile(keyFile, "Rotation", "CaptRAWMaskReferenceDegree", rotate.captrawMaskReferenceDegree);
+            assignFromKeyfile(keyFile, "Rotation", "CaptRAWSourceBasis", rotate.captrawSourceBasisSet);
+            assignFromKeyfile(keyFile, "Rotation", "CaptRAWSourceBasisHorizontal", rotate.captrawSourceBasisHorizontal);
+            assignFromKeyfile(keyFile, "Rotation", "CaptRAWSourceBasisVertical", rotate.captrawSourceBasisVertical);`]
+ ]);
+
 }

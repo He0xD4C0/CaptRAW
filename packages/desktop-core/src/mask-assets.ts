@@ -31,9 +31,16 @@ export async function publishAsset(core:Core,path:string,data:Buffer,id:string,l
     }
   }finally{await rm(temporary,{force:true});}
 }
+// Prepared brush coverage enters the same immutable store as restored assets.
+// The caller owns its lease until a document update adopts it.
+export async function publishBrushCoverage(core:Core,cache:string,source:string,check:()=>Promise<void>){
+  const data=await assetBytes(source),id=hash(data),store=join(cache,'document-assets'),path=join(store,id+'.png');
+  await assetDirectory(store);await check();const present=await existing(path,id);
+  await publishAsset(core,path,data,id);return {path,sha256:id,created:!present};
+}
 // Assets are immutable and published before the recipe. Failed saves leave the
 // previous recipe intact; unreferenced content is not deleted behind other copies.
-export async function saveRecipeWithMasks<T extends AssetDocument>(core:Core,path:string,supplied:T,serialize:(value:T)=>Promise<string>,overwrite=true){
+export async function saveRecipeWithMasks<T extends AssetDocument>(core:Core,path:string,supplied:T,serialize:(value:T)=>Promise<string>,overwrite=true,beforePublish?:()=>Promise<void>){
   const recipe=structuredClone(supplied);
   const inventory:{paths:string[]}=await core.call('maskAssets',{artProfile:recipe.artProfile,adjustments:recipe.adjustments,validate:true});
   const replacements:Record<string,string>={},files:NonNullable<EditDocument['maskAssets']>['files']=[];
@@ -59,7 +66,7 @@ export async function saveRecipeWithMasks<T extends AssetDocument>(core:Core,pat
   }else delete recipe.maskAssets;
   await saveInputProfileAsset(core,path,recipe);
   const temporary=path+'.'+randomUUID()+'.tmp';
-  try{await writeFile(temporary,await serialize(recipe),{flag:'wx',mode:0o600});if(!overwrite)return !!await core.call('publish',{temporary,destination:path});await rename(temporary,path);return true;}
+  try{await writeFile(temporary,await serialize(recipe),{flag:'wx',mode:0o600});await beforePublish?.();if(!overwrite)return !!await core.call('publish',{temporary,destination:path});await rename(temporary,path);return true;}
   finally{await rm(temporary,{force:true});}
 }
 // Materialize checked bytes inside the app's private cache, so later edits and

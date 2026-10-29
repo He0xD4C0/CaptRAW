@@ -1,8 +1,12 @@
 # 本地核心协议
 
+当前计划入口为 [ACR 18.7（2743）既有工具完整对齐](ACR-PARITY.md#当前执行范围2026-10-29)：从 0.64 起，工作流优先，替换旧阶段 0–8 扩展计划。整组 Done / Cancel、源旁同名 XMP 首次替换确认后记住、连续 Heal / Clone、画笔 flow / density、ISO 自适应与常规预设增强均按该范围推进；RAW 不回写、未知 XMP 字段保留。默认预设内容 / Raw Defaults 暂不完善，保留内置包更新接口。新增计划不代表下文已有相应 API；既有协议记录不据此扩写。产品验收限 macOS，Windows / Linux 仅审查接口与构建风险。
+
 核心库目标为 `captraw-core`，进程为 `captraw-engine <resources-directory> <private-cache-directory>`。它没有 Electron 或窗口初始化依赖。CPU / OpenMP，Vulkan、SIMDE、OCIO、CTL、mimalloc 后端关闭；固定 ART 接口由 CMake 编译验证。
 
 stdin / stdout 每行一个 JSON 对象；ART 自身 stdout 重定向到 stderr，保证控制输出纯净。请求 `{ "id": 1, "method": "open", "params": { ... } }`，结果 `{ "id": 1, "result": ... }` 或 `{ "id": 1, "error": "..." }`；异步帧和进度使用 `event`。启动发送 `ready`。公共类型见 `packages/contracts/index.ts`。
+
+开发核心将外部会话 ID 作为不透明标识原样返回，缓存文件名使用其 SHA-256 摘要，避免路径分隔符或特殊字符进入 PNG / 覆盖 / 亮度 / 浮点文件路径。该缓存修复不改变持久化配方或显影版本。
 
 | 操作 | 参数 | 结果 |
 |---|---|---|
@@ -11,7 +15,7 @@ stdin / stdout 每行一个 JSON 对象；ART 自身 stdout 重定向到 stderr�
 | `whiteBalance` | `mode: camera/auto/preset/sample`；可选 preset ID 或原始图像归一化坐标、奇数像素窗口 | 返回精确相机通道系数、色温 / 色调投影和显示状态，不直接更改当前配方 |
 | `maskAssets` | 完整 `artProfile`、可选控件投影 `adjustments`、精确路径 `replacements`、`validate` | 递归枚举 / 重绑定四种工具中全部外部蒙版路径，包含停用工具与组件；可解码核验。同时处理投影中的栅格引用（含停用组件）；返回完整配置及传入的投影，不修改当前图像 |
 | `validate` | 完整 `artProfile` 和 `adjustments` | 无图像解码的配方参数检查、输入配置 / 黑白 / 分级投影，以及按来源配置绑定参考角的 `masks`；不改变已打开图片 |
-| `update` | 递增 `revision`、`adjustments`、可选 `artProfile` 和仅控制显示的 `maskId` | 更新后的完整 ART 配置文本；异步输出 fit 帧 |
+| `update` | 递增 `revision`、`adjustments`、可选 `artProfile` 和仅控制显示的 `maskId`；开发核心另支持 `linearPreview` 布尔值 | 更新后的完整 ART 配置文本；异步输出 fit 帧。`linearPreview=true` 在 SDR 中请求同区域线性 Rec.709 Float16 附件，不写配方；开发引擎 27 的显式 HDR 编辑自动附带浮点数据，详见 [HDR 接口验证](HDR.md#已接入的缓存浮点接口未打包) |
 | `viewport` | `revision`、`x/y/width/height`（已旋转图像像素坐标） | 真正 skip=1 的 detail 帧，按原图边界限制请求范围 |
 | `coordinates`（未发布） | `sessionId`、当前 `revision`、`from/to: display/reference/source`、1–4096 个 `points`，可选 ±45° `referenceAngle` | 完整粗旋转画布的像素中心坐标映射；不含裁切偏移或归一化。保留图像外坐标，逆解失败的点返回 null；拒绝过期会话 / revision，不更改配方 |
 | `before` | `revision` | 初始显影 before 帧，不更改保存配方 |
@@ -24,7 +28,7 @@ stdin / stdout 每行一个 JSON 对象；ART 自身 stdout 重定向到 stderr�
 
 预览帧包括 revision、会话、完整尺寸、区域坐标、三通道 256 档真实输出直方图、私有 PNG 文件路径及耗时；可选 `mask` 包含组 ID、覆盖图及其图像坐标范围。每帧文件名唯一，PNG 写入 sRGB chunk。宿主只将自己的缓存路径映射成 `captraw://preview/` URL，保留有限帧；没有 Base64 图像控制消息。前端丢弃过期会话和 revision，连续调整延迟 90 ms 合并。Canvas2D 按 sRGB 解码，1:1 使用 `1/devicePixelRatio` 的 CSS 缩放；不重复执行后端色彩变换。
 
-`EditDocument` 是 XMP 的内存投影，包含固定引擎版本、源路径 / 大小 / SHA-256、完整 ART 配置和控件值。当前核心写入引擎 26，读取 20–26；不恢复旧 JSON、基线 2 / 3 或其他处理版本。`adjustments` 由 C++ 适配器映射，渲染与输出读取完整 ART `ProcParams`。XMP 保存先写旁侧临时文件，再原子 rename；导出成功后才替换目标。以下带历史版本的实现记录不构成旧文件格式兼容承诺；当前文件协议见末尾 XMP 章节。
+`EditDocument` 是 XMP 的内存投影，包含固定引擎版本、源路径 / 大小 / SHA-256、完整 ART 配置和控件值。0.64 安装版写入引擎 27；未发布工作树写入引擎 28、读取 20–28；不恢复旧 JSON、基线 2 / 3 或其他处理版本。`adjustments` 由 C++ 适配器映射，渲染与输出读取完整 ART `ProcParams`。XMP 保存先写旁侧临时文件，再原子 rename；导出成功后才替换目标。以下带历史版本的实现记录不构成旧文件格式兼容承诺；当前文件协议见末尾 XMP 章节。
 
 引擎 14 的颜色分级使用 `adjustments.colorGrading`：`shadows/midtones/highlights/global` 各有 `hue:0..360`、`saturation:0..100`、`luminance:-100..100`，外加 `blending:0..100`、`balance:-100..100`。`validate` 返回同名投影；完整原生参数保存在 `[CaptRAW Color Grading]` 的 `Version=1` / `Values`，顺序为四组三值、混合、平衡。缺省可继承完整配置，显式初始值清除该组；原生加载拒绝版本、长度、范围和有限值错误。共享 Stage 3 在黑白之后处理，全中性旁路，继承参数变化同样刷新预览缓存。详见 [接入与限制](COLOR-GRADING.md)。0.17 已接入 Web 色轮；数值不等于 Adobe 参数。
 
@@ -127,6 +131,8 @@ ART 的 Laplace 修复迭代原来以 OpenMP 同时更新相邻行，造成读�
 
 更新参数时，精确通道系数变化也触发 `WHITEBALANCE`，即使色温 / 色调投影未变。第一次请求详细区域或参数变化使高质量状态失效时，采用 ART 原界面的 `getHighQualComputed → startProcessing(M_HIGHQUAL) → setHighQualComputed`；仅调用 crop 的 `fullUpdate` 会沿用适屏快速去马赛克和预处理。后续已有高质量状态的区域更新仍走原缓存。
 
+0.64 收口另修正适屏白平衡缓存：ART 默认 `WB_BEFORE_HIGH_DETAIL` 在低倍率白平衡更新时复用 RAW 缩放和去马赛克缓存，但首次打开以当前白平衡建立这些缓存，导致同一配方保存重开后像素变化。现在色温、色调或精确系数变化同时触发 `FIRST`，重新建立 RAW 与高光恢复缓存；其他调整仍沿用原有失效范围。未修改白平衡系数、配方格式或完整导出算法。`tests/white-balance-history.mjs` 对 NEF / CR3 / RAF 检查连续调色与全新进程、撤销、重做及前后对比的逐字节 PNG 一致性；旧安装核心须能复现失败。
+
 同一 session / revision 的适屏刷新不会清除已经到达的 detail；不同会话或旧 revision 仍丢弃。完整上下文滤镜的缓存和取消机制不变。新配方标记引擎 13，读取引擎 12 及更早配方；基线 2 / 3 / 4 和已有调整坐标不变。修正作用于所有配方的重新导出，不保留错误的白平衡加载行为，所以旧版 TIFF 不能作为新版本的逐像素兼容目标。旧安装包保留用于历史复现。
 
 `tests/preview-output.mjs` 覆盖相机 / 自动 / 预设 / 吸管 / 手动及仅系数变化、DCP / 矩阵、点与参数曲线、NEF / CR3 / X-Trans / Z5II HE 两模式；独立进程输出相同坐标 ROI。`tests/inspect-preview-output.py` 检查 uint16、ICC 和量化像素，再检查隐藏安装版旧配方 / 自动 / 手动白平衡的全尺寸 TIFF。不同 ART Camera / CustomMult 模式的原始 16 位差异另外记录，不将两种模式一概声称相同。
@@ -174,7 +180,7 @@ Electron `Synchronizer` 以单独的原生进程串行打开目标，再把目�
 
 同步预览单独保存在私有会话缓存，下一批替换上一批文件；窗口已缓存的缩略图不依赖旧 URL。取消结束工作进程并清理本批临时目录，退出清理整个会话缓存。原片、已有 XMP / ARP / 配方不写入；之后通过原有显式保存生成目标配方。此批未修改 C++ / ART 处理语义，引擎 15 / 基线 4 保持。
 
-只支持显式同步；多选时普通调节仍只作用于活动照片。相机配置文件同步、自动联动和批量配方保存后续单独验收。灰阶与 RAW 检查中，旧 0.20 核心同进程预览后输出曾出现间歇性 1/65535 差异，复测未稳定重现，原因未定；桌面实际独立导出进程及本批新旧独立核心对照一致。诊断保留在 `artifacts/synchronize/warm-export-diagnostic.json`，不据此宣称所有运行组合逐像素确定。
+0.20 当时只支持显式同步；多选时普通调节只作用于活动照片。该限制已由本轮未发布的联动事务替代。相机配置文件同步、自动联动和批量配方保存后续单独验收。灰阶与 RAW 检查中，旧 0.20 核心同进程预览后输出曾出现间歇性 1/65535 差异，复测未稳定重现，原因未定；桌面实际独立导出进程及本批新旧独立核心对照一致。诊断保留在 `artifacts/synchronize/warm-export-diagnostic.json`，不据此宣称所有运行组合逐像素确定。
 
 ## 批量导出（0.22）
 
@@ -638,3 +644,140 @@ Shift+L 在此模式切换放大镜，不创建亮度蒙版；Option 拖动临�
 五个 `SplitToning*` 全部出现且没有现代 `ColorGrade*` 字段时，按 [Adobe 官方兼容规则](https://blog.adobe.com/en/publish/2020/10/20/introducing-color-grading)将混合设为 100，中间调 / 全局 / 所有明度设为零。该形状识别为本项目推断，不将只有部分旧字段的现代预设默认化。首次导入返回的说明在预设面板显示，标准化保存后不依赖原五项缺省结构。真实 Adobe 文件只读核验，不进入源码 / 安装包。
 
 文档和预设版本为 `CaptRAW-26_ART-1.26.10_LibRaw-3b20539`，读取 20–26；0.61 会明确拒绝新版本，避免误读稀疏预设。原 JSON 格式仍不读取或迁移。测试入口为 `tests/xmp-partial.mjs` 和 `tests/xmp-partial-e2e.mjs`；后者只使用隐藏、不可聚焦的真实 Electron 窗口，从可见控件操作并检查实际像素、保存恢复和 TIFF16 / ICC。不能据此宣称 Adobe 色彩、曲线采样或画质等效。
+
+
+## 评分元数据与筛选（0.63 / 引擎 26）
+
+`ImageSession` / `EditDocument` 的可选 `rating` 独立于 `Adjustments`，使用 [Adobe XMP Basic](https://developer.adobe.com/xmp/docs/xmp-namespaces/xmp/) 的 `http://ns.adobe.com/xap/1.0/` / `Rating`。-1 为拒绝、0 为未评分、0–5 范围内的实数原样保留；没有值时不制造默认属性；覆盖已有目标时移除目标遗留评分，不让未评分照片继承另一份 XMP 的分数。星级控件提交整数，侧车中的 2.5 仍可显示、筛选和往返。原片嵌入 XMP 优先于冲突的 EXIF 整数评分，直接使用随包 Exiv2 读取，不以是否含 EXIF 判定 XMP 可读性；没有 XMP 时沿用 ART 的相机 / EXIF 整数投影。无效侧车评分在进入编辑前明确拒绝。
+
+评分进入每张照片的历史和未保存快照，单张 / 批量保存成功后才清除对应脏标记。修改或撤销评分不请求显影，不改变调整参数、原生配置或当前像素；前后设置交换保留当前评分。数值输入框和选择框不触发评分快捷键，组合键 0 仍用于缩放。筛选只影响会话列表和多选目标，不关闭照片或删除原片；活动照片不符合筛选时提示并保留画面。
+
+`export` 的可选 `rating` 和批量导出每张快照中的同名值，仅用于输出元数据；缺省保持原有输出行为。桌面先完成 ART 渲染，再用随包 Exiv2 在任务临时 JPEG / TIFF 中写标准 XMP 评分，删除冲突的 `Exif.Image.Rating` / `RatingPercent`；写入失败或取消不会发布最终文件。像素和 ICC 不应变化，独立检查 JPEG / TIFF 的拒绝、零值、小数及批量快照。输入 RAW / XMP / ARP 不作元数据回写。
+
+显影版本仍为 26、基线 4；没有新增渲染参数或私有评分格式。旧应用忽略但保留未知的标准评分属性，旧 JSON 格式仍拒绝。完整 IPTC / GPS / 版权 / 隐私导出策略、颜色标签编辑、排序和自动更新原旁车尚未实现。验证入口为 `tests/ratings.mjs` 和 `tests/ratings-e2e.mjs`，运行后清理独立临时目录；GUI 使用隐藏、不可聚焦的真实 Electron 窗口。
+
+
+## HDR 编辑状态（0.64 / 引擎 27，实验性）
+
+`Adjustments.hdrEnabled` 为可选布尔值，`hdrHeadroom` 为 1–4 EV（默认 3），开启时设置 ART `WhitePoint=2^EV`，自动发布缓存浮点帧；`linearPreview` 仍只控制 SDR 中的可选附件。两者是处理参数，参与原有历史、预设、独立 HDR 同步组、保存和重开，修改使非 RAW 处理缓存失效。未指定的新状态不改旧 ART 配置；删除受管状态或显式关闭恢复白点 1。普通 SDR 默认不分配 GPU 画布。
+
+XMP 开关使用 `crs:HDREditMode` 的 0 / 1；ART EV 余量使用有类型的 `ct:ARTAdjustments.hdrHeadroom`。不解释 / 覆盖 Adobe `HDRMaxValue` 或 `SDR*`，不接受私有开关重复定义或未知模式。非零 Adobe 样本及完整互操作验收仍缺失；实现依据、处理域与证据见 [HDR 接入验证](HDR.md#hdr-编辑与-xmp开发引擎-27未打包)。
+
+原生 `ToneCurve.CaptRAWHDREditMode` 是显式 HDR 分级域标记，只在开启时序列化，默认 SDR 的原生配置不增加字段。旧高白点分级保持原算法；新 HDR 分支按峰值归一化，完整配置可以在独立 CLI 重建。当前界面 / 原生拒绝已知会截断或忽略白点的曲线及黑白组合，尚未支持全部 HDR 工具。`linear.histogram` 为三个 512 桶通道、EV 上限及负值 / 超峰值计数，基于实际交付区域的半浮点预览，非原始 RAW 全量直方图。
+
+当前 `export` 仍只支持 SDR；高白点配方在创建输出前明确报错。HDR 输出、SDR 映射和物理显示未完成，0.63 安装包不受开发接口变化影响。处理版本升为 27 防止旧应用按 SDR 分级误读新配置；基线仍 4。
+
+## 阶段 0：导出快照与无裁框旋转（0.64 收口）
+
+桌面单张 `export(ExportRequest)` 和批量 `exportBatch(BatchExportRequest)` 共用 `ExportDocumentSnapshot`：源路径、原图尺寸、完整 ART 配置、当前调整、评分和源 XMP 包。点击时深拷贝；主进程在对话框之前固定输入，独立核心先 `compose` 再完整输出。无需切换活动原生会话或等待当前预览，活动照片不再代替筛选后的单张选择。没有可见选中照片时禁用导出；菜单名称、尺寸取所选首张。源 XMP 在契约中保留，完整当前元数据融合及隐私策略仍属阶段 6，不能据此宣称所有字段已写入输出。
+
+输出成功后才发布；取消及异常等待工作进程退出后清理临时输出和缓存。共享接口使用 Node 标准路径及结构化数据，没有新增 macOS 专用逻辑；现有原生 `publish`、依赖部署、Windows 进程终止与覆盖行为仍须阶段 8 在目标平台验证，不能把本机通过当作跨平台通过。
+
+Adobe [Camera Raw XMP 定义](https://developer.adobe.com/xmp/docs/xmp-namespaces/crs/)只在 `HasCrop=True` 时定义 `CropAngle`。无裁框自由旋转使用原有 ART 类型扩展保留 `fineRotation`，包括显式零值；不伪造全图裁框。只有活动裁框才由标准 `CropAngle` 单独拥有角度。稀疏自由角度预设移除残留裁框字段但不制造裁框 / 重置；`HasCrop=False` 不激活潜在 `CropAngle`，并披露尚未等效的 Adobe 自由旋转语义。实际裁框旧重复所有权规则不变。
+
+蒙版交互测试默认自行生成确定性 1024×768 中灰纹理与镜头元数据，支持显式外部夹具；成功清理临时图像，失败保留可重现现场。该夹具证明几何、事务与实际像素响应，不是 Adobe 边界或画质参考。
+
+
+## 颗粒与裁切后晕影（本轮组件收口）
+
+颗粒与裁切后晕影的默认投影：native `open` 的 `effectsDefaults` 为 `current` 时返回完整模型字段，数量均为零并走像素旁路；`legacy` 或缺省不补新字段。桌面调用者须依据是否存在已加载配方传入 `loaded ? 'legacy' : 'current'`，然后合并配方，不能把新默认字段混入旧 XMP / ARP。旧配方的缺省字段继续使用原 ART 路径；界面明确提供会改变外观、可撤销的更新操作，未更新的子控件仍显示但禁用。
+
+本轮颗粒采用确定性高斯噪声场，大小调整空间相关尺度，粗糙度调整局部振幅规律；晕影实现独立的裁切坐标覆盖率与三种颜色处理。连续 native 与七项隐藏、不聚焦的完整 App GUI 专项已通过：新图默认完整模型、大小／粗糙度及晕影子项真实改像素、保存重启恢复、27版非零旧XMP保持外观、更新处理可撤销、生产菜单TIFF16／ICC及与保存配方独立核心输出像素一致。最新元数据后端闭环身份为 native `61c955d0…` / 桌面 `e632ff75…`；这是开发构建验证，不是安装包发布。非零 ACR 18.7 渲染的画质等效仍单独待验，不能由同包核心一致性替代。
+
+
+颗粒适屏采样足迹专项：`tests/effects-footprint.py` 编译独立 C++ 核，不构建 ART。固定 3072×2048、50% 线性灰、数量 10，测试大小／粗糙度 (5,0)、(25,50)、(80,100)，各覆盖 skip 2/4/8。参考为全尺寸核生成的 uint16 TIFF 再面积缩小，比较 RMS、相邻相关性、相关长度与高频能量；这不是实际 ART 导出验收。旧单点采样的细颗粒 RMS 比为 1.993/3.988/7.932；足迹滤波后九组 RMS 比为 0.9999964–1.0000012，归一化像素误差最高 0.000952（包含 16 位量化）。原分辨率和偏移 detail 保持同一源像素采样；非整数足迹按 texel 交叠面积加权，不通过除以 skip 人工缩放噪声强度。该滤波只作用于显式新颗粒模型，旧 ART 不变。
+
+足迹测试选择中灰、低数量以隔离采样问题：高数量／高粗糙度可生成超出显示范围的线性值，后续色彩转换和输出截断会影响缩小结果。真实 ART fit/detail、TIFF16／ICC及下述隔离性能专项已通过；强效果极值与 ACR 渲染画质等效仍须另验。
+
+独占性能专项已完成并释放窗口：`CAPTRAW_GRAIN_WIDTH=8200 CAPTRAW_GRAIN_HEIGHT=5500 CAPTRAW_GRAIN_REPEATS=20 node tests/effects-art-footprint.mjs`。固定45.1MP平坦TIFF、已启动引擎、8线程、skip=5；每组20次真实数量变化（10／11交替），按最近秩计算P95。打开至首帧284.9ms。大小／粗糙度5／0、25／50、80／100的P95分别613.6、419.5、361.3ms，完整导出分别8.578、9.145、12.950秒；三组均满足本专项1秒更新门槛。测试前后native SHA256均为`38b3eae5f61385a23e8ebb81acb2a9928295e255bc381667cbd21840bd2e3279`，effects源码保持冻结，成功临时数据已清理。
+
+独占专项像素验证：实际浮点fit与完整线性Rec.709 TIFF16面积缩小的颗粒RMS比为1.003203／1.000984／1.000096，相关长度及高频能量通过阈值；detail源坐标对应正确，输出16位及ICC确认。绝对像素误差在half与TIFF16量化界限内，不宣称逐像素相等；弱细颗粒的噪声差分相对误差可达8.16%，须结合量化界限理解。该专项只覆盖平坦TIFF、已启动引擎的native预览／输出；实际RAW解码首帧、完整GUI输入反馈、多显示器及ACR效果等效另验。
+
+
+## 本轮未发布工作流接口
+
+`SyncRequest` 在原分组同步外支持 `EditCommand`：共享 `operationId`、稀疏 `set`、显式 `unset` 和类型化嵌套 `merge`；`commands` 为每张目标分别提供计算结果，目标路径必须与冻结快照一一对应。`recompute` 在独立核心中逐张执行白平衡、自动影调或自动透视，不复制活动照片的自动结果。全部准备成功后才在工作台提交，失败或取消恢复草稿；连续手势只形成一步历史。历史按选中参与照片的最近操作选择，来源未发生变化时也能撤销其同步目标。
+
+会话保存使用 `SessionSaveRequest` 的完整不可变快照，默认源旁同名 XMP，先确认目标与替换，再原子发布。已确认文件被外部修改时重新确认；读回并合并最新未知 RDF 字段及任意限定符。逐项返回实际发布的 `xmpPacket`，工作台更新当前元数据快照；单张失败可另存，整组完成只在全部未保存编辑成功后结束。会话结束调用 `forgetSession` 回收确认和保存位置。原 RAW 不写入；此前明确保存或导出的文件不随会话取消删除。
+
+预设应用与复制／粘贴复用同一准备／提交事务。悬停使用独立处理器及 revision，只有临时画布帧，不改变编辑、脏状态、其他照片或历史。内置包按稳定 ID、包版本、兼容处理版本和资产校验值安装，与用户副本和收藏分开。ISO 预设按真实 `crs:ISODependent` 序列存储锚点，数值按 log2 ISO 插值；结构和枚举不盲目插值。其真实 ACR 18.7 往返与逐项强度映射仍待验收。
+
+开发工作树写入处理版本 28，已存 20–27 仍可读取。0.64 安装版使用处理版本 27，不能把上述接口接入当成已发布。JPEG／TIFF 的完整当前元数据与隐私策略、全部工具的 ACR 效果对照、安装包和多平台准备仍按冻结范围逐项收尾。
+
+未发布输出选项增加 `resolution`（整数 1–999 PPI）、`jpegQuality`（整数 0–12）、`tiffCompression`（`zip`／`none`）。JPEG 量程、PPI 范围及 TIFF 选项已由[固定本机 18.7 界面](../artifacts/stage-0/acr-reference/iso-amount-187/status.json)实测，优先于泛版本网页；JPEG 使用现有 libjpeg，将级别线性映射为 `max(1, round(level * 100 / 12))`，不宣称 Adobe 私有量化表同级相同。新界面默认 12／ZIP／300 PPI；未提供这些可选字段的旧 API 调用保留质量 95／ZIP／来源打印分辨率。PPI 写入 EXIF 和 XMP；TIFF 还在编码时直接设置实际目录标签，避免依赖 Exiv2 对已有 TIFF 分辨率更新的版本差异。编码复用包内 libtiff，保持 16 位与原 ICC，无新增依赖；单张和批量共享同一 `ExportOptions` 快照。
+
+JPEG／TIFF 的 `metadata` 为 `{include: 'all' | 'all-except-develop' | 'copyright' | 'none', removeLocation: boolean}`，新界面默认保留不含显影设置的元数据。共用 `finishOutputMetadata` 在像素导出后、发布前合并原图元数据及当前文档的 XMP，写入当前调整／评分／版权与实际输出尺寸。`all` 使用 `crs:AlreadyApplied=True`；已知 CaptRAW 处理文档、资产与原片路径字段不嵌入渲染文件，未知顶层字段及限定符继续保留。版权／不保留策略主动过滤非所选数据；ICC 和打印参数仍保留。位置过滤同时处理 EXIF GPS／可能携带位置的相机私有数据、IPTC 地点、XMP 标准地点字段及嵌套／限定符中的对应属性。
+
+原生 `metadataPacket` 提供源文件 XMP 与实际容器类别；`outputMetadata` 仅负责 EXIF／IPTC 同步及过滤。Exiv2 在限定标准标量和大 JPEG XMP 上不能作为保真写入器：最终 XMP 使用同一固定 SDK 的 `XMPFiles` 照片 handler，原生 XMP worker 增加受限于 JPEG／TIFF 的 `file-read`／`file-write`，以 SDK 安全更新处理容器和扩展 JPEG XMP。`native/xmp-files.cmake` 禁用动态媒体、插件和扫描；源码与原有 SDK 相同，无云服务。图像引擎的低层 `export` 是像素编码原语，完整输出必须经过共用 finalizer；无 Electron 的 Node 调用可复用同一后端，`BatchExporter` 在请求元数据策略但未配置 XMP 后端时拒绝启动。任何阶段失败均不发布临时文件；原图和旁车不写入。既有 HDR AVIF 的元数据行为保持，其余新选项仅用于本轮 JPEG／TIFF。
+
+足迹优化只缓存确定性高斯格点，按单次调用、每线程有限行管理；整数／非整数面积权重与积分顺序保持不变，skip=1继续原路径。75组参数／足迹组合及三组45MP整图逐个double一致；配对独立核基准只说明优化有效，不作为产品性能验收，最终性能以本节独占native专项为准。
+
+曾由隐藏GUI发现新子参数漏触发缓存失效：数值变化但画布不变。已在`core.cc`比较`captrawEffects`并触发ALLNORAW；专项改为连续使用最新profile，避免初始profile强制重算掩盖问题。后续统一构建的连续native与完整隐藏GUI均已验证修复。
+
+Paint Overlay枚举已由固定ACR18.7真实取证确认：`artifacts/stage-0/acr-reference/iso-amount-187/status.json`关联的`paint-overlay-selected.ax.txt`显示“绘画叠加”，`acr187-paint-overlay.xmp`记录Version=18.7、PostCropVignetteStyle=3、Amount=-20（SHA256 943500e911d29c086e7298de789f9a48cbc87dda00321f33f3ab17d81771eb2f）。本机SDK读取该真实预设，现有decode得到paint-overlay、vignette=-20，通过；不改枚举。此证据关闭取值/读取映射缺口，不证明显影算法画质等效。Adobe窗口未由本专项操作。
+
+共用运行适配集中在 `desktop-core/runtime`：本机路径相对关系判定替代缓存路径的 POSIX 字符串前缀，原生程序名按平台选择后缀，Node 工作进程终止集中管理。资源层分别拼接目录，主进程保留 Electron 文件对话框边界。Homebrew／Mach-O 构建脚本显式限制 macOS ARM64，并在依赖构建副作用前检查平台；Windows／Linux 仍需实现依赖部署、原子替换和真实进程取消验收，本轮不声称支持。
+
+SDK 文件读回专项修正：上游 `GetXMP` 用模板应用复制对象，会跳过空标量和空复合节点；JPEG 扩展包合并也走同一路径。固定构建以 SDK 自身序列化／解析精确返回已解析树，并以 `DuplicateSubtree` 合并扩展属性，保持显式空值及任意限定符；不改变通用模板应用的删除语义。补丁前后散列写入 XMP 构建清单，避免空色标清除在下一次读回时丢失。
+
+原片身份只属于打开会话及任务快照：`SourceIdentity` 保存字节数、SHA256 和不透明文件版本，读取句柄／路径前后检查一致性；切图按字节数与SHA256校验原内容身份，不能重新绑定为不同内容；文件版本只用于读取期间一致性，移走后原样恢复可直接重试。联动事务、保存、导出及独立对比／透视任务在读取和提交边界校验，取消准备会停止后续文件。未提供身份的低层调用仅能从本次运行开始建立基线，无法追溯此前的替换。原片不加锁，最后检查至原子发布仍有极短竞态，不宣称锁定了不可变原文件。
+
+持久 XMP 的 Source 仍只记录路径、字节数与 SHA256，不包含平台文件版本。保存按最终旁车目录写相对路径，以 `/` 分隔；源旁旁车只记录原片文件名。原片／旁车／资产目录一起移动后，现有读回会相对旁车解析，并核对原片内容；资产仍按 SHA 校验和物化。显式另存和批量另存同样按各自最终目录计算，临时 staging 目录不进入关联。
+
+默认单测中的阴影校准契约不依赖本机 Adobe 参考或原生构建。涉及保留的 18.7 XMP、SDK 和 ART 补丁的专项另以 `node --test tests/calibration-shadow-source.mjs` 执行；需要先准备对应本机参考及原生依赖，不能把缺少这些本机资产当成可重复源码单测通过。
+
+
+### Glow 候选管线（处理版本 28）
+
+固定参考为 `artifacts/stage-0/acr-reference/controls-187/REFERENCE.md` 及同目录原始 XMP/TIFF。实际映射为 GlowStyle 0/1/2 对应漫射/光华/光晕；LocalGlow=0.3 对应局部数量30。[Adobe 官方语义](https://helpx.adobe.com/camera-raw/desktop/edit-and-enhance-images/tone-and-color/vignette-grain-effects-camera-raw.html)说明范围由高光扩展至更广影调，扩散控制空间宽度；漫射/光华暖度由冷到暖，光晕由黄到红，四项共享设置位于全局。
+
+正式状态使用 `glow/glowStyle/glowRange/glowSpread/glowWarmth`，局部仅 `details.glow`（有符号整数 −100～100；全局数量仍为0～100）。全局写标准 CRS，局部沿用现有蒙版 typed RDF；实际 Adobe LocalGlow 可读取，尚未实现或证明 Adobe 可读回新建 CaptRAW 蒙版。预设/同步携带相同字段，强度仅缩放全局数量，共享设置保持固定。未实现 local grain。
+
+独立原生 `CaptRAW Glow` v1 配置保存五个共享参数及原色彩校正区域索引/局部数量。参数缺省或全局/全部局部数量为零时不建立处理配置，避免改变旧像素；已有 ART Gaussian Glow/Halation 区域保持。缓存比较完整新向量。局部使用 ART LinkedMaskManager 保存的原覆盖率（含组件/反选/范围），不使用8位画面覆盖层，也不在已调色像素上重新选范围。
+
+算法是可验证的光学候选，并非 Adobe 私有算法复刻：在线性工作空间选择高光；复用 ART build_gaussian_kernel/Convolution 做能量归一化散射，光晕复用其有限径向1/r²核构造。漫射混合散射与发光源形成柔化，光华叠加散射，光晕仅叠加扩散到发光源之外的有色光；暖度改变散射光通道比例。sigma按源图短边0.00625倍及2^((Spread-50)/25)缩放，明确属于候选尺度定义。当前候选沿用多个局部有符号数量与全局按覆盖率求和后限制为0–100的规则；未因双向控件证据另造公式。真实18.7局部+30截图的拇指位于约65%位置，支持双向控件；同源TIFF的六组局部参考已记录在 `artifacts/stage-0/acr-reference/glow-tiff-187/`，全局40加局部−30确实减弱，全局0加局部−30仍有微小残差；当前负值合成、负值下限限制及重叠组合均未证实Adobe等效。不能将这些公式解释为已知Adobe映射。
+
+1:1沿用现有完整图像上下文路径，再提取视窗，不能用32像素固定边界截断大核。适屏按源图尺寸/skip调整空间支持；实际fit/export缩小后响应、速度、取消及细节一致性等待联合构建验收。现已通过真实参考校验值、SDK全局映射/实际局部读取、补丁锚点/幂等及TypeScript检查；`tests/glow-native.mjs` 6组与 `tests/glow-e2e.mjs` 7组候选闭环已通过，含有符号局部、保存重开及TIFF16；同源ACR灰阶和边缘响应仍有明确差异。不宣称ACR画质同级。
+
+
+### 增强 Look 组件验证边界
+
+固定 RAWmakase MIT 模块的移植算术与渲染管线分别检查。联合 probe 的独立 Rust 差分通过100份RGB表、16500组像素／强度（最大绝对误差9.54e-7）及660组HSV像素／强度；13项非法数据边界拒绝。另只读本机50份Artistic／Modern／Vintage／B&W配置，42个唯一表（19 HSV、23 RGB）全部解码，扩展表的 wire MD5 与 Adobe 属性指纹一致；仅保留源文件、表和probe校验值清单 `artifacts/stage-0/acr-reference/enhanced-tables-187/installed-table-manifest.json`，不把Adobe表资产纳入源码或安装包。
+
+以上证明解码／算术，不证明完整Look应用与ACR画质同级。旧ARP关闭但保留非零值的算子曾被identity Look意外启用，原生像素检查已实证失败；修复后已在联合构建通过原生identity边界及完整13组隐藏GUI，含实际Artistic 01导入；这些不等于Adobe画质验收。
+
+### 已渲染输入相对白平衡候选
+
+新打开且没有已有编辑的已渲染输入使用 `relativeWBModel=art-ctl-v1` 与整数 `incrementalTemperature/incrementalTint`（−100～100，零表示原照）；标准 XMP 仅写 `crs:IncrementalTemperature/IncrementalTint`，不把相对值写入 Kelvin 字段。固定18.7四组 JPEG 参考位于 `artifacts/stage-0/acr-reference/relative-wb-curves-187/`；已证明属性及控件单位。逐字节重建同一JPEG（SHA256 `f337ed7c7e461c6a7963ae6938b7e7cd7da1a2ebba3c63c742d055c5a618f2de`）后，独立ICC转换至D50 Lab的实际对照显示：零值平均ΔE76为0.0223；色温+25、色调−15及组合分别为11.31、9.40、14.96，明确未达到画质门槛。随后以独立ICC方向检查修正Tint符号（负值偏绿、正值偏洋红）；核心 `7f2ca806` 的Tint-only／组合平均ΔE76降至4.34／13.35，温度-only仍11.31，零值不变。幅度和亮度差异仍明确存在，不能把ART-ctl坐标接入当作Adobe语义等效；已另封存11组同源TIFF参考，见 `artifacts/stage-0/acr-reference/curves-refine-tiff-187/white-balance.json`；它们与旧JPEG四组独立，强度和画质仍未对齐。
+
+处理复用固定 ART-ctlscripts 的相对白平衡矩阵（来源、版本及散列见 THIRD_PARTY.md），在 ICC 转换后、通道混合前作用于线性工作空间。新字段缺省保留原 RAW／旧渲染配方的绝对色温路径；相对零值不建立矩阵。旧渲染编辑提供显式恢复原照并进入相对模式的入口，不自动重新解释旧 Kelvin。相机系数与相对偏移不可混用，跨 RAW／已渲染输入固定复制报单位冲突；自动白平衡逐图计算。
+
+自动与吸管从未调色源像素经原 ICC 转换至 Rec.2020，使用 ART 灰世界取样／实际坐标足迹，有限范围求解同一版本矩阵并返回整数偏移。无有效颜色或无法中和时明确报错，整数残差作近似提示；不以关闭自动／吸管回避求解。相对预设强度保持固定并警告，未推测 Adobe 混合预设的 amount 映射。ISO 锚点及创建入口只接受实际解码为 mosaic-raw／linear-raw 且 ISO 有效的照片，不猜扩展名。
+
+联合构建已通过相对WB契约7项、原生5组、隐藏主界面5组，12份旧RAW／已渲染输入TIFF16基线精确保持。新增相对WB的零值、自动／吸管、历史、保存重开和输出属于候选闭环证据；非零Adobe TIFF参考已取得；当前候选与Adobe的强度和画质对照仍未通过。这些是显式专项，不将原生依赖、私有参考或本机SDK混入默认纯单测。
+
+
+### 去边确定性修正（未发布）
+
+ART `PF_correct_RT.cc` 最后一步读取邻域同时原地更新色度，行并行使相同配方在撤销、重开和输出时产生不同像素。现只将该依赖前序结果的更新恢复原单线程行序，并按固定像素顺序求平均色度；高斯及独立逐像素阶段仍并行。新核心1／2／8线程各4次TIFF16输出与修正前原算子的单线程基线精确相等。`global-boundaries-e2e.mjs --native-only` 持续检查跨线程TIFF16一致性，完整GUI仍检查精确撤销。旧多线程竞争的结果不能作为可重现外观保证；这是处理版本28内的缺陷修正。
+
+独立 `export` 也在编码前拒绝输出指向源文件本身、硬链接或符号链接；Node单张／批量发布的覆盖确认及内容身份校验继续负责工作流边界。
+
+
+### 线性渐变端点模型（未发布）
+
+线性叶子使用 `linearGradientModel='full-zero-v1'` 时，原生按连续归一化Full／Zero端点投影并限制覆盖率至0–1，不再乘旧的半跨度／羽化换算。新建及无CaptRAW历史模型的Adobe渐变导入采用此模型；额外羽化固定0，端点直接控制过渡。缺标记的旧编辑保留原处理和像素，界面仅在明确“更新渐变”后升级，可一次撤销。该模型尚不代表双向渐变支持。
+
+参数进入完整ART配置、XMP、预设与同步；`Documents` 明确拥有可选模型字段，撤销后保存会删除该字段，外部未知结构继续保留。原生覆盖、几何坐标服务、画布引导线与完整输出使用同一端点约定；约45MP适屏／1:1／线性TIFF16及跨源复制已通过专项。
+
+### 手动几何候选（未发布）
+
+`PerspectiveSettings.manualModel='art-perspective-v1'` 显式启用 ART 比例、缩放及归一化 X/Y 位移；缺标记继续原有处理路径。仿射取样接在现有透视逆映射前，坐标服务、吸管、蒙版、修复、详细预览及完整输出共用变换。控件支持一次事务、Esc 和多图联动；稀疏命令携带启用状态，保留目标未调节的其他几何参数。
+
+当前 `constrainCrop` 使用 ART 填满及仿射有效区域拟合，尚不是 Adobe 的实际内缩裁框。固定18.7参考已确认 Scale110 为中心放大1.10，但 Aspect／X／Y 的非零数值不能直接映射；约束裁框改变时 `CropConstrainToWarp` 也仍为0。因此这些标准属性尚不按同名数值接入，旧XMP结构继续保留；完整Upright、透明覆盖率及Trim待后续闭环。
+
+### 同源与异片蒙版绑定（未发布）
+
+`MaskGeometryReference` 增加v3，记录当前持有文档的内容身份（size+SHA256）、无绑定的源框架及四项归一化仿射映射。相同内容跨decoder时映射传感器物理点，异片沿用相对位置；再次复制会扁平组合，不累计A→B→B引用链。历史v1/v2缺省仍保留原解释；不把未知作者直接重标为当前照片。当前处理源身份由独立核心实际读文件获得，仅在运行时使用，不进入完整ART配方；可复用的持有绑定随蒙版v3持久化。来源在解码／绑定校验前后核对，Node事务继续核对冻结源身份。
+
+新decoder策略为显式 `sensor-crop-v1`。Canon只在可识别的SensorInfo排他端点错误下恢复包含式最后行列；X-Trans保留CFA对齐前的厂商默认裁切，并使用成熟边缘插值覆盖有效边缘。旧框架省略decoderModel时保留既有解码，10份旧像素基线精确一致。真实TIFF构图和蒙版位置分别检查，不由尺寸正确推断画质或位置已正确。

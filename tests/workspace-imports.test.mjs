@@ -6,9 +6,10 @@ import {join} from 'node:path';
 import {createRequire} from 'node:module';
 import {ENGINE_VERSION,OUTPUT_COLOR_SPACES,autoTone,mergeAdjustmentPatch,partialAdjustmentGroups,validRating} from '@captraw/contracts';
 import {DEFAULT_EXPORT_OPTIONS,validateExportOptions,outputDimensions} from '@captraw/contracts/export-options';
-import {capturePreset,validatePreset,presetValidationBase} from '@captraw/contracts/presets';
-import {SYNC_GROUPS,cameraExposureValue,matchExposureByCameraSettings,synchronizedAdjustments} from '@captraw/contracts/synchronize';
+import {capturePreset,validatePreset,presetValidationBase,presetAmount} from '@captraw/contracts/presets';
+import {SYNC_GROUPS,adjustmentCommand,applyEditCommand,cameraExposureValue,matchExposureByCameraSettings,synchronizedAdjustments} from '@captraw/contracts/synchronize';
 import {NativeEngine} from '@captraw/desktop-core/engine';
+import {executableName,isContainedFile} from '@captraw/desktop-core/runtime';
 import {BatchExporter,validateBatch} from '@captraw/desktop-core/batch-export';
 import {Documents,validateBatchSave} from '@captraw/desktop-core/documents';
 import {saveRecipeWithMasks,restoreRecipeMasks} from '@captraw/desktop-core/mask-assets';
@@ -16,11 +17,15 @@ import {ObjectSelection} from '@captraw/desktop-core/object-selection';
 import {Presets} from '@captraw/desktop-core/presets';
 import {Segmenter} from '@captraw/desktop-core/segmentation';
 import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {XMP,CRS,CT,property,text,encode,decode,encodeAdjustments,decodeAdjustments,readExtension} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,TIFF,property,text,encode,decode,encodeAdjustments,decodeAdjustments,readExtension} from '@captraw/desktop-core/xmp';
 
-test('all 13 public entries resolve to compiled JavaScript in plain Node',()=>{
- const entries=['@captraw/contracts',...['export-options','presets','synchronize'].map(name=>'@captraw/contracts/'+name),...['engine','batch-export','documents','mask-assets','object-selection','presets','segmentation','synchronize','xmp'].map(name=>'@captraw/desktop-core/'+name)];
- for(const entry of entries)assert.match(import.meta.resolve(entry),/\/dist\/[^/]+\.js$/);
+test('all public entries load compiled JavaScript in plain Node',async()=>{
+ const entries=[];
+ for(const name of ['contracts','desktop-core']){
+  const manifest=JSON.parse(await readFile(new URL(`../packages/${name}/package.json`,import.meta.url),'utf8'));
+  for(const key of Object.keys(manifest.exports))entries.push('@captraw/'+name+(key==='.'?'':key.slice(1)));
+ }
+ for(const entry of entries){assert.match(import.meta.resolve(entry),/\/dist\/[^/]+\.js$/);await import(entry);}
  for(const entry of ['@captraw/contracts/src/index.js','@captraw/desktop-core/src/engine.js'])assert.throws(()=>import.meta.resolve(entry),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
  assert.equal(process.versions.electron,undefined);
  assert(!Object.keys(createRequire(import.meta.url).cache).some(path=>/\/node_modules\/electron\//.test(path)));
@@ -33,6 +38,25 @@ test('XMP rating keeps rejection distinct from unrated and accepts the standard 
  const document={path:'/photo.nef',width:100,height:100,artProfile:'',adjustments:structuredClone(presetValidationBase),rating:3};
  assert.doesNotThrow(()=>validateBatchSave({documents:[document]}));
  assert.throws(()=>validateBatchSave({documents:[{...document,rating:6}]}),/评分/);
+ assert.throws(()=>validateBatch({format:'tiff',colorSpace:'srgb',documents:[{...document,rating:6}]}),/评分/);
+});
+
+test('shadow calibration preserves sparse edits, bounds, history commands and preset grouping without native dependencies',()=>{
+ for(const shadowTint of [-100,-1,0,1,100]){
+  const value={calibration:{shadowTint}},properties=encodeAdjustments(value);
+  assert.equal(properties.find(p=>p.ns===CRS&&p.name==='ShadowTint').node.value,String(shadowTint));
+  assert.deepEqual(decodeAdjustments(properties).adjustments,value);
+  assert(!properties.some(p=>p.ns===CRS&&/^(Red|Green|Blue)/.test(p.name)));
+ }
+ for(const shadowTint of [-101,101,.5,NaN,Infinity])assert.throws(()=>encodeAdjustments({calibration:{shadowTint}}),/ShadowTint/);
+ for(const value of ['','0.5','101'])assert.throws(()=>decodeAdjustments([property(CRS,'ShadowTint',text(value))]),/ShadowTint/);
+ const base={...structuredClone(presetValidationBase),calibration:{shadowTint:-12,redHue:9,blueSaturation:8}},next={...base,calibration:{...base.calibration,shadowTint:25}};
+ const command=adjustmentCommand(base,next,'shadow');assert.deepEqual(command.set,{calibration:{shadowTint:25}});assert.deepEqual(applyEditCommand(base,command),next);
+ assert.deepEqual(applyEditCommand(next,adjustmentCommand(next,base,'undo')),base);
+ assert.deepEqual(mergeAdjustmentPatch(base,{calibration:{redHue:17}}).calibration,{...base.calibration,redHue:17});
+ assert.deepEqual(partialAdjustmentGroups({calibration:{shadowTint:25}}),['calibration']);
+ const preset=capturePreset({name:'阴影',group:'验证',groups:['calibration'],adjustments:next});assert.deepEqual(preset.adjustments,{calibration:next.calibration});
+ assert(presetAmount(preset.adjustments,50).warnings.some(w=>w.includes('calibration')));
 });
 
 test('export options validate input types and compute output dimensions',()=>{
@@ -42,6 +66,10 @@ test('export options validate input types and compute output dimensions',()=>{
  assert.deepEqual(outputDimensions(300,200,options),{width:300,height:200});
  for(const size of [{...options.size,width:'600'},{...options.size,dontEnlarge:1}])assert.throws(()=>validateExportOptions({...options,size}));
  assert.throws(()=>validateExportOptions({...options,sharpen:{...options.sharpen,radius:NaN}}));
+ for(const resolution of [0,NaN,72.5,'300',1000])assert.throws(()=>validateExportOptions({...options,resolution}));
+ for(const jpegQuality of [-1,13,5.5,'12'])assert.throws(()=>validateExportOptions({...options,jpegQuality}));
+ assert.throws(()=>validateExportOptions({...options,tiffCompression:'lossy'}));
+ assert.throws(()=>validateExportOptions({...options,tiffCompression:'lzw'}));
 });
 
 test('preset and synchronization contracts select fields and isolate snapshots',()=>{
@@ -66,6 +94,39 @@ test('preset and synchronization contracts select fields and isolate snapshots',
  const partial={...from,adjustments:{...target.adjustments,crop:{x:0,y:0,width:.5,height:.5}}};
  assert.equal(synchronizedAdjustments(partial,target,['crop']).fineRotation,-17);
  assert.throws(()=>synchronizedAdjustments(from,target,['unknown']));
+});
+
+test('linked edits copy changed controls and sparse color bands without replacing target settings',()=>{
+ const before=structuredClone(presetValidationBase),after={...structuredClone(before),exposure:1.25,hsl:{hue:[0,30,0,0,0,0,0,0],saturation:Array(8).fill(0),luminance:Array(8).fill(0)}};
+ const target={...structuredClone(before),contrast:27,temperature:4200,hsl:{hue:[17,5,0,0,0,0,0,0],saturation:[10,0,0,0,0,0,0,0],luminance:Array(8).fill(0)}};
+ const saved=structuredClone(target),command=adjustmentCommand(before,after,'gesture-1'),result=applyEditCommand(target,command);
+ assert.deepEqual(command.set,{exposure:1.25,hsl:{hue:{1:30}}});assert.equal(command.operationId,'gesture-1');
+ assert.equal(result.exposure,1.25);assert.equal(result.contrast,27);assert.equal(result.temperature,4200);
+ assert.deepEqual(result.hsl.hue,[17,30,0,0,0,0,0,0]);assert.equal(result.hsl.saturation[0],10);assert.deepEqual(target,saved);
+ const clear=adjustmentCommand({...before,grain:30},before,'clear');assert.deepEqual(clear.unset,['grain']);assert.equal(applyEditCommand({...target,grain:70},clear).grain,undefined);
+ const curve={...before,parametricCurve:{shadows:12,darks:0,lights:0,highlights:0,splits:[25,50,75]}};
+ assert.deepEqual(adjustmentCommand(before,curve,'curve').set,{parametricCurve:{shadows:12}});
+ assert.deepEqual(adjustmentCommand(before,{...before,calibration:{redHue:10,redSaturation:0,greenHue:0,greenSaturation:0,blueHue:0,blueSaturation:0}},'calibration').set,{calibration:{redHue:10}});
+ const points={...before,curve:[{x:0,y:0},{x:.5,y:.7},{x:1,y:1}]};assert.deepEqual(applyEditCommand(target,adjustmentCommand(before,points,'curve-points')).curve,points.curve);
+ assert.deepEqual(adjustmentCommand(before,before,'noop').set,{});assert.throws(()=>applyEditCommand(target,{set:{},unset:[]}),/无效/);
+ const geometry={enabled:false,horizontal:0,vertical:0,angle:0,shear:0,focalLength:0,cropFactor:1,aspect:1};
+ const lensTarget={...target,perspective:{...geometry,horizontal:27},blackWhite:{enabled:false,mixer:[17,0,0,0,0,0,0,0]}};
+ const linked=applyEditCommand(lensTarget,adjustmentCommand(before,{...before,perspective:{...geometry,enabled:true,vertical:12},blackWhite:{enabled:true,mixer:Array(8).fill(0)}},'nested'));
+ assert.equal(linked.perspective.vertical,12);assert.equal(linked.perspective.horizontal,27);assert.equal(linked.blackWhite.enabled,true);assert.equal(linked.blackWhite.mixer[0],17);
+});
+
+test('linked edits carry tool activation from an already active source while preserving unrelated target controls',()=>{
+ const perspective={enabled:true,horizontal:0,vertical:0,angle:0,shear:0,focalLength:0,cropFactor:1,aspect:1,manualModel:'art-perspective-v1',scale:1};
+ const before={...structuredClone(presetValidationBase),perspective,blackWhite:{enabled:true,mixer:Array(8).fill(0)}};
+ const after={...structuredClone(before),perspective:{...perspective,scale:1.3},blackWhite:{enabled:true,mixer:[0,25,0,0,0,0,0,0]}};
+ const target={...structuredClone(presetValidationBase),perspective:{...perspective,enabled:false,horizontal:17,aspect:1.2},blackWhite:{enabled:false,mixer:[12,0,0,0,0,0,0,0]}};
+ const result=applyEditCommand(target,adjustmentCommand(before,after,'active-tools'));
+ assert.equal(result.perspective.enabled,true);assert.equal(result.perspective.scale,1.3);
+ assert.equal(result.perspective.horizontal,17);assert.equal(result.perspective.aspect,1.2);
+ assert.equal(result.blackWhite.enabled,true);assert.deepEqual(result.blackWhite.mixer,[12,25,0,0,0,0,0,0]);
+ const disabled={...before,blackWhite:{...before.blackWhite,enabled:false}};
+ assert.equal(applyEditCommand(result,adjustmentCommand(before,disabled,'disable')).blackWhite.enabled,false);
+ assert.deepEqual(adjustmentCommand(before,before,'unchanged').merge,undefined);
 });
 
 test('camera exposure matching uses ISO, aperture, shutter and exposure compensation atomically',()=>{
@@ -123,6 +184,28 @@ test('XMP typed state and Documents serialize through their public interfaces',a
  const xmp=new XMP('unused');assert.equal(typeof xmp.read,'function');
 });
 
+test('legacy typed XMP missing flip controls inherits ARP flips while standalone standard Orientation clears them',async()=>{
+ const inherited={...structuredClone(presetValidationBase),flipHorizontal:true,flipVertical:true};
+ const artProfile='[Coarse Transformation]\nRotate=0\nHorizontalFlip=true\nVerticalFlip=true\n';
+ for(const [orientation,rotation] of [[1,0],[3,180],[6,90],[8,270]]){
+  const properties=[property(CT,'EngineVersion',encode(ENGINE_VERSION)),property(CT,'ARTAdjustments',encode({})),property(CT,'ARTProfile',encode(artProfile)),property(TIFF,'Orientation',text(orientation))];
+  const documents=new Documents({read:async()=>({packet:'<legacy/>',properties})});
+  const read=await documents.read('/legacy.xmp');
+  assert.equal(read.artProfile,artProfile);
+  assert.equal(read.adjustments.rotation,rotation);
+  assert(!Object.hasOwn(read.adjustments,'flipHorizontal'),'missing legacy horizontal control must stay absent');
+  assert(!Object.hasOwn(read.adjustments,'flipVertical'),'missing legacy vertical control must stay absent');
+  const merged=mergeAdjustmentPatch(inherited,read.adjustments);
+  assert.equal(merged.flipHorizontal,true);assert.equal(merged.flipVertical,true);
+ }
+ const external=decodeAdjustments([property(TIFF,'Orientation',text(1))]).adjustments;
+ assert.deepEqual(external,{rotation:0,flipHorizontal:false,flipVertical:false});
+ const cleared=mergeAdjustmentPatch(inherited,external);
+ assert.equal(cleared.flipHorizontal,false);assert.equal(cleared.flipVertical,false);
+ const explicit=decodeAdjustments(encodeAdjustments({rotation:0,flipHorizontal:false,flipVertical:false})).adjustments;
+ assert.equal(explicit.flipHorizontal,false);assert.equal(explicit.flipVertical,false);
+});
+
 test('mask asset save and restore keep an ordinary recipe independent',async t=>{
  const directory=await mkdtemp(join(tmpdir(),'captraw-import-masks-'));t.after(()=>rm(directory,{recursive:true,force:true}));
  const recipe={artProfile:'[ART]',adjustments:structuredClone(presetValidationBase)};
@@ -142,33 +225,62 @@ test('Node-only service lifecycle and validation need no native binary or Electr
  const selection=new ObjectSelection('unused','unused','unused','unused',directory,()=>{});
  await assert.rejects(selection.predict('unknown',[]));await selection.cancel();assert.equal(selection.previews.size,0);selection.shutdown();
  const presets=new Presets(join(directory,'presets'),{call:async()=>{throw new Error('unexpected native call');}},directory,new XMP('unused'));
- assert.deepEqual(await presets.list(),{items:[],errors:[]});
+ const packs=await presets.listPacks();assert.equal(packs.length,1);assert.equal(packs[0].id,'org.captraw.validation');assert(packs[0].engineVersions.includes(ENGINE_VERSION));
  const sync=new Synchronizer('unused','unused',directory,()=>{});
  const adjustments=structuredClone(presetValidationBase),source={image:{path:'/source.nef'},adjustments,profile:''},target={image:{path:'/target.nef'},adjustments:structuredClone(adjustments),profile:''};
  assert.deepEqual(await sync.run({source,targets:[target],groups:['light']}),[]);
  await assert.rejects(sync.run({source,targets:[source],groups:['light']}));assert.equal(sync.running,false);sync.cancel();
 });
 
+test('runtime containment rejects sibling prefixes and parent traversal without rejecting dotted filenames',()=>{
+ const directory=join(tmpdir(),'照片 缓存');
+ for(const file of [join(directory,'frame.png'),join(directory,'..frame.png'),join(directory,'mask','像素.png')])assert(isContainedFile(directory,file));
+ for(const file of [directory,join(directory+'-other','frame.png'),join(directory,'..','frame.png')])assert(!isContainedFile(directory,file));
+ assert.equal(executableName('captraw-engine','win32'),'captraw-engine.exe');
+ for(const platform of ['darwin','linux'])assert.equal(executableName('captraw-engine',platform),'captraw-engine');
+});
+
 test('NativeEngine public entry performs real JSON-line RPC with a Node fixture',{timeout:10000},async t=>{
  const directory=await mkdtemp(join(tmpdir(),'captraw-import-engine-'));t.after(()=>rm(directory,{recursive:true,force:true}));
  const script=join(directory,'protocol.mjs');
- await writeFile(script,"import {createInterface} from 'node:readline';\nconsole.log(JSON.stringify({event:'ready'}));\ncreateInterface({input:process.stdin}).on('line',line=>{const {id,method,params}=JSON.parse(line);console.log(JSON.stringify({id,result:{method,params}}));});\n");
+ await writeFile(script,"import {createInterface} from 'node:readline';\nconsole.log(JSON.stringify({event:'ready',engineVersion:'"+ENGINE_VERSION+"'}));\ncreateInterface({input:process.stdin}).on('line',line=>{const {id,method,params}=JSON.parse(line);console.log(JSON.stringify({id,result:{method,params}}));});\n");
  const engine=new NativeEngine(process.execPath,script,join(directory,'cache'));
  const closed=new Promise(done=>engine.child.once('close',done));
  try{await engine.ready;assert(engine.alive);assert.deepEqual(await engine.call('echo',{value:42}),{method:'echo',params:{value:42}});}
  finally{engine.terminate();await closed;}
- assert.equal(engine.alive,false);await assert.rejects(engine.call('echo'),/未运行/);
+ assert.equal(engine.alive,false);engine.terminate();await assert.rejects(engine.call('echo'),/未运行/);
+});
+
+test('NativeEngine refuses mismatched and missing processing versions before sending edits',{timeout:10000},async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'captraw-engine-version-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ for(const [index,version] of [ENGINE_VERSION+'-other',undefined].entries()){
+  const script=join(directory,`wrong-${index}.mjs`),marker=join(directory,`called-${index}`);
+  await writeFile(script,`import {createInterface} from 'node:readline';import {writeFileSync} from 'node:fs';
+console.log(JSON.stringify(${JSON.stringify({event:'ready',engineVersion:version})}));
+createInterface({input:process.stdin}).on('line',()=>writeFileSync(${JSON.stringify(marker)},'unexpected edit'));
+`);
+  const engine=new NativeEngine(process.execPath,script,join(directory,'cache-'+index));
+  const closed=new Promise(done=>engine.child.once('close',done));
+  try{
+   await assert.rejects(engine.ready,/版本不一致/);
+   await assert.rejects(engine.call('update',{revision:1}),/版本不一致/);
+   assert.equal(engine.alive,false);
+   assert.equal(await readFile(marker,'utf8').catch(error=>{assert.equal(error.code,'ENOENT');return null;}),null);
+  }finally{engine.terminate();await closed;}
+ }
 });
 
 test('synchronization cancellation during source-reference validation returns null',{timeout:10000},async t=>{
  const directory=await mkdtemp(join(tmpdir(),'captraw-sync-reference-'));t.after(()=>rm(directory,{recursive:true,force:true}));
  const marker=join(directory,'validating'),script=join(directory,'protocol.mjs');
+ const sourcePath=join(directory,'source.nef'),targetPath=join(directory,'target.nef');
+ await Promise.all([sourcePath,targetPath].map(path=>writeFile(path,'source-reference cancellation fixture')));
  await writeFile(script,`import {createInterface} from 'node:readline';import {writeFileSync} from 'node:fs';
-console.log(JSON.stringify({event:'ready'}));
+console.log(JSON.stringify({event:'ready',engineVersion:${JSON.stringify(ENGINE_VERSION)}}));
 createInterface({input:process.stdin}).on('line',line=>{const {method}=JSON.parse(line);if(method==='validate')writeFileSync(${JSON.stringify(marker)},'started');});
 `);
  const sync=new Synchronizer(process.execPath,script,join(directory,'cache'),()=>{});t.after(()=>sync.cancel());
- const adjustments=structuredClone(presetValidationBase),source={image:{path:'/source.nef'},profile:'',adjustments:{...adjustments,masks:[{id:'leaf',type:'radial'}]}},target={image:{path:'/target.nef'},profile:'',adjustments};
+ const adjustments=structuredClone(presetValidationBase),source={image:{path:sourcePath},profile:'',adjustments:{...adjustments,masks:[{id:'leaf',type:'radial'}]}},target={image:{path:targetPath},profile:'',adjustments};
  const pending=sync.run({source,targets:[target],groups:['masks']});pending.catch(()=>{});
  const deadline=Date.now()+5000;let started=false;
  while(Date.now()<deadline){if(await readFile(marker,'utf8').catch(()=>null)==='started'){started=true;break;}await new Promise(resolve=>setTimeout(resolve,20));}
@@ -183,7 +295,7 @@ test('sparse adjustment merging preserves every unselected channel, wheel, split
  const result=mergeAdjustmentPatch(base,patch),expected=structuredClone(base);
  expected.hsl.hue[4]=0;expected.hsl.saturation[7]=-35;expected.parametricCurve.highlights=-18;expected.parametricCurve.splits[2]=88;expected.colorGrading.midtones.saturation=0;expected.colorGrading.balance=7;expected.calibration.redHue=-5;
  assert.deepEqual(result,expected);assert.deepEqual(base,original);result.hsl.hue[0]=99;assert.equal(base.hsl.hue[0],1);
- assert.deepEqual(partialAdjustmentGroups(patch),['hsl','parametricCurve','colorGrading','calibration']);assert.deepEqual(partialAdjustmentGroups(base),['calibration']);assert.deepEqual(partialAdjustmentGroups({...base,calibration:{redHue:10,redSaturation:0,greenHue:0,greenSaturation:9,blueHue:0,blueSaturation:0}}),[]);
+ assert.deepEqual(partialAdjustmentGroups(patch),['hsl','parametricCurve','colorGrading','calibration']);assert.deepEqual(partialAdjustmentGroups(base),['calibration']);assert.deepEqual(partialAdjustmentGroups({...base,calibration:{shadowTint:0,redHue:10,redSaturation:0,greenHue:0,greenSaturation:9,blueHue:0,blueSaturation:0}}),[]);
 });
 
 test('sparse XMP serialization retains only supplied standard fields across JSON transport',()=>{
@@ -202,4 +314,40 @@ test('legacy complete Split Toning resets modern controls while modern sparse gr
  assert(classic.warnings.some(message=>message.includes('旧式分离色调')));
  const modern=decodeAdjustments([...properties,property(CRS,'ColorGradeMidtoneSat',text(0))]);
  assert.equal(modern.adjustments.colorGrading.blending,undefined);assert.equal(modern.adjustments.colorGrading.global,undefined);assert(!modern.warnings.some(message=>message.includes('旧式分离色调')));
+});
+
+test('HDR uses the standard mode with ART-only headroom and rejects ambiguous state',()=>{
+ for(const enabled of [false,true]){
+  const value={hdrEnabled:enabled,hdrHeadroom:2.25},properties=encodeAdjustments(value);
+  assert.equal(properties.find(p=>p.ns===CRS&&p.name==='HDREditMode').node.value,enabled?'1':'0');
+  assert.deepEqual(readExtension(properties,'ARTAdjustments'),{hdrHeadroom:2.25});
+  assert.deepEqual(decodeAdjustments(properties).adjustments,value);
+  assert.equal(properties.some(p=>p.ns===CRS&&p.name==='HDRMaxValue'),false);
+ }
+ const external=decodeAdjustments([property(CRS,'HDREditMode',text(1)),property(CRS,'HDRMaxValue',text(2))]);
+ assert.deepEqual(external.adjustments,{hdrEnabled:true});
+ assert(external.warnings.some(message=>message.includes('HDRMaxValue')));
+ assert(external.warnings.some(message=>message.includes('尚未等效')));
+ assert.equal(decodeAdjustments([property(CRS,'HDREditMode',text(0))]).warnings.some(message=>message.includes('HDREditMode')),false);
+ for(const value of ['',2,'True'])assert.throws(()=>decodeAdjustments([property(CRS,'HDREditMode',text(value))]));
+ for(const value of [NaN,Infinity,0,4.1,'3'])assert.throws(()=>encodeAdjustments({hdrEnabled:true,hdrHeadroom:value}));
+ assert.throws(()=>encodeAdjustments({hdrEnabled:1}));
+ assert.throws(()=>decodeAdjustments([property(CT,'ARTAdjustments',encode({hdrEnabled:true})),property(CRS,'HDREditMode',text(0))]));
+ assert.throws(()=>decodeAdjustments([property(CT,'ARTAdjustments',encode({hdrEnabled:true}))]));
+});
+
+test('HDR presets and synchronization preserve independently selected light controls',()=>{
+ const base=structuredClone(presetValidationBase),adjustments={...base,hdrEnabled:true,hdrHeadroom:4,exposure:2};
+ const preset=capturePreset({name:'HDR',group:'Test',groups:['hdr'],adjustments});validatePreset(preset);
+ assert.deepEqual(preset.adjustments,{hdrEnabled:true,hdrHeadroom:4});
+ const source={image:{path:'/a.nef',width:100,height:80},adjustments},target={image:{path:'/b.nef',width:100,height:80},adjustments:{...base,exposure:-1}};
+ assert.deepEqual(synchronizedAdjustments(source,target,['hdr']),{...target.adjustments,hdrEnabled:true,hdrHeadroom:4});
+ assert.equal(synchronizedAdjustments(source,target,['light']).hdrEnabled,undefined);
+});
+
+
+test('HDR AVIF export accepts only matching Rec.2020 and validates before worker startup',async()=>{
+ const request={documents:[{path:join(tmpdir(),'source.nef'),width:1200,height:800,artProfile:'',adjustments:structuredClone(presetValidationBase)}],format:'avif',colorSpace:'rec2020'};
+ validateBatch(request);assert.throws(()=>validateBatch({...request,colorSpace:'srgb'}));
+ const exporter=new BatchExporter('unused','unused','unused',()=>{});await assert.rejects(exporter.run({...request,colorSpace:'srgb'},'unused'));assert.equal(exporter.active,false);exporter.shutdown();
 });

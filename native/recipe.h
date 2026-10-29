@@ -4,7 +4,9 @@
 namespace captraw {
 std::vector<double> parametricCurve(const Json &);
 Json defaults();
-Json referencedMasks(const Json &,const art::engine::procparams::ProcParams &);
+Json referencedMasks(const Json &,const art::engine::procparams::ProcParams &,bool bindFrame = false);
+Json maskGeometryReference(const art::engine::procparams::ProcParams &);
+std::string maskGeometryReferenceData(const Json &);
 Json inputProfileSettings(const art::engine::procparams::ColorManagementParams &);
 Json blackWhiteSettings(const art::engine::procparams::ProcParams &);
 Json perspectiveSettings(const art::engine::procparams::ProcParams &);

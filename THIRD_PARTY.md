@@ -4,18 +4,22 @@ CaptRAW 原型采用 GPL-3.0-or-later；完整条款和上游作者声明见 `LI
 
 | 组件 | 用途 | 许可依据 |
 |---|---|---|
-| Adobe XMP Toolkit SDK v2025.03 | XMP / RDF 读写；固定 `581c41213ddcee1fbc72cbb532531102a6617a25` | BSD-3-Clause；保留 RSA MD5 单文件声明。构建脚本记录源码散列与多语言值保留补丁；系统 Expat 只通过 macOS 系统库调用 |
+| RAWmakase enhanced-profile modules | 增强 Look 表的有界解码、色彩编码、插值和强度规则的 C++ 移植依据 | 固定 `e0251f9da4b8b70678388f4ec357ba88f416ac32`；各文件 SHA-256 见 `native/enhanced-profile-sources.json`，MIT 原文见 `native/enhanced-profile.LICENSE`。保留 Copyright (c) 2026 RAWmakase contributors。仅移植该来源模块，不引入其 RAW 引擎、外部 CLI 或 Adobe DNG SDK；上游公开向量与独立 ACR 验收分开记录 |
+| Adobe XMP Toolkit SDK v2025.03 | XMP / RDF 读写及 JPEG／TIFF 的 XMPFiles 照片处理库；固定 `581c41213ddcee1fbc72cbb532531102a6617a25` | BSD-3-Clause；保留 RSA MD5 单文件声明。构建脚本记录源码散列、多语言值及空 RDF 节点保留补丁；不启用媒体、插件或扫描处理器。系统 Expat、CoreFoundation／CoreServices 由 macOS 系统库提供 |
 | ART 1.26.10 / RawTherapee 衍生代码 | RAW 显影、局部处理、输出 | 固定源码中的 `LICENSE.txt`、文件头与 `licenses/`，GPL-3.0-or-later 及单文件声明 |
 | ART 中源自 GIMP 的修复代码 | Laplace 取样修复 | `src/engine/ipspot.cc` 保留 GIMP 作者、原始声明和 GPL-3.0-or-later 条款；没有新增运行依赖 |
 | ART TextureBoost / NLMeans | 全局 / 蒙版纹理、清晰度与局部亮度降噪 | 固定源码 `iptextureboost.cc`、`ipsmoothing.cc`、`nlmeans.cc` 的 GPL-3.0-or-later 声明；原算法未修改，无新增模型或依赖 |
 | ART Tone Equalizer（源自 darktable） | 局部高光、阴影、白色、黑色 | `iptoneequalizer.cc` 保留 Alberto Griggio 与 Aurelien Pierre 的 GPL-3.0-or-later 声明；复用同一算法计算每个区域的明暗增益，无新增依赖 |
 | LibRaw Redlamp 分支 `3b20539d3faa766a370e93a529a3b87edffbf0f6` | 本地相机 RAW、Nikon HE / HE★ 解码 | 选择 LGPL-2.1-only；源码双许可及单文件声明不变，保留 LGPL、CDDL、COPYRIGHT、REDLAMP.md |
+| libavif 1.4.2（开发接入） | HDR AVIF 本地编码；源码 SHA-256 `2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d` | 完整 BSD-2-Clause 及附属声明随包保留；只启用 AOM，不依赖云编码 |
+| AOM 3.15.0 / libvmaf | AV1 编码与实际动态依赖 | AOM 固定源码 revision `de4c1d1edc49723a78954d30a83690aa1937422f`，BSD 声明及 AOM PATENTS 1.0 全文；libvmaf 保留 BSD-2-Clause-Patent LICENSE，实际 Cellar 版本写入清单 |
 | Exiv2、FFTW | 元数据、计算 | 各自 GPL 条款，实际版本记录在依赖清单 |
 | LittleCMS、libjpeg-turbo、libpng、libtiff、libomp 等 | 色彩、编码、并行 | 逐个收集声明和版本，不将它们统一重新许可为 GPL |
 | gtkmm / glibmm / GTK / Cairo 等 | ART CLI 支持代码依赖 | 原库 LGPL / MPL 等条款；不构建或显示 ART 原界面 |
 | Electron / Chromium | 桌面容器 | Electron MIT 与 Chromium 完整第三方声明 |
 | React、Radix UI、Lucide | Web 交互与图标 | 各包随附许可，生成 `licenses/web-dependencies.json` |
 | ART wbpresets.json | 相机白平衡预设 | 随固定 ART 源码提供，文件头注明源于 Darktable；按 ART GPL 源码和各文件声明分发，保留原始头部和来源 |
+| ART-ctlscripts wbchmix.ctl / _artlib.ctl | 相对 WB 与阴影色调原语 | Alberto Griggio，GPL-3.0-or-later；固定提交 `958935312489710b17dc4792d0677bdacf43a95c`。两文件 SHA-256 分别为 `632e5af427df23d6554354cc36092e4d09a3b9dd7f3e5eab4357e84f4565a0b7`、`acd92617016ab136478c9fa0ea9f639a32419033a1e4bd8281e3c8db6da2b457`；移植位于 `native/white-balance.cc` 和 `native/grading.cc`，源码保留版权与来源 |
 | ART ICC / DCP / camconst / profiles | 色彩与相机数据 | 随固定 ART 源码分发，保留原资源及作者信息；ICC 标记 Public Domain / Nobody，DCP 各自保留版权字段，不将“有版权”误标为 CC0 |
 | Lensfun 数据库 | 光学数据 | 随 Lensfun 分发；实际配方列出 LGPL-3.0、GPL-3.0、CC-BY-3.0 和 Public Domain，保留各部分声明 |
 | QA RAW 样本 | 验证解码与画质接入 | raw.pixls.us 的 CC0 样本，来源、模式与校验值在 `tests/fixtures.json`；不装入应用 |

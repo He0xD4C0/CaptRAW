@@ -2,6 +2,9 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
 import { createWriteStream, mkdirSync } from 'node:fs';
+import {join} from 'node:path';
+import {ENGINE_VERSION} from '@captraw/contracts';
+import {terminateProcess} from './runtime.js';
 export class NativeEngine extends EventEmitter {
   child: ChildProcessWithoutNullStreams;
   ready: Promise<void>;
@@ -11,11 +14,11 @@ export class NativeEngine extends EventEmitter {
   private pending = new Map<number, { resolve: (value: any) => void; reject: (reason: Error) => void }>();
   constructor(binary: string, resources: string, cache: string) {
     super(); mkdirSync(cache, { recursive: true });
-    const log = createWriteStream(`${cache}/engine.log`, { flags: 'a' });
-    this.child = spawn(binary, [resources, cache], { stdio: 'pipe' });
+    const log = createWriteStream(join(cache,'engine.log'), { flags: 'a' });
+    this.child = spawn(binary, [resources, cache], { stdio: 'pipe',windowsHide:true });
     this.child.stderr.pipe(log);
     this.ready = new Promise((resolve, reject) => {
-      this.once('ready', resolve); this.child.once('error', error=>{this.exited=true;log.end();reject(error);});
+      this.once('ready', resolve);this.once('startup-error',reject); this.child.once('error', error=>{this.exited=true;log.end();reject(error);});
       this.child.once('exit', (code, signal) => {
         this.exited=true;
         const error = new Error(`显影核心已退出（${code ?? signal}），请重新打开图片重试。`);
@@ -29,7 +32,13 @@ export class NativeEngine extends EventEmitter {
         if (typeof message.id === 'number') {
           const task = this.pending.get(message.id); this.pending.delete(message.id);
           if (task) message.error ? task.reject(new Error(message.error)) : task.resolve(message.result);
-        } else if (message.event === 'ready') this.emit('ready');
+        } else if (message.event === 'ready') {
+          if(message.engineVersion!==ENGINE_VERSION){
+            this.emit('startup-error',new Error(`显影核心与应用处理版本不一致（应用 ${ENGINE_VERSION}；核心 ${message.engineVersion??'未报告'}），请使用同一构建的完整应用。`));
+            this.terminate();return;
+          }
+          this.emit('ready');
+        }
         else this.emit('engine-event', message);
       } catch { log.write(`Invalid protocol line: ${line}\n`); }
     });
@@ -45,5 +54,5 @@ export class NativeEngine extends EventEmitter {
       });
     });
   }
-  terminate() { this.child.kill('SIGTERM'); }
+  terminate() { terminateProcess(this.child); }
 }

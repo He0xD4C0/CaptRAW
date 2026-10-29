@@ -2,6 +2,7 @@ import {join} from 'node:path';
 import {rm} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {NativeEngine} from './engine.js';
+import {sourceFrameOpenSnapshot} from '@captraw/contracts';
 import type {AutoPerspectiveRequest,PerspectiveSettings} from '@captraw/contracts';
 
 export class AutoPerspective {
@@ -15,7 +16,7 @@ export class AutoPerspective {
   const job={id:request.id,worker,cancelled:false};this.current=job;
   let timer:ReturnType<typeof setTimeout>|undefined,listener:(message:any)=>void=()=>{};
   try{
-   await worker.call('open',{path,sessionId:request.sessionId});
+   await worker.call('open',{path,sessionId:request.sessionId,...sourceFrameOpenSnapshot(request.adjustments,request.artProfile,request.sourceFrame)});
    const preview=new Promise<void>((accept,reject)=>{
     listener=message=>{if(message.event==='preview'&&message.frame.revision===1&&message.frame.kind==='fit')accept();else if(message.event==='error')reject(new Error(message.message));};
     worker.on('engine-event',listener);timer=setTimeout(()=>reject(new Error('自动透视准备超时，请重试。')),120000);

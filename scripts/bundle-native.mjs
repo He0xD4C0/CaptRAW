@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 
+if(process.platform!=='darwin'||process.arch!=='arm64')throw new Error('Native packaging currently targets macOS ARM64.');
 const root=resolve(import.meta.dirname,'..'),output=join(root,'build/bundle/native');
 const upstream=join(root,'build/upstream/ART-1e0e12c62e4f329d30bb5624d62a23a663ffbe6b');
 rmSync(output,{recursive:true,force:true});mkdirSync(join(output,'lib'),{recursive:true});
@@ -32,8 +33,9 @@ function collect(source,destination,isExecutable=false){
   cpSync(source,destination);chmodSync(destination,0o755);
   const cellar=source.match(/^(.*\/Cellar\/([^/]+)\/([^/]+))\//);
   if(cellar)formulas.set(cellar[2],{version:cellar[3],path:cellar[1]});
+  const ownID=isExecutable?undefined:run('otool',['-D',source]).split('\n')[1]?.trim();
   for(const dep of deps(source)){
-    if(system(dep))continue;
+    if(system(dep)||dep===ownID)continue;
     const original=locate(dep,source);
     if(realpathSync(original)===source)continue; // LC_ID_DYLIB
     const target=join(output,'lib',basename(original));
@@ -53,6 +55,10 @@ cpSync(join(upstream,'LICENSE.txt'),join(licenses,'ART-GPL-3.0.txt'));
 cpSync(join(upstream,'AUTHORS.txt'),join(licenses,'ART-AUTHORS.txt'));
 cpSync(join(upstream,'licenses'),join(licenses,'ART-components'),{recursive:true});
 const manifest=[];
+const avifSource=join(root,'build/upstream/libavif-1.4.2'),avifBuild=join(root,'build/vendor/libavif');
+mkdirSync(join(licenses,'libavif'),{recursive:true});cpSync(join(avifSource,'LICENSE'),join(licenses,'libavif/LICENSE'));cpSync(join(avifBuild,'build.json'),join(licenses,'libavif/build.json'));
+manifest.push({name:'libavif',license:'BSD-2-Clause and bundled notices',...JSON.parse(readFileSync(join(avifBuild,'build.json'),'utf8'))});
+
 const xmpSource=join(root,'build/upstream/xmp-sdk');mkdirSync(join(licenses,'xmp'),{recursive:true});
 cpSync(join(xmpSource,'LICENSE'),join(licenses,'xmp/LICENSE'));
 for(const name of ['MD5.cpp','MD5.h'])cpSync(join(xmpSource,'third-party/zuid/interfaces',name),join(licenses,'xmp',name));
@@ -72,15 +78,17 @@ for(const [name,info] of [...formulas].sort(([a],[b])=>a.localeCompare(b))){
     for(const entry of readdirSync(dir,{withFileTypes:true})){
       const path=join(dir,entry.name);
       if(entry.isDirectory()&&entry.name!=='.brew')copyNotices(path,depth+1);
-      else if(entry.isFile()&&/licen[sc]e|copying|copyright|notice|authors/i.test(entry.name)){
+      else if(entry.isFile()&&/licen[sc]e|copying|copyright|notice|authors|patents/i.test(entry.name)){
         const relative=path.slice(info.path.length+1).replaceAll('/','__');cpSync(path,join(dest,relative));
       }
     }
   }
   copyNotices(info.path);
+  if(name==='aom')cpSync(join(avifBuild,'AOM-PATENTS'),join(dest,'PATENTS'));
+
   const text=existsSync(formula)?readFileSync(formula,'utf8'):'';
   const metadata=installed.find(f=>f.name===name);
-  manifest.push({name,version:info.version,license:metadata?.license||text.match(/^\s*license\s+(.+)$/m)?.[1],source:metadata?.urls?.stable?.url||text.match(/^\s*url\s+"([^"]+)"/m)?.[1],sha256:metadata?.urls?.stable?.checksum||text.match(/^\s*sha256\s+"([^"]+)"/m)?.[1]});
+  manifest.push({name,version:info.version,...(name==='aom'?{revision:'de4c1d1edc49723a78954d30a83690aa1937422f',patentsSHA256:'661fb8e504744e95587b556b94a58343448300606a41bea8c7a9b97125696e61'}:{}),license:metadata?.license||text.match(/^\s*license\s+(.+)$/m)?.[1],source:metadata?.urls?.stable?.url||text.match(/^\s*url\s+"([^"]+)"/m)?.[1],sha256:metadata?.urls?.stable?.checksum||text.match(/^\s*sha256\s+"([^"]+)"/m)?.[1]});
 }
 const web=[];
 const dependencyGraph=JSON.parse(run('pnpm',['--filter','@captraw/desktop','list','--prod','--depth','Infinity','--json']));

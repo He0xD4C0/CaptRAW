@@ -23,7 +23,7 @@ const checks=[],metrics=[],errors=[];let app,page,core,revision=0,sequence=0,con
 const pass=name=>{checks.push(name);console.log('PASS',name);};
 const viewport=()=>page.getByTestId('viewport'),pending=()=>page.getByTestId('repair-gesture-pending');
 const undo=()=>page.getByRole('button',{name:'撤销',exact:true}),redo=()=>page.getByRole('button',{name:'重做',exact:true});
-const list=()=>page.getByRole('list',{name:'修复点列表'}).getByRole('listitem');
+const list=()=>page.getByRole('list',{name:'修复列表'}).getByRole('listitem');
 const frame=()=>page.evaluate(()=>window.__repairEvents.filter(e=>e.event==='preview'&&e.frame.kind==='fit').at(-1)?.frame);
 const fits=()=>page.evaluate(()=>window.__repairEvents.filter(e=>e.event==='preview'&&e.frame.kind==='fit').length);
 const pixels=async()=>createHash('sha256').update(await page.locator('canvas').evaluate(c=>c.toDataURL())).digest('hex');

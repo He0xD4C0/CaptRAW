@@ -21,8 +21,10 @@ try{
  const standardFields={Exposure2012:.75,Contrast2012:17,Highlights2012:-21,Shadows2012:32,Whites2012:11,Blacks2012:-14,Vibrance:18,Saturation:-9,Texture:23,Clarity2012:-16,Dehaze:12,PostCropVignetteAmount:-20,GrainAmount:7,Sharpness:44,SharpenRadius:1.2,LuminanceSmoothing:19,ColorNoiseReduction:28,LensManualDistortionAmount:-24,VignetteAmount:36,Temperature:5200,Tint:12};
  const mappedFixture=`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="mapped" xmlns:c="${CRS}" c:ProcessVersion="15.4" ${Object.entries(standardFields).map(([key,value])=>`c:${key}="${value}"`).join(' ')}/></rdf:RDF></x:xmpmeta>`;
  const mappedFile=join(out,'all-standard-fields.xmp');writeFileSync(mappedFile,mappedFixture);const mapped=await documents.read(mappedFile);
- assert.deepEqual({...mapped.adjustments},{exposure:.75,contrast:17,highlights:-21,shadows:32,whites:11,blacks:-14,vibrance:18,saturation:-9,texture:23,clarity:-16,dehaze:12,vignette:-20,grain:7,sharpening:44,sharpenRadius:1.2,luminanceNoise:19,colorNoise:28,lensManualDistortion:-24,lensVignette:36,temperature:5200,tint:12});
+ assert.deepEqual({...mapped.adjustments},{exposure:.75,contrast:17,highlights:-21,shadows:32,whites:11,blacks:-14,vibrance:18,saturation:-9,texture:23,clarity:-16,dehaze:12,vignette:-20,grain:7,sharpening:44,sharpenRadius:1.2,luminanceNoise:19,colorNoise:28,lensManualDistortion:-24,lensVignette:36,temperature:5200,tint:12,grainModel:'procedural-v1',postCropVignetteStyle:'highlight-priority'});
  assert(mapped.warnings.some(value=>value.includes('尚未验证与 ACR 的像素等效')));
+ const legacyMapped=decodeAdjustments((await xmp.call('write',mappedFixture,[property(CT,'EngineVersion',encode('CaptRAW-27_ART-1.26.10_LibRaw-3b20539'))])).properties).adjustments;
+ assert.equal(legacyMapped.grainModel,undefined);assert.equal(legacyMapped.postCropVignetteStyle,undefined);
  const mappedDocument={xmpPacket:mapped.xmpPacket,engineVersion:ENGINE_VERSION,source:{path:source,size:readFileSync(source).length,sha256:before},artProfile:profile,adjustments:{...image.adjustments,...mapped.adjustments},baselineVersion:4};
  const mappedSaved=join(out,'all-standard-fields-saved.xmp');writeFileSync(mappedSaved,await documents.serialize(mappedDocument));const mappedProperties=(await xmp.read(mappedSaved)).properties,mappedExtension=readExtension(mappedProperties,'ARTAdjustments');
  for(const [key,value] of Object.entries(standardFields))assert.equal(Number(lookup(mappedProperties,CRS,key).value),value,key);
@@ -106,7 +108,7 @@ try{
  const orientedCrop={x:.12,y:.18,width:.65,height:.61},cropAngle=-7.5,cropFields={HasCrop:'True',CropTop:.12,CropLeft:.21,CropBottom:.77,CropRight:.82,CropAngle:cropAngle};
  const cropFixture=`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="crop" xmlns:c="${CRS}" xmlns:t="${TIFF}" t:Orientation="6" ${Object.entries(cropFields).map(([key,value])=>`c:${key}="${value}"`).join(' ')}/></rdf:RDF></x:xmpmeta>`;
  const cropFile=join(out,'crop-rotation.xmp');writeFileSync(cropFile,cropFixture);const cropRead=await documents.read(cropFile);
- assert.deepEqual(cropRead.adjustments,{rotation:90,crop:orientedCrop,fineRotation:cropAngle});
+ assert.deepEqual(cropRead.adjustments,{rotation:90,flipHorizontal:false,flipVertical:false,crop:orientedCrop,fineRotation:cropAngle});
  const cropDocument={...mappedDocument,adjustments:{...image.adjustments,...cropRead.adjustments}},savedCrop=join(out,'crop-rotation-saved.xmp');
  writeFileSync(savedCrop,await documents.serialize(cropDocument));const cropProperties=(await xmp.read(savedCrop)).properties,cropExtension=readExtension(cropProperties,'ARTAdjustments');
  assert.equal(lookup(cropProperties,TIFF,'Orientation').value,'6');assert.equal(lookup(cropProperties,CRS,'HasCrop').value,'True');assert.equal(Number(lookup(cropProperties,CRS,'CropTop').value),cropFields.CropTop);assert.equal(Number(lookup(cropProperties,CRS,'CropLeft').value),cropFields.CropLeft);assert.equal(Number(lookup(cropProperties,CRS,'CropBottom').value),cropFields.CropBottom);assert.equal(Number(lookup(cropProperties,CRS,'CropRight').value),cropFields.CropRight);assert.equal(Number(lookup(cropProperties,CRS,'CropAngle').value),cropAngle);
@@ -115,7 +117,8 @@ try{
  const partialCropFixture=cropFixture.replace(` c:CropAngle="${cropAngle}"`,''),partialCropFile=join(out,'partial-crop.xmp');writeFileSync(partialCropFile,partialCropFixture);const partialCropRead=await documents.read(partialCropFile);
  assert(!Object.hasOwn(partialCropRead.adjustments,'crop'));assert(partialCropRead.warnings.some(value=>value.includes('Crop*')&&value.includes('不完整')));
  const mirroredCropFile=join(out,'mirrored-orientation-crop.xmp');writeFileSync(mirroredCropFile,cropFixture.replace('t:Orientation="6"','t:Orientation="2"'));const mirroredCropRead=await documents.read(mirroredCropFile);
- assert(!Object.hasOwn(mirroredCropRead.adjustments,'crop'));assert(mirroredCropRead.warnings.some(value=>value.includes('镜像方向')));assert(mirroredCropRead.warnings.some(value=>value.includes('Crop*')));
+ assert.deepEqual(mirroredCropRead.adjustments,{rotation:0,flipHorizontal:true,flipVertical:false,crop:{x:.18,y:.12,width:.61,height:.65},fineRotation:cropAngle});
+ const mirroredFields=encodeAdjustments(mirroredCropRead.adjustments);assert.equal(lookup(mirroredFields,TIFF,'Orientation').value,'2');for(const name of ['CropTop','CropLeft','CropBottom','CropRight','CropAngle'])assert.equal(Number(lookup(mirroredFields,CRS,name).value),cropFields[name]);
  for(const [source,label,pattern] of [[cropFixture,'crop-order','裁切矩形'],[cropFixture,'crop-boolean','HasCrop'],[cropFixture,'crop-angle','CropAngle'],[cropFixture,'orientation','Orientation']]){
   let packet=source;
   if(label==='crop-boolean')packet=packet.replace('c:HasCrop="True"','c:HasCrop="Yes"');
@@ -126,6 +129,55 @@ try{
   await assert.rejects(documents.read(file),new RegExp(pattern,'i'));
  }
  pass('partial crop groups are not applied and invalid orientation, boolean, rectangle or angle values are rejected');
+ // CropAngle is conditional on HasCrop=True in Adobe's Camera Raw namespace.
+ // Free ART rotation must survive without inventing an active crop rectangle.
+ for(const fineRotation of [-12.25,8.5,0,undefined]){
+  const values={crop:null,...(fineRotation===undefined?{}:{fineRotation})};
+  const packet=(await xmp.call('write',cropFixture,encodeAdjustments(values))).packet,properties=(await xmp.call('read',packet)).properties;
+  assert.equal(lookup(properties,CRS,'HasCrop').value,'False');assert.equal(lookup(properties,CRS,'CropAngle').value,'0');
+  assert.deepEqual(readExtension(properties,'ARTAdjustments'),fineRotation===undefined?{}:{fineRotation});
+  const decoded=decodeAdjustments(properties);assert.equal(decoded.adjustments.crop,null);assert.equal(decoded.adjustments.fineRotation,fineRotation);
+  if(fineRotation)assert(decoded.warnings.some(value=>value.includes('尚未等效为 Adobe 裁框角度')));
+ }
+ const freeDocument={...cropDocument,xmpPacket:readFileSync(savedCrop,'utf8'),adjustments:{...image.adjustments,crop:null,fineRotation:8.5}},freeFile=join(out,'free-rotation.xmp');
+ writeFileSync(freeFile,await documents.serialize(freeDocument));
+ for(let round=0;round<3;round++){
+  const restored=await documents.read(freeFile);assert.equal(restored.adjustments.crop,null);assert.equal(restored.adjustments.fineRotation,8.5);
+  writeFileSync(freeFile,await documents.serialize(restored));
+ }
+ const freeProfile=await e.call('compose',{path:source,width:image.width,height:image.height,adjustments:(await documents.read(freeFile)).adjustments,artProfile:profile});
+ assert.match(freeProfile.artProfile,/\[Crop\][^\[]*\nEnabled=false\n/);assert.match(freeProfile.artProfile,/\[Rotation\][^\[]*\nDegree=8\.5\n/);
+ pass('SDK serialization and three Documents save/read cycles retain free angles and explicit zero independently of disabled cropping');
+ const inactiveAngle=(await xmp.call('write',cropFixture,[property(CRS,'HasCrop',text('False'))])).packet;
+ const inactiveRead=decodeAdjustments((await xmp.call('read',inactiveAngle)).properties);
+ assert.equal(inactiveRead.adjustments.crop,null);assert(!Object.hasOwn(inactiveRead.adjustments,'fineRotation'));assert(inactiveRead.warnings.some(value=>value.includes('HasCrop=False')));
+ const inactiveOwned=(await xmp.call('write',inactiveAngle,[property(CT,'EngineVersion',encode(ENGINE_VERSION)),property(CT,'ARTAdjustments',encode({fineRotation:8.5}))])).packet;
+ assert.equal(decodeAdjustments((await xmp.call('read',inactiveOwned)).properties).adjustments.fineRotation,8.5);
+ const sparsePacket=(await xmp.call('write',readFileSync(freeFile,'utf8'),encodeAdjustments({fineRotation:-12.25}))).packet,sparseProperties=(await xmp.call('read',sparsePacket)).properties;
+ for(const name of Object.keys(cropFields))assert.equal(lookup(sparseProperties,CRS,name),undefined,name);
+ assert.equal(decodeAdjustments(sparseProperties).adjustments.fineRotation,-12.25);assert(!Object.hasOwn(decodeAdjustments(sparseProperties).adjustments,'crop'));
+ for(const crop of [null,undefined])for(const fineRotation of [NaN,Infinity,-46,46,'8.5'])assert.throws(()=>encodeAdjustments({crop,fineRotation}),/旋转角度/);
+ pass('HasCrop=False never activates a latent CropAngle; sparse angle serialization removes stale crop fields without manufacturing a crop or reset');
+ for(const version of [ENGINE_VERSION,'CaptRAW-23_ART-1.26.10_LibRaw-3b20539'])for(const fineRotation of [cropAngle,9]){
+  const duplicate=(await xmp.call('write',cropFixture,[property(CT,'EngineVersion',encode(version)),property(CT,'ARTAdjustments',encode({fineRotation}))])).packet,properties=(await xmp.call('read',duplicate)).properties;
+  if(version===ENGINE_VERSION)assert.throws(()=>decodeAdjustments(properties),/重复定义/);
+  else{const decoded=decodeAdjustments(properties);assert.equal(decoded.adjustments.fineRotation,fineRotation);assert.equal(decoded.warnings.some(value=>value.includes('冲突')),fineRotation!==cropAngle);}
+ }
+ pass('active crop angles retain current-version duplicate rejection and legacy equal-value migration / conflicting-private-value precedence');
+ const freePreset=await store.create({name:'自由旋转',group:'几何',groups:['crop'],adjustments:freeDocument.adjustments}),freeExport=join(out,'free-preset.xmp');
+ await store.rename(freePreset.id,'自由旋转已改名','几何');await store.exportFile(freePreset.id,freeExport);
+ const freePresetRead=await documents.read(freeExport);assert.equal(freePresetRead.adjustments.fineRotation,8.5);assert.equal(freePresetRead.adjustments.crop,null);
+ const cropTarget={image,profile,adjustments:{...image.adjustments,crop:orientedCrop,fineRotation:-3}},freeApplied=(await store.apply(freePreset.id,cropTarget,sync))[0];
+ assert.equal(freeApplied.adjustments.crop,null);assert.equal(freeApplied.adjustments.fineRotation,8.5);assert.match(freeApplied.profile,/\[Crop\][^\[]*\nEnabled=false\n/);assert.match(freeApplied.profile,/\[Rotation\][^\[]*\nDegree=8\.5\n/);
+ const sparseFile=join(out,'angle-only.xmp');writeFileSync(sparseFile,(await xmp.call('write','',encodeAdjustments({fineRotation:-12.25}))).packet);
+ const sparsePreset=await store.importFile(sparseFile),sparseExport=join(out,'angle-only-export.xmp');await store.rename(sparsePreset.id,'仅角度','几何');await store.exportFile(sparsePreset.id,sparseExport);
+ assert.deepEqual((await documents.read(sparseExport)).adjustments,{fineRotation:-12.25});
+ const sparseApplied=(await store.apply(sparsePreset.id,cropTarget,sync))[0];assert.equal(sparseApplied.adjustments.fineRotation,-12.25);assert.deepEqual(sparseApplied.adjustments.crop,orientedCrop);assert.match(sparseApplied.profile,/\[Crop\][^\[]*\nEnabled=true\n/);
+ const uncroppedTarget={...cropTarget,adjustments:{...cropTarget.adjustments,crop:null}},sparseUncropped=(await store.apply(sparsePreset.id,uncroppedTarget,sync))[0];
+ assert.equal(sparseUncropped.adjustments.crop,null);assert.equal(sparseUncropped.adjustments.fineRotation,-12.25);assert.match(sparseUncropped.profile,/\[Crop\][^\[]*\nEnabled=false\n/);
+ await store.update(freePreset.id,{name:'重置角度',group:'几何',groups:['crop'],adjustments:{...freeDocument.adjustments,fineRotation:0}});
+ const resetApplied=(await store.apply(freePreset.id,uncroppedTarget,sync))[0];assert.equal(resetApplied.adjustments.fineRotation,0);assert.equal(resetApplied.adjustments.crop,null);assert.match(resetApplied.profile,/\[Rotation\][^\[]*\nEnabled=false\n/);
+ pass('real Presets create/import/rename/export/update and Synchronizer preserve free/sparse/reset angles; sparse presets preserve target crop state');
  for(const [name,value] of [['Contrast2012','12.5'],['Texture','-101'],['GrainAmount','-1'],['SharpenRadius','3.1'],['LensManualDistortionAmount','1.5'],['VignetteAmount','-101']]){
   const invalid=join(out,`invalid-${name}.xmp`);writeFileSync(invalid,mappedFixture.replace(`c:${name}="${standardFields[name]}"`,`c:${name}="${value}"`));
   await assert.rejects(documents.read(invalid),new RegExp(name));
@@ -155,11 +207,13 @@ try{
  assert(conflict.warnings.some(v=>v.includes('坐标不一致')&&v.includes('Adobe')&&v.includes('优先级尚未验证')));
  for(const name of ['Medium Contrast','Strong Contrast','Vendor Curve']){
   const named=await readCurvePacket(curvePacket(name,{ToneCurvePV2012:rawBent}));assert.deepEqual(named.adjustments,{curve:bent});
-  assert(named.warnings.some(v=>v.includes(name)&&v.includes('对应关系尚未验证')&&v.includes('优先级尚未验证')));
+  if(name==='Vendor Curve')assert(named.warnings.some(v=>v.includes(name)&&v.includes('对应关系尚未验证')&&v.includes('优先级尚未验证')));
+  else assert(named.warnings.some(v=>v.includes(name)&&v.includes('已核验的 ACR 18.7 曲线坐标不一致')&&v.includes('保存为 Custom')));
+  assert.equal(lookup(encodeAdjustments(named.adjustments),CRS,'ToneCurveName2012').value,'Custom');
  }
  const custom=await readCurvePacket(curvePacket('Custom',{ToneCurvePV2012:['0, 0','255, 255'],ToneCurvePV2012Red:rawBent}));assert.deepEqual(custom.adjustments,{curve:identity,redCurve:bent});assert(!custom.warnings.some(v=>v.includes('ToneCurveName2012')));
  const collinear=await readCurvePacket(curvePacket('Linear',{ToneCurvePV2012:['0, 0','128, 128','255, 255']}));assert(!collinear.warnings.some(v=>v.includes('坐标不一致')));assert.equal(collinear.adjustments.curve.length,3);
- pass('conflicting Linear and unverified named curves disclose CaptRAW coordinate use without claiming Adobe precedence; Custom may have a straight master and bent RGB');
+ pass('conflicting Linear, mismatched known presets and unverified names preserve file coordinates and save Custom; a straight master may retain bent RGB');
  const valid=await readCurvePacket(curvePacket(undefined,{ToneCurvePV2012:[' +0 , 0 ','6.4e1, +9.6e1','255, 255']}));assert.deepEqual(valid.adjustments,{curve:bent});
  for(const value of ['', ' ', ', 0', '0,', ' , 0', '0, ', '0,,0', '0,0,0', 'NaN,0', 'Infinity,0', '1e309,0', '0x10,0', '0b10,0', '0o10,0', '64oops,0', '1_0,0', '-1,0', '256,0', '0,256', '0,-1', '0,NaN', '1e,0', '64 65,0'])await assert.rejects(readCurvePacket(curvePacket(undefined,{ToneCurvePV2012:[value,'255,255']})),/XMP 曲线点无效/);
  for(const items of [[],['0,0'],['0,0','64,96','64,100','255,255'],['64,96','0,0'],Array.from({length:129},(_,i)=>`${i},${i}`)])await assert.rejects(readCurvePacket(curvePacket(undefined,{ToneCurvePV2012:items})),/XMP 曲线点/);
@@ -217,6 +271,27 @@ try{
  const migratedBlackWhiteSaved=await documents.serialize(migratedBlackWhite),migratedBlackWhiteProperties=(await xmp.call('read',migratedBlackWhiteSaved)).properties,migratedBlackWhiteExtension=readExtension(migratedBlackWhiteProperties,'ARTAdjustments');
  assert.equal(lookup(migratedBlackWhiteProperties,CRS,'ConvertToGrayscale').value,'True');assert.equal(lookup(migratedBlackWhiteProperties,CRS,'GrayMixerGreen').value,'31');assert.deepEqual(migratedBlackWhiteExtension.blackWhite,{base:blackWhite.base});
  pass('version 22 private black-and-white settings migrate to ConvertToGrayscale and GrayMixer fields while preserving the ART base');
+ const ownershipAdjustments={...mappedDocument.adjustments,parametricCurve,hsl,colorGrading,blackWhite,crop:orientedCrop,fineRotation:cropAngle};
+ const ownershipPrivate=encode(ownershipAdjustments),privateBlackWhite=lookup(ownershipPrivate.fields,CT,'blackWhite'),privateBase=lookup(privateBlackWhite.fields,CT,'base');
+ const future=property(CT,'FutureControl',encode({nested:'保留 未知结构'}));ownershipPrivate.fields.push(future);privateBlackWhite.fields.push(future);
+ privateBase.qualifiers=[property('urn:xmp-ownership-test','QualifiedBase',{fields:[property('urn:xmp-ownership-test','Text',{value:'保留 未知限定符'})]})];
+ const ownershipPacket=(await xmp.call('write','',[property(CT,'EngineVersion',encode('CaptRAW-22_ART-1.26.10_LibRaw-3b20539')),property(CT,'ARTAdjustments',ownershipPrivate)])).packet;
+ const originalPrivate=lookup((await xmp.call('read',ownershipPacket)).properties,CT,'ARTAdjustments'),originalBlackWhite=lookup(originalPrivate.fields,CT,'blackWhite');
+ const expectedStandard=(await xmp.call('write','',encodeAdjustments(ownershipAdjustments).filter(p=>p.ns!==CT))).properties;
+ let ownershipDocument={...mappedDocument,xmpPacket:ownershipPacket,adjustments:ownershipAdjustments};
+ for(let generation=0;generation<2;generation++){
+  const packet=await documents.serialize(ownershipDocument),properties=(await xmp.call('read',packet)).properties,extension=lookup(properties,CT,'ARTAdjustments'),native=readExtension(properties,'ARTAdjustments');
+  for(const key of standardKeys)assert(!Object.hasOwn(native,key),`${key} must not return in the private extension after lossless merge`);
+  assert.equal(native.fineRotation,undefined);assert.equal(native.blackWhite.enabled,undefined);assert.equal(native.blackWhite.mixer,undefined);assert.deepEqual(native.blackWhite.base,blackWhite.base);
+  for(const p of expectedStandard)assert.deepEqual(lookup(properties,p.ns,p.name),p.node,`${p.name} retains its standard value`);
+  assert.deepEqual(lookup(extension.fields,CT,'FutureControl'),lookup(originalPrivate.fields,CT,'FutureControl'));
+  const savedBlackWhite=lookup(extension.fields,CT,'blackWhite');assert.deepEqual(lookup(savedBlackWhite.fields,CT,'FutureControl'),lookup(originalBlackWhite.fields,CT,'FutureControl'));
+  assert.deepEqual(lookup(savedBlackWhite.fields,CT,'base').qualifiers,lookup(originalBlackWhite.fields,CT,'base').qualifiers);
+  const file=join(out,`standard-ownership-${generation}.xmp`);writeFileSync(file,packet);ownershipDocument=await documents.read(file);assert.deepEqual(ownershipDocument.adjustments.blackWhite,blackWhite);
+ }
+ const privateBoundary=await documents.serialize({...mappedDocument,xmpPacket:ownershipPacket,adjustments:{...ownershipAdjustments,crop:null,fineRotation:3,sharpenRadius:.25}});
+ const boundaryExtension=readExtension((await xmp.call('read',privateBoundary)).properties,'ARTAdjustments');assert.equal(boundaryExtension.fineRotation,3);assert.equal(boundaryExtension.sharpenRadius,.25);
+ pass('lossless migration owns all standard fields and nested black-and-white controls across two saves, preserving unknown structures/base qualifiers and genuine free-angle/legacy-radius ART state');
  const groupedPacket=readFileSync(groupedSaved,'utf8'),groupedPacketProperties=(await xmp.call('read',groupedPacket)).properties,legacyGroupsExtension=readExtension(groupedPacketProperties,'ARTAdjustments');
   legacyGroupsExtension.parametricCurve=parametricCurve;legacyGroupsExtension.hsl=hsl;legacyGroupsExtension.colorGrading=colorGrading;
  const migratedGroupsPacket=(await xmp.call('write',groupedPacket,[
@@ -299,6 +374,7 @@ try{
   assert.deepEqual(lookup(properties,CRS,'ToneCurvePV2012').items.map(item=>item.value),decimals);assert.equal(lookup(properties,CRS,'ToneCurveName2012').value,'Custom');
  }
  pass('0.34 fractional XMP coordinates, including real near-integer decimals, survive three document save/reopen cycles exactly');
+ await e.call('open',{path:source,sessionId:'white-balance-raw'});
  const wbPreview=e.preview(17);await e.call('update',{revision:17,adjustments:image.adjustments,artProfile:profile});await wbPreview;
  const wb=await e.call('whiteBalance',{mode:'camera'}),wbFile=join(out,'camera-white-balance.xmp');
  await saveRecipeWithMasks(e,wbFile,{...document,adjustments:{...adjustments,...wb}},v=>documents.serialize(v));
