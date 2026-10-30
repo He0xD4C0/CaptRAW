@@ -21,7 +21,7 @@ CaptRAW uses a local native core to process RAW files. It provides non-destructi
 | Item | Version | Status |
 |---|---|---|
 | Published installation baseline | 0.64 | DMG, source archive, and acceptance identity registered |
-| Installation-experience candidate | `0.66.0-beta.1` / `febb036106312f9b` | Trustworthy color pipeline and scoped macOS photography workflow delivered; full ACR replacement remains future work |
+| Installation-experience candidate | `0.66.0-beta.1` / `7d826b9f7274736b` | Trustworthy color pipeline and scoped macOS photography workflow delivered; full ACR replacement remains future work |
 
 The [macOS closeout ledger](docs/CLOSEOUT.md) defines the current development and acceptance scope. Installation, signing, hashes, and prior acceptance evidence are recorded in the [acceptance log](docs/ACCEPTANCE.md). Earlier ACR research and acceptance records are retained for traceability only.
 

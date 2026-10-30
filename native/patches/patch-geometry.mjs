@@ -183,9 +183,21 @@ export function patchGeometryMapping(upstream){
  });
  patch('dcrop.cc','// Include versioned manual framing in the complete-canvas rule.',s=>{
   const anchor='perspective.angle || perspective.shear)) ||';
-  if(!s.includes(anchor))throw new Error('ART manual perspective detail canvas anchor missing');
-  return s.replace(anchor,`perspective.angle || perspective.shear || perspective.captrawManual)) ||
+  if(s.includes(anchor)){
+   return s.replace(anchor,`perspective.angle || perspective.shear || perspective.captrawManual)) ||
         // Include versioned manual framing in the complete-canvas rule.`);
+  }
+  const insert='    leftBorder = skips(rqx1 - bx1, skip);';
+  if(!s.includes(insert))throw new Error('ART manual perspective detail canvas anchor missing');
+  return s.replace(insert,`    // Include versioned manual framing in the complete-canvas rule.
+    const auto &perspective=parent->params.perspective;
+    if ((perspective.enabled && (perspective.horizontal || perspective.vertical || perspective.angle || perspective.shear || perspective.captrawManual)) ||
+        (parent->params.lensProf.needed() &&
+         (parent->params.lensProf.useDist || parent->params.lensProf.useCA))) {
+        orx=ory=0;orw=parent->fw;orh=parent->fh;
+    }
+
+`+insert);
  });
  // Signed framing is stored in its public units and lowered only at the
  // existing ART sampler. Legacy aspect/scale/offset arithmetic stays intact.
