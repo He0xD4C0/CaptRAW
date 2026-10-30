@@ -9,7 +9,7 @@
 | A 统一基线 | 已完成 | 无 | 仅后续相关改动触发回归 | [候选cda4985d708663da](../build/candidates/cda4985d708663da/manifest.json)、[集中结果](../build/candidates/cda4985d708663da/checks.json)、对应source.tar.gz；类型检查、91单测、XMP及4项工作流专项通过；未验收身份层已隔离 |
 | B 原生文档与导入 | 已完成 | 无 | 仅相关改动触发回归 | [0.65.0-beta.1安装体验候选](../release/0.65.0-beta.1/CaptRAW-0.65.0-beta.1-arm64.dmg)、[统一证据](../release/0.65.0-beta.1/evidence/release.json)、[界面](../release/0.65.0-beta.1/evidence/native-edit.png)；安装版隐藏工作流及断网／禁Homebrew核心通过；对应源码与许可同目录 |
 | C 软件色彩链路 | 已完成 | 无 | 仅相关改动触发回归 | [0.66.0-beta.1安装体验候选](../release/0.66.0-beta.1/CaptRAW-0.66.0-beta.1-arm64.dmg)、[统一证据](../release/0.66.0-beta.1/evidence/release.json)、[可见界面](../release/0.66.0-beta.1/evidence/color-experience.png)、[候选结果](../release/0.66.0-beta.1/evidence/checks.json)；无ICC输入选择与资产保存、Display P3半浮点适屏／1:1／对比、目标色域proof、JPEG/TIFF16 ICC均在同一安装版通过；216个固定样本平均ΔE00 0.00965、最大0.06528；不宣称硬件校准 |
-| D 摄影工作流收尾 | 已完成 | 无 | 仅后续相关改动触发回归 | [0.66.0-beta.1安装包](../release/0.66.0-beta.1/CaptRAW-0.66.0-beta.1-arm64.dmg)、[最终候选结果](../release/0.66.0-beta.1/evidence/checks.json)、[工作流截图](../release/0.66.0-beta.1/evidence/workflow/mask-edit.png)、[性能报告](../release/0.66.0-beta.1/evidence/workflow/performance-smoke.json)；安装版通过两图选择／评分／色标／联动曝光／径向蒙版／批量原生保存／重开／整组取消，以及会话保存恢复、预设与ISO、连续修复、双图TIFF16输出；45MP RAW首帧1.19秒，基础更新最大402.90毫秒；源码、许可和下一轮多平台清单同目录 |
+| D 摄影工作流收尾 | 已完成 | 无 | 仅后续相关改动触发回归 | [0.66.0-beta.1安装包](https://github.com/He0xD4C0/CaptRAW/releases/tag/v0.66.0-beta.1)、[最终候选结果](../release/0.66.0-beta.1/evidence/checks.json)、[工作流截图](../release/0.66.0-beta.1/evidence/workflow/mask-edit.png)、[性能报告](../release/0.66.0-beta.1/evidence/workflow/performance-smoke.json)；安装版通过两图选择／评分／色标／联动曝光／径向蒙版／批量原生保存／重开／整组取消，以及会话保存恢复、预设与ISO、连续修复、双图TIFF16输出；45MP RAW首帧1.20秒，基础更新最大402.29毫秒；源码、许可和下一轮多平台清单同目录 |
 
 ## 原生文档约定
 

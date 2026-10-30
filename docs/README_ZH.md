@@ -21,7 +21,7 @@ CaptRAW 使用本地原生核心处理 RAW，提供非破坏编辑、多图会�
 | 对象 | 版本 | 状态 |
 |---|---|---|
 | 已发布安装基线 | 0.64 | 已登记 DMG、源码归档和验收身份 |
-| 安装体验候选 | `0.66.0-beta.1`／`047645006a542a92` | 可信色彩链路与冻结范围内的 macOS 摄影工作流已交付；完整 ACR 替代仍属后续目标 |
+| 安装体验候选 | `0.66.0-beta.1`／`db9f4790e1e9d594` | 可信色彩链路与冻结范围内的 macOS 摄影工作流已交付；完整 ACR 替代仍属后续目标 |
 
 当前施工与验收范围以 [macOS 收尾账本](CLOSEOUT.md) 为准。安装、签名、哈希与既有验收记录见 [验收记录](ACCEPTANCE.md)。旧对齐研究和历史验收仅作追溯。
 
@@ -51,7 +51,7 @@ CaptRAW 使用本地原生核心处理 RAW，提供非破坏编辑、多图会�
 
 ## 安装与使用
 
-安装体验候选：[0.66.0-beta.1 DMG](../release/0.66.0-beta.1/CaptRAW-0.66.0-beta.1-arm64.dmg)。对应源码、依赖许可和证据位于同目录；本机副本为 `~/Applications/CaptRAW-0.66.0-beta.1.app`。稳定安装基线 `../release/CaptRAW-0.64.0-arm64.dmg` 和 `~/Applications/CaptRAW-0.64.app` 保留。
+安装体验候选：[CaptRAW 0.66.0-beta.1](https://github.com/He0xD4C0/CaptRAW/releases/tag/v0.66.0-beta.1)。本机副本为 `~/Applications/CaptRAW-0.66.0-beta.1.app`。稳定安装基线 `../release/CaptRAW-0.64.0-arm64.dmg` 和 `~/Applications/CaptRAW-0.64.app` 保留。
 
 0.64 和 0.66 使用 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证。本机安装通过不代表其他机器的 Gatekeeper。`0.66.0-beta.1` 完成本轮批准的 macOS 色彩与工作流范围，不宣称完整 ACR 同级。
 

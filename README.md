@@ -21,7 +21,7 @@ CaptRAW uses a local native core to process RAW files. It provides non-destructi
 | Item | Version | Status |
 |---|---|---|
 | Published installation baseline | 0.64 | DMG, source archive, and acceptance identity registered |
-| Installation-experience candidate | `0.66.0-beta.1` / `047645006a542a92` | Trustworthy color pipeline and scoped macOS photography workflow delivered; full ACR replacement remains future work |
+| Installation-experience candidate | `0.66.0-beta.1` / `db9f4790e1e9d594` | Trustworthy color pipeline and scoped macOS photography workflow delivered; full ACR replacement remains future work |
 
 The [macOS closeout ledger](docs/CLOSEOUT.md) defines the current development and acceptance scope. Installation, signing, hashes, and prior acceptance evidence are recorded in the [acceptance log](docs/ACCEPTANCE.md). Earlier ACR research and acceptance records are retained for traceability only.
 
@@ -51,7 +51,7 @@ CaptRAW may use algorithms that differ from Adobe Camera Raw and does not promis
 
 ## Install and use
 
-Installation-experience candidate: [0.66.0-beta.1 DMG](release/0.66.0-beta.1/CaptRAW-0.66.0-beta.1-arm64.dmg). The matching source, dependency licenses, and evidence are in the same directory. The local copy is `~/Applications/CaptRAW-0.66.0-beta.1.app`. The stable installation baseline remains available as `release/CaptRAW-0.64.0-arm64.dmg` and `~/Applications/CaptRAW-0.64.app`.
+Installation-experience candidate: [CaptRAW 0.66.0-beta.1](https://github.com/He0xD4C0/CaptRAW/releases/tag/v0.66.0-beta.1). The local copy is `~/Applications/CaptRAW-0.66.0-beta.1.app`. The stable installation baseline remains available as `release/CaptRAW-0.64.0-arm64.dmg` and `~/Applications/CaptRAW-0.64.app`.
 
 0.64 and 0.66 are ad-hoc signed and have no Developer ID signature or Apple notarization. A successful local installation does not establish Gatekeeper acceptance on another machine. `0.66.0-beta.1` closes the approved macOS color and workflow scope; it is not a claim of complete ACR parity.
 
