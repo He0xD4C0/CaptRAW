@@ -189,7 +189,8 @@ export function patchGeometryMapping(upstream){
   }
   const insert='    leftBorder = skips(rqx1 - bx1, skip);';
   if(!s.includes(insert))throw new Error('ART manual perspective detail canvas anchor missing');
-  return s.replace(insert,`    // Include versioned manual framing in the complete-canvas rule.
+  return s.replace(insert,`    // CaptRAW: preserve the complete intermediate transform canvas.
+    // Include versioned manual framing in the complete-canvas rule.
     const auto &perspective=parent->params.perspective;
     if ((perspective.enabled && (perspective.horizontal || perspective.vertical || perspective.angle || perspective.shear || perspective.captrawManual)) ||
         (parent->params.lensProf.needed() &&
