@@ -1,17 +1,18 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {existsSync,mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
-import {join} from 'node:path';
+import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {patchLinearGradient} from '../../native/patches/patch-linear-gradient.mjs';
 
-test('Full/Zero patch only changes the Gradient case and replays safely',()=>{
+const sourceFixture=process.env.CAPTRAW_ART_SOURCE_ARCHIVE||resolve('build/upstream/art.tar.gz');
+test('Full/Zero patch only changes the Gradient case and replays safely',{skip:existsSync(sourceFixture)?false:'Requires the pinned ART source archive'},()=>{
  const work=mkdtempSync(join(tmpdir(),'captraw-linear-gradient-patch-'));let passed=false;
  try{
   const prefix='ART-1e0e12c62e4f329d30bb5624d62a23a663ffbe6b/src/engine/';
   const files=['procparams.h','procparams.cc','masks.cc'];mkdirSync(join(work,'src/engine'),{recursive:true});
-  for(const name of files)writeFileSync(join(work,'src/engine',name),execFileSync('tar',['-xOf','build/upstream/art.tar.gz',prefix+name]));
+  for(const name of files)writeFileSync(join(work,'src/engine',name),execFileSync('tar',['-xOf',sourceFixture,prefix+name]));
   const before=readFileSync(join(work,'src/engine/masks.cc'),'utf8');
   const rectangle=s=>s.slice(s.indexOf('        case AreaMask::Shape::RECTANGLE:'),s.indexOf('        case AreaMask::Shape::POLYGON:'));
   assert(rectangle(before).includes('Coord center'));

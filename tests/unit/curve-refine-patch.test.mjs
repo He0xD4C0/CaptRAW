@@ -1,7 +1,7 @@
 // Source-only: imports .mjs directly. No contracts/dist, compiler or engine.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {existsSync,mkdtempSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -11,11 +11,12 @@ import {compareCurveRefineChains} from '../support/curve-refine-chain-fixture.mj
 
 const files=['procparams.h','procparams.cc','iptonecurve.cc','iprgbcurves.cc'];
 const prefix='ART-1e0e12c62e4f329d30bb5624d62a23a663ffbe6b/';
+const sourceFixture=process.env.CAPTRAW_ART_SOURCE_ARCHIVE||resolve('build/upstream/art.tar.gz'),fixtureTest=(name,run)=>test(name,{skip:existsSync(sourceFixture)?false:'Requires the pinned ART source archive'},run);
 let lastFailure;
 function fixture(run){
  const work=mkdtempSync(join(tmpdir(),'captraw-curve-refine-patch-'));let passed=false;
  try{
-  execFileSync('tar',['-xzf',resolve('build/upstream/art.tar.gz'),'-C',work,'--strip-components=1',...files.map(f=>prefix+'src/engine/'+f)]);
+  execFileSync('tar',['-xzf',sourceFixture,'-C',work,'--strip-components=1',...files.map(f=>prefix+'src/engine/'+f)]);
   const path=name=>join(work,'src/engine',name),read=name=>readFileSync(path(name),'utf8');
   run({work,path,read});passed=true;
  }finally{
@@ -28,7 +29,7 @@ function fixture(run){
 }
 const section=(s,start,end)=>{const i=s.indexOf(start);assert(i>=0,start);const j=s.indexOf(end,i+start.length);assert(j>i,end);return s.slice(i,j);};
 
-test('pinned source patch prepares opt-in state, equality and ARP ownership',()=>fixture(({work,read})=>{
+fixtureTest('pinned source patch prepares opt-in state, equality and ARP ownership',()=>fixture(({work,read})=>{
  patchCurveRefine(work);
  const h=read('procparams.h'),cc=read('procparams.cc');
  assert(h.includes('std::string captrawCurveRefineModel;'));
@@ -51,7 +52,7 @@ test('pinned source patch prepares opt-in state, equality and ARP ownership',()=
  assert(!cc.includes('CurveRefineSaturation'),'Unknown standard XMP must not become a native activation signal');
 }));
 
-test('zero and identity dispatch retain the complete old rendering branch verbatim',()=>fixture(({work,read})=>{
+fixtureTest('zero and identity dispatch retain the complete old rendering branch verbatim',()=>fixture(({work,read})=>{
  const before=read('iptonecurve.cc');patchCurveRefine(work);const after=read('iptonecurve.cc');
  const legacy=section(before,'        if (single_curve) {','        if (editWhatever) {');
  const retained=section(after,'        if (single_curve) {','        if (editWhatever) {');
@@ -65,7 +66,7 @@ test('zero and identity dispatch retain the complete old rendering branch verbat
  assert(after.includes('if (amount == 0.f || (ir == ig && ig == ib) || (tc.curve && tc.curve->isIdentity())) return;'));
 }));
 
-test('only the primary point curve is mixed; gamma, RGB channels and parametric code stay intact',()=>fixture(({work,read})=>{
+fixtureTest('only the primary point curve is mixed; gamma, RGB channels and parametric code stay intact',()=>fixture(({work,read})=>{
  patchParametricCurve(work);
  const before=read('iptonecurve.cc'),rgb=read('iprgbcurves.cc');patchCurveRefine(work);const after=read('iptonecurve.cc');
  assert.equal(section(after,'        const auto adjust =','        DiagonalCurve tcurve2'),section(before,'        const auto adjust =','        DiagonalCurve tcurve2'));
@@ -79,7 +80,7 @@ test('only the primary point curve is mixed; gamma, RGB channels and parametric 
  assert(active.includes('tc.Set(*ccurve, whitept);\n                apply_tc('));
 }));
 
-test('finite compensation extends boundary deltas without replacing or clamping the STD baseline',()=>fixture(({work,read})=>{
+fixtureTest('finite compensation extends boundary deltas without replacing or clamping the STD baseline',()=>fixture(({work,read})=>{
  patchCurveRefine(work);const source=read('iptonecurve.cc'),body=section(source,'void refine_point_rgb(','void apply_point_curve_refine(');
  const std=body.indexOf('standard.Apply(r, g, b);'),gray=body.indexOf('if (amount == 0.f || (ir == ig && ig == ib)'),guard=body.indexOf('if (!std::isfinite(ir)'),weighted=body.indexOf('WeightedStdToneCurve');
  assert(std<gray&&gray<guard&&guard<weighted);
@@ -105,13 +106,13 @@ test('finite compensation extends boundary deltas without replacing or clamping 
  assert(combined.includes('if (mr != sr) r += mr - sr;'));
 }));
 
-test('patch composes after existing parametric patch and replays byte-exactly',()=>fixture(({work,read})=>{
+fixtureTest('patch composes after existing parametric patch and replays byte-exactly',()=>fixture(({work,read})=>{
  patchParametricCurve(work);patchCurveRefine(work);const once=files.map(read);
  patchParametricCurve(work);patchCurveRefine(work);assert.deepEqual(files.map(read),once);
  assert(read('procparams.cc').includes('captrawParametric == other.captrawParametric'));
 }));
 
-test('missing source anchor rejects before any file is written',()=>fixture(({work,path,read})=>{
+fixtureTest('missing source anchor rejects before any file is written',()=>fixture(({work,path,read})=>{
  writeFileSync(path('iptonecurve.cc'),read('iptonecurve.cc').replace('        if (single_curve && editImgFloat &&','        if (changed_fixture && editImgFloat &&'));
  const before=files.map(read);assert.throws(()=>patchCurveRefine(work),/anchor mismatch/);assert.deepEqual(files.map(read),before);
 }));
@@ -131,12 +132,12 @@ test('nonzero Contrast and inherited curve2 keep the optimized gray baseline in 
  }
 });
 
-test('partially applied patch cannot be mistaken for a complete replay',()=>fixture(({work,path,read})=>{
+fixtureTest('partially applied patch cannot be mistaken for a complete replay',()=>fixture(({work,path,read})=>{
  const before=read('procparams.cc');patchCurveRefine(work);writeFileSync(path('procparams.cc'),before);
  const partial=files.map(read);assert.throws(()=>patchCurveRefine(work),/Partial curve-refine patch/);assert.deepEqual(files.map(read),partial);
 }));
 
-test('tampered mixer rejects replay before touching other files',()=>fixture(({work,path,read})=>{
+fixtureTest('tampered mixer rejects replay before touching other files',()=>fixture(({work,path,read})=>{
  patchCurveRefine(work);writeFileSync(path('iptonecurve.cc'),read('iptonecurve.cc').replace('std::min(tc.whitept,ir)','std::min(65535.f,ir)'));
  const before=files.map(read);assert.throws(()=>patchCurveRefine(work),/Modified curve-refine patch/);assert.deepEqual(files.map(read),before);
 }));
