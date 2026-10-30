@@ -21,7 +21,7 @@ CaptRAW 使用本地原生核心处理 RAW，提供非破坏编辑、多图会�
 | 对象 | 版本 | 状态 |
 |---|---|---|
 | 已发布安装基线 | 0.64 | 已登记 DMG、源码归档和验收身份 |
-| 安装体验候选 | `0.66.0-beta.1`／`db9f4790e1e9d594` | 可信色彩链路与冻结范围内的 macOS 摄影工作流已交付；完整 ACR 替代仍属后续目标 |
+| 安装体验候选 | `0.66.0-beta.1`／`febb036106312f9b` | 可信色彩链路与冻结范围内的 macOS 摄影工作流已交付；完整 ACR 替代仍属后续目标 |
 
 当前施工与验收范围以 [macOS 收尾账本](CLOSEOUT.md) 为准。安装、签名、哈希与既有验收记录见 [验收记录](ACCEPTANCE.md)。旧对齐研究和历史验收仅作追溯。
 
@@ -92,7 +92,7 @@ pnpm package  # 构建当前源码的 ARM64 应用和 DMG
 
 `pnpm dev` 要求原生核心和 XMP worker 已经构建。打包前还需按 [分割模型说明](SEGMENTATION.md) 准备并校验本地模型资产。安装后的产品不依赖 Homebrew、FFmpeg 或 Python。
 
-HDR AVIF 构建固定 AOM 3.15.0 与 libavif 1.4.2。升级 Homebrew 依赖后，应先核对版本并更新固定信息。若 Electron 下载站点不可达，可在构建环境设置 `ELECTRON_MIRROR`；安装器仍校验 Electron 包内的摘要。
+HDR AVIF 构建接受 AOM 3.15.0 或 3.15.2 与 libavif 1.4.2，并记录实际安装版本及对应源码 revision。变更 Homebrew 依赖后，应先增加并核对已知固定项再构建。若 Electron 下载站点不可达，可在构建环境设置 `ELECTRON_MIRROR`；安装器仍校验 Electron 包内的摘要。
 
 ## 验证
 

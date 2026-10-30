@@ -119,7 +119,7 @@ Rec.2020 外的负通道截到 0，超过 10000 cd/m² 的通道截到 PQ 上限
 
 AVIF 元数据取自 ART 输出元数据对象，保留可编码的源 EXIF / XMP 及 IPTC→XMP，应用当前 XMP 评分、正常方向与实际像素尺寸；显式评分移除冲突的旧 EXIF Rating / RatingPercent。源 RAW 和旁车只读。完整 IPTC / GPS / 隐私策略及各种 MakerNote 的跨应用保真仍未验收。编码取消通过终止独立 worker 实现，成功后才发布；批量同名编号保留已有文件。
 
-依赖固定 [libavif 1.4.2](https://github.com/AOMediaCodec/libavif/releases/tag/v1.4.2)，源归档 SHA-256 为 `2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d`。只启用本机 AOM 3.15.0；构建脚本核对版本，不引入其他 codec、libyuv、云服务或产品端 Python / FFmpeg。打包收集实际 AOM→libvmaf 依赖、完整 libavif LICENSE、AOM LICENSE / PATENTS 和 libvmaf 专利许可；固定 AOM revision、PATENTS 校验值和实际 Cellar 版本写清单。归档 / 许可说明见 THIRD_PARTY.md。
+依赖固定 [libavif 1.4.2](https://github.com/AOMediaCodec/libavif/releases/tag/v1.4.2)，源归档 SHA-256 为 `2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d`。只启用已知的 AOM 3.15.0 或 3.15.2；构建脚本核对版本及对应 revision，不引入其他 codec、libyuv、云服务或产品端 Python / FFmpeg。打包收集实际 AOM→libvmaf 依赖、完整 libavif LICENSE、AOM LICENSE / PATENTS 和 libvmaf 专利许可；匹配的 AOM revision、PATENTS 校验值和实际 Cellar 版本写清单。归档 / 许可说明见 THIRD_PARTY.md。
 
 验证分别使用 `tests/integration/color/hdr-export.mjs` 的实际原生输出、独立 ART Float32 参考与 FFmpeg / dav1d 解码；另由隐藏 GUI 操作单张 / 批量、调整快照、后续编辑、取消保留目标及缩放。最终结果以各目录 `report.json` 为准，候选验证未通过前不宣称安装版完成。原生专项在禁网 / 禁 Homebrew 读取的沙箱内运行；GUI 子进程未加该沙箱，浏览器 HTTP 已禁用。普通截图不能作为 HDR 亮度证据。
 

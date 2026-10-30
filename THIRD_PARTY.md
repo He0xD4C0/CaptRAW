@@ -13,7 +13,7 @@ CaptRAW 原型采用 GPL-3.0-or-later；项目版权声明见 `COPYRIGHT`，完�
 | ART Tone Equalizer（源自 darktable） | 局部高光、阴影、白色、黑色 | `iptoneequalizer.cc` 保留 Alberto Griggio 与 Aurelien Pierre 的 GPL-3.0-or-later 声明；复用同一算法计算每个区域的明暗增益，无新增依赖 |
 | LibRaw Redlamp 分支 `3b20539d3faa766a370e93a529a3b87edffbf0f6` | 本地相机 RAW、Nikon HE / HE★ 解码 | 选择 LGPL-2.1-only；源码双许可及单文件声明不变，保留 LGPL、CDDL、COPYRIGHT、REDLAMP.md |
 | libavif 1.4.2（开发接入） | HDR AVIF 本地编码；源码 SHA-256 `2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d` | 完整 BSD-2-Clause 及附属声明随包保留；只启用 AOM，不依赖云编码 |
-| AOM 3.15.0 / libvmaf | AV1 编码与实际动态依赖 | AOM 固定源码 revision `de4c1d1edc49723a78954d30a83690aa1937422f`，BSD 声明及 AOM PATENTS 1.0 全文；libvmaf 保留 BSD-2-Clause-Patent LICENSE，实际 Cellar 版本写入清单 |
+| AOM 3.15.0/3.15.2 / libvmaf | AV1 编码与实际动态依赖 | AOM 分别固定源码 revision `de4c1d1edc49723a78954d30a83690aa1937422f`／`af3dc9aadc793c1b00edc003e3fc19a44fdeb574`，BSD 声明及 AOM PATENTS 1.0 全文；libvmaf 保留 BSD-2-Clause-Patent License，实际 Cellar 版本写入清单 |
 | Exiv2、FFTW | 元数据、计算 | 各自 GPL 条款，实际版本记录在依赖清单 |
 | LittleCMS、libjpeg-turbo、libpng、libtiff、libomp 等 | 色彩、编码、并行 | 逐个收集声明和版本，不将它们统一重新许可为 GPL |
 | gtkmm / glibmm / GTK / Cairo 等 | ART CLI 支持代码依赖 | 原库 LGPL / MPL 等条款；不构建或显示 ART 原界面 |

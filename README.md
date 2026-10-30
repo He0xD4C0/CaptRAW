@@ -21,7 +21,7 @@ CaptRAW uses a local native core to process RAW files. It provides non-destructi
 | Item | Version | Status |
 |---|---|---|
 | Published installation baseline | 0.64 | DMG, source archive, and acceptance identity registered |
-| Installation-experience candidate | `0.66.0-beta.1` / `db9f4790e1e9d594` | Trustworthy color pipeline and scoped macOS photography workflow delivered; full ACR replacement remains future work |
+| Installation-experience candidate | `0.66.0-beta.1` / `febb036106312f9b` | Trustworthy color pipeline and scoped macOS photography workflow delivered; full ACR replacement remains future work |
 
 The [macOS closeout ledger](docs/CLOSEOUT.md) defines the current development and acceptance scope. Installation, signing, hashes, and prior acceptance evidence are recorded in the [acceptance log](docs/ACCEPTANCE.md). Earlier ACR research and acceptance records are retained for traceability only.
 
@@ -92,7 +92,7 @@ pnpm package  # build the current ARM64 application and DMG
 
 `pnpm dev` requires an existing native core and XMP worker build. Packaging also requires the local model assets to be prepared and verified as described in the [segmentation documentation](docs/SEGMENTATION.md). The installed product does not depend on Homebrew, FFmpeg, or Python.
 
-HDR AVIF builds pin AOM 3.15.0 and libavif 1.4.2. After upgrading Homebrew dependencies, verify their versions and update the pinned information first. If the Electron download host is unavailable, set `ELECTRON_MIRROR` in the build environment; the installer still verifies the digest supplied by the Electron package.
+HDR AVIF builds accept AOM 3.15.0 or 3.15.2 with libavif 1.4.2 and record the exact installed version and matching source revision. After changing Homebrew dependencies, add and verify a known pin before building. If the Electron download host is unavailable, set `ELECTRON_MIRROR` in the build environment; the installer still verifies the digest supplied by the Electron package.
 
 ## Verification
 

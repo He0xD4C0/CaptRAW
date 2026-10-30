@@ -6,12 +6,14 @@ if(process.platform!=='darwin'||process.arch!=='arm64')throw new Error('AVIF dep
 const root=resolve(import.meta.dirname,'..'),version='1.4.2',sha256='2b645287340ba5a631d268b551dc2d72bd73ac33335962dd36dcdb6d8366921d';
 const source=join(root,'build/upstream/libavif-'+version),archive=join(root,'build/upstream/libavif-'+version+'.tar.gz'),prefix=join(root,'build/vendor/libavif');
 const run=(command,args)=>execFileSync(command,args,{cwd:root,stdio:'inherit'}),hash=path=>createHash('sha256').update(readFileSync(path)).digest('hex');
-const aom=execFileSync('pkg-config',['--modversion','aom'],{encoding:'utf8'}).trim();if(aom!=='3.15.0')throw new Error('HDR AVIF currently requires aom 3.15.0; install the documented dependency version.');
+const aom=execFileSync('pkg-config',['--modversion','aom'],{encoding:'utf8'}).trim();
+const aomCommit={'3.15.0':'de4c1d1edc49723a78954d30a83690aa1937422f','3.15.2':'af3dc9aadc793c1b00edc003e3fc19a44fdeb574'}[aom];
+if(!aomCommit)throw new Error('HDR AVIF requires aom 3.15.0 or 3.15.2; install a documented dependency version.');
 mkdirSync(join(root,'build/upstream'),{recursive:true});
 if(!existsSync(archive))run('curl',['-fsSL','--retry','3',`https://codeload.github.com/AOMediaCodec/libavif/tar.gz/refs/tags/v${version}`,'-o',archive]);
 if(hash(archive)!==sha256)throw new Error('libavif source checksum mismatch');
 if(!existsSync(source))run('tar',['-xzf',archive,'-C',join(root,'build/upstream')]);
-const record={version,sha256,aom,source:`https://codeload.github.com/AOMediaCodec/libavif/tar.gz/refs/tags/v${version}`,aomCommit:'de4c1d1edc49723a78954d30a83690aa1937422f'};
+const record={version,sha256,aom,source:`https://codeload.github.com/AOMediaCodec/libavif/tar.gz/refs/tags/v${version}`,aomCommit};
 if(!existsSync(join(prefix,'lib/libavif.dylib'))||!existsSync(join(prefix,'AOM-PATENTS'))||!existsSync(join(prefix,'build.json'))||JSON.stringify(JSON.parse(readFileSync(join(prefix,'build.json'),'utf8')))!==JSON.stringify(record)){
  run('cmake',['-S',source,'-B',join(root,'build/avif'),'-G','Ninja','-DCMAKE_BUILD_TYPE=Release',`-DCMAKE_INSTALL_PREFIX=${prefix}`,'-DCMAKE_OSX_ARCHITECTURES=arm64','-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0','-DCMAKE_PREFIX_PATH=/opt/homebrew','-DBUILD_SHARED_LIBS=ON','-DAVIF_CODEC_AOM=SYSTEM','-DAVIF_LIBYUV=OFF','-DAVIF_JPEG=OFF','-DAVIF_ZLIBPNG=OFF','-DAVIF_BUILD_APPS=OFF','-DAVIF_BUILD_TESTS=OFF']);
  run('cmake',['--build',join(root,'build/avif'),'-j',process.env.CAPTRAW_BUILD_JOBS||'8']);run('cmake',['--install',join(root,'build/avif')]);
