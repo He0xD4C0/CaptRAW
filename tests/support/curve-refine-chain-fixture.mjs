@@ -10,7 +10,7 @@ export function compareCurveRefineChains(){
  const start=diagnostic.indexOf(' def srgb_encode('),end=diagnostic.indexOf(' def scalar_metrics(',start);
  if(start<0||end<0)throw new Error('Missing read-only ART equation ports');
  const ports=diagnostic.slice(start,end).split('\n').map(line=>line.startsWith(' ')?line.slice(1):line).join('\n');
- return JSON.parse(execFileSync(resolve('build/qa-venv/bin/python'),['-c',`import numpy as np,json
+ return JSON.parse(execFileSync(process.env.CAPTRAW_CURVE_REFINE_PYTHON||resolve('build/qa-venv/bin/python'),['-c',`import numpy as np,json
 ${ports}
 # ART iptonecurve.cc::ContrastCurve/get_contrast_curve/DoubleCurve and
 # curves.cc::ToneCurve::Set. All cases retain nonzero actual Contrast math.

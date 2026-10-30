@@ -12,6 +12,7 @@ import {compareCurveRefineChains} from '../support/curve-refine-chain-fixture.mj
 const files=['procparams.h','procparams.cc','iptonecurve.cc','iprgbcurves.cc'];
 const prefix='ART-1e0e12c62e4f329d30bb5624d62a23a663ffbe6b/';
 const sourceFixture=process.env.CAPTRAW_ART_SOURCE_ARCHIVE||resolve('build/upstream/art.tar.gz'),fixtureTest=(name,run)=>test(name,{skip:existsSync(sourceFixture)?false:'Requires the pinned ART source archive'},run);
+const pythonFixture=process.env.CAPTRAW_CURVE_REFINE_PYTHON||resolve('build/qa-venv/bin/python');
 let lastFailure;
 function fixture(run){
  const work=mkdtempSync(join(tmpdir(),'captraw-curve-refine-patch-'));let passed=false;
@@ -117,7 +118,7 @@ fixtureTest('missing source anchor rejects before any file is written',()=>fixtu
  const before=files.map(read);assert.throws(()=>patchCurveRefine(work),/anchor mismatch/);assert.deepEqual(files.map(read),before);
 }));
 
-test('nonzero Contrast and inherited curve2 keep the optimized gray baseline in the numerical source fixture',()=>{
+test('nonzero Contrast and inherited curve2 keep the optimized gray baseline in the numerical source fixture',{skip:existsSync(pythonFixture)?false:'Requires the prepared numerical Python fixture'},()=>{
  const result=compareCurveRefineChains();assert.equal(result.rows.length,3);
  assert.equal(result.corners.length,2);
  for(const corner of result.corners){
