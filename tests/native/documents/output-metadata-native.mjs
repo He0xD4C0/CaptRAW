@@ -4,9 +4,9 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {XMP,CRS,CT,XMP_BASIC,lookup,property,text} from '@captraw/desktop-core/xmp';
-import {finishOutputMetadata} from '@captraw/desktop-core/output-metadata';
-import {BatchExporter} from '@captraw/desktop-core/batch-export';
+import {XMP,CRS,CT,XMP_BASIC,lookup,property,text} from '@captraw/desktop-core/documents';
+import {finishOutputMetadata} from '@captraw/desktop-core/export';
+import {BatchExporter} from '@captraw/desktop-core/export';
 import {DEFAULT_EXPORT_OPTIONS} from '@captraw/contracts/export-options';
 import {EngineClient} from '../../support/engine-client.mjs';
 const scratch=mkdtempSync(join(tmpdir(),'captraw-output-metadata-')),source=join(scratch,'源 照片.tiff'),python=resolve('build/qa-venv/bin/python');
@@ -79,7 +79,7 @@ im=Image.new('RGB',(480,320));im.putdata([((x*3+y)%256,(y*2+x)%256,(x+y*3)%256) 
   if(include==='none')for(const secret of ['old copyright','old author','当前版权','当前作者'])assert(!fileBytes.includes(Buffer.from(secret)),secret+' survives in metadata-free output');
   if(include==='none'||include==='copyright')assert(!fileBytes.includes(Buffer.from('blob-value-'.repeat(100))));
   if(include==='all'){
-   const raw=execFileSync('exiftool',['-a','-b','-XMP',path]);assert(raw.includes(Buffer.from('managed-qualified')));assert(raw.includes(Buffer.from('blob-value-'.repeat(10000))));
+   const raw=execFileSync('exiftool',['-a','-b','-XMP',path]);assert(!raw.includes(Buffer.from('managed-qualified')),'removed develop qualifier must not survive as abandoned metadata');assert(raw.includes(Buffer.from('extended-empty')));assert(raw.includes(Buffer.from('blob-value-'.repeat(10000))));
    if(format==='jpeg')assert(readFileSync(path).includes(Buffer.from('http://ns.adobe.com/xmp/extension/')),'large XMP must use real Extended JPEG XMP segments');
   }
  }
@@ -96,6 +96,7 @@ print('all 8 metadata policies preserve encoded pixels, dimensions and ICC')`,JS
  const directory=join(scratch,'batch');mkdirSync(directory);
  const queue=new BatchExporter(resolve('build/native/captraw-engine'),resolve('build/native/resources'),join(scratch,'batch-cache'),()=>{},xmp);
  const results=await queue.run({format:'tiff',colorSpace:'srgb',documents:[doc],options:{...structuredClone(DEFAULT_EXPORT_OPTIONS),metadata:{include:'all',removeLocation:true}}},directory);
- assert(results[0].output);assert.equal(Number(lookup((await xmp.call('file-read','',[],{path:results[0].output,format:'tiff'})).properties,CRS,'Exposure2012').value),.75);
+ assert(results[0].output);const batchMetadata=(await xmp.call('file-read','',[],{path:results[0].output,format:'tiff'})).properties;assert(!batchMetadata.some(p=>p.ns===CRS||p.ns===CT));assert.equal(lookup(batchMetadata,U,'Later').value,'current sidecar');
+ execFileSync(python,['-c',"import sys,numpy as np,tifffile\nassert np.array_equal(tifffile.imread(sys.argv[1]),tifffile.imread(sys.argv[2]))",results[0].output,outputs.find(item=>item.format==='tiff').path]);
  assert.equal(hash(source),original);passed=true;console.log('PASS current sidecar, unknown qualified/nested RDF, EXIF/IPTC reconciliation, privacy, real pixels and shared batch pipeline');
 }finally{await engine.stop();if(passed)rmSync(scratch,{recursive:true,force:true});else console.error('Failure retained:',scratch);}

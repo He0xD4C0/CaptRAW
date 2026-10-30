@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import type {PerspectiveGuide,PerspectiveSettings,Point,PreviewFrame} from '@captraw/contracts';
-import type {DocumentState} from './useWorkbench';
+import type {DocumentState} from './workbench/model';
 import {rotatePoint,type CanvasEditTransaction} from '../lib/geometry';
 
 interface Props {document?:DocumentState;frame?:PreviewFrame;enabled:boolean;busy:boolean;begin:(id:string,revision:number,label:string)=>CanvasEditTransaction|null;done:()=>void;error:(message:string)=>void}

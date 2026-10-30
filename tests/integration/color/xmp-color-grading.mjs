@@ -6,8 +6,8 @@ import {join,resolve} from 'node:path';
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {Documents} from '@captraw/desktop-core/documents';
 import {Presets} from '@captraw/desktop-core/presets';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {XMP,CRS,CT,lookup,property,text,encode,readExtension} from '@captraw/desktop-core/xmp';
+import {Synchronizer} from '@captraw/desktop-core/presets';
+import {XMP,CRS,CT,lookup,property,text,encode,readExtension} from '@captraw/desktop-core/documents';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {adobeGradingFields,adobeGradingSettings,adobeGradingFixture} from '../../support/xmp-test.mjs';
 

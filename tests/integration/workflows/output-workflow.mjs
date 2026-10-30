@@ -3,7 +3,7 @@ import {readFileSync,writeFileSync,mkdirSync,existsSync,rmSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {homedir} from 'node:os';
 import {createHash} from 'node:crypto';
-import {BatchExporter,validateBatch} from '@captraw/desktop-core/batch-export';
+import {BatchExporter,validateBatch} from '@captraw/desktop-core/export';
 import {EngineClient} from '../../support/engine-client.mjs';
 const out=resolve(process.env.CAPTRAW_OUTPUT_OUT||'artifacts/output-workflow');mkdirSync(out,{recursive:true});
 const binary=process.env.CAPTRAW_ENGINE||resolve('build/native/captraw-engine'),resources=process.env.CAPTRAW_RESOURCES||resolve('build/native/resources');

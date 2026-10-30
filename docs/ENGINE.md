@@ -716,7 +716,7 @@ JPEG／TIFF 的 `metadata` 为 `{include: 'all' | 'all-except-develop' | 'copyri
 
 Paint Overlay枚举已由固定ACR18.7真实取证确认：`artifacts/stage-0/acr-reference/iso-amount-187/status.json`关联的`paint-overlay-selected.ax.txt`显示“绘画叠加”，`acr187-paint-overlay.xmp`记录Version=18.7、PostCropVignetteStyle=3、Amount=-20（SHA256 943500e911d29c086e7298de789f9a48cbc87dda00321f33f3ab17d81771eb2f）。本机SDK读取该真实预设，现有decode得到paint-overlay、vignette=-20，通过；不改枚举。此证据关闭取值/读取映射缺口，不证明显影算法画质等效。Adobe窗口未由本专项操作。
 
-共用运行适配集中在 `desktop-core/runtime`：本机路径相对关系判定替代缓存路径的 POSIX 字符串前缀，原生程序名按平台选择后缀，Node 工作进程终止集中管理。资源层分别拼接目录，主进程保留 Electron 文件对话框边界。Homebrew／Mach-O 构建脚本显式限制 macOS ARM64，并在依赖构建副作用前检查平台；Windows／Linux 仍需实现依赖部署、原子替换和真实进程取消验收，本轮不声称支持。
+共用运行适配集中在 `@captraw/desktop-core/engine`：本机路径相对关系判定替代缓存路径的 POSIX 字符串前缀，原生程序名按平台选择后缀，Node 工作进程终止集中管理。资源层分别拼接目录，主进程保留 Electron 文件对话框边界。Homebrew／Mach-O 构建脚本显式限制 macOS ARM64，并在依赖构建副作用前检查平台；Windows／Linux 仍需实现依赖部署、原子替换和真实进程取消验收，本轮不声称支持。
 
 SDK 文件读回专项修正：上游 `GetXMP` 用模板应用复制对象，会跳过空标量和空复合节点；JPEG 扩展包合并也走同一路径。固定构建以 SDK 自身序列化／解析精确返回已解析树，并以 `DuplicateSubtree` 合并扩展属性，保持显式空值及任意限定符；不改变通用模板应用的删除语义。补丁前后散列写入 XMP 构建清单，避免空色标清除在下一次读回时丢失。
 

@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {copyFileSync,existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {Segmenter} from '@captraw/desktop-core/segmentation';
+import {Segmenter} from '@captraw/desktop-core/editing';
 
 const out=resolve(process.env.CAPTRAW_SKY_MASK_OUT||'artifacts/sky-mask');
 const source=resolve(process.env.CAPTRAW_SKY_MASK_IMAGE||'artifacts/segmentation-input/inputs/nikon-d850.NEF.png');

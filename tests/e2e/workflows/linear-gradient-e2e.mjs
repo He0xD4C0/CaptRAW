@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';import {expect} from '@playwright/test';import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
 import {mkdtempSync,readFileSync,writeFileSync,copyFileSync,existsSync,rmSync,mkdirSync} from 'node:fs';import {join,resolve} from 'node:path';import {tmpdir} from 'node:os';import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';
-import {Documents} from '@captraw/desktop-core/documents';import {XMP,CRS,lookup} from '@captraw/desktop-core/xmp';import {EngineClient} from '../../support/engine-client.mjs';
+import {Documents} from '@captraw/desktop-core/documents';import {XMP,CRS,lookup} from '@captraw/desktop-core/documents';import {EngineClient} from '../../support/engine-client.mjs';
 const work=mkdtempSync(join(tmpdir(),'captraw-linear-gui-')),fixture=JSON.parse(readFileSync('tests/fixtures/assets/linear-gradient-legacy.json','utf8')),source=join(work,'旧 渐变.tif'),target=join(work,'预设 目标.tif'),adobe=join(work,'Adobe 渐变.tif'),sidecar=p=>p.replace(/\.[^.]+$/,'.xmp'),docs=new Documents(new XMP(resolve('build/xmp/captraw-xmp'))),python=resolve('build/qa-venv/bin/python');let app,page,passed=false;const checks=[];
 const hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex'),pass=s=>{checks.push(s);console.log('PASS',s);};
 const button=name=>page.getByRole('button',{name,exact:true});const canvas=()=>page.locator('canvas[aria-label="显影预览"]');

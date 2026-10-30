@@ -40,8 +40,13 @@
 ```sh
 pnpm test:unit
 pnpm test:e2e
+pnpm test:suite unit
+pnpm test:gate macos-smoke
+pnpm test:affected HEAD
 node tests/native/geometry/geometry-reference-test.mjs
 node tests/integration/documents/xmp-documents.mjs
 ```
+
+`test:gate` 和所有 native/E2E suite 必须由有效 `CAPTRAW_CANDIDATE` 提供产物身份。直接调试可追加 `--dev-unverified`，此时结果会明确标记为不受信，且不会写入 candidate 的 `checks/`。`--manual` 允许执行未列入正式 gate 的领域 suite，`--fail-fast` 可关闭默认的继续收集失败模式。
 
 历史 `docs/ACCEPTANCE.md` 保留旧路径作为当时证据；当前测试、脚本和持续维护的文档使用本目录结构。

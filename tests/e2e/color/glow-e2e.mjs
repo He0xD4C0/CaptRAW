@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';import {expect} from '@playwright/test';
 import {mkdtempSync,readFileSync,writeFileSync,existsSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';
 import {electron,closeElectron} from '../../support/electron-background.mjs';import {EngineClient} from '../../support/engine-client.mjs';
-import {XMP,CRS,lookup} from '@captraw/desktop-core/xmp';import {Documents} from '@captraw/desktop-core/documents';
+import {XMP,CRS,lookup} from '@captraw/desktop-core/documents';import {Documents} from '@captraw/desktop-core/documents';
 const work=mkdtempSync(join(tmpdir(),'captraw-glow-gui-')),source=join(work,'发光 fixture.tif'),sidecar=join(work,'发光 fixture.xmp'),python=resolve('build/qa-venv/bin/python');
 const xmp=new XMP(resolve('build/xmp/captraw-xmp')),documents=new Documents(xmp),checks=[];let app,page,core,success=false;
 const pass=s=>{checks.push(s);console.log('PASS',s);},hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex');

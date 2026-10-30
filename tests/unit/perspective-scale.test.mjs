@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {CRS,CT,property,text,encode,lookup,readExtension,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {CRS,CT,property,text,encode,lookup,readExtension,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/documents';
 const legacy={enabled:true,horizontal:0,vertical:0,angle:0,shear:0,focalLength:0,cropFactor:1,aspect:1};
 const manual=scale=>({...legacy,manualModel:'art-perspective-v1',scale});
 const standard=value=>property(CRS,'PerspectiveScale',text(value));

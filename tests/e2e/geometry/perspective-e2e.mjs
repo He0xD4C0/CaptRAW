@@ -4,7 +4,7 @@ import {electron,closeElectron} from '../../support/electron-background.mjs';
 import {readDocument} from '../../support/xmp-test.mjs';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 import {mkdirSync,mkdtempSync,writeFileSync,readFileSync,existsSync,rmSync,copyFileSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {execFileSync} from 'node:child_process';

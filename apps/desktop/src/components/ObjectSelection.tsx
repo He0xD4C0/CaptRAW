@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import type {ObjectMaskResult,ObjectCandidateResult,ObjectPrompt,Point,ObjectBox,PersonPart,PersonPartsResult,SemanticMaskPart,SemanticMasksResult,SkyMaskResult} from '@captraw/contracts';
-import type {DocumentState} from '../hooks/useWorkbench';
+import type {DocumentState} from '../hooks/workbench/model';
 export function useObjectSelection(prepare:()=>Promise<{doc:DocumentState;profile:string}|undefined>,commit:(mask:ObjectMaskResult)=>void){
  const [active,setActive]=useState(false),[pending,setPending]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
  const [prompts,setPrompts]=useState<ObjectPrompt[]>([]),[result,setResult]=useState<ObjectCandidateResult>(),[selected,setSelected]=useState(0);

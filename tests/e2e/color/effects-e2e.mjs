@@ -7,7 +7,7 @@ import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {XMP,CT,encode,property} from '@captraw/desktop-core/xmp';
+import {XMP,CT,encode,property} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 const work=mkdtempSync(join(tmpdir(),'captraw-effects-gui-')),python=resolve('build/qa-venv/bin/python'),fresh=join(work,'新照片 fresh.tif'),legacy=join(work,'旧照片 legacy.tif');
 const xmp=new XMP(resolve('build/xmp/captraw-xmp')),documents=new Documents(xmp),checks=[];let app,page,success=false;

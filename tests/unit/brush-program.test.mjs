@@ -4,8 +4,8 @@ import {mkdtemp,writeFile,readFile,rm,readdir,link} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateBrushPrograms,ENGINE_VERSION} from '@captraw/contracts';
-import {encodeAdjustments,decodeAdjustments,CT,CRS,readExtension} from '@captraw/desktop-core/xmp';
-import {BrushPreparation} from '@captraw/desktop-core/brush';
+import {encodeAdjustments,decodeAdjustments,CT,CRS,readExtension} from '@captraw/desktop-core/documents';
+import {BrushPreparation} from '@captraw/desktop-core/editing';
 const stroke=()=>({id:'stroke',gestureId:'gesture',operation:'paint',flow:27,density:63,feather:30,canvas:{width:40,height:30},points:[{x:.4,y:.5,radius:.2},{x:.6,y:.5,radius:.2}],geometryReference:{version:1,data:'opaque-native-transform'},autoMask:false});
 const mask=s=>({id:'mask',name:'画笔',type:'brush',enabled:true,inverted:false,feather:30,points:[],start:{x:.5,y:.5},end:{x:.5,y:.5},brightness:1,contrast:0,saturation:0,brush:{version:1,strokes:[s]}});
 test('versioned brush parameters use typed vendor RDF and preserve absent legacy fields',()=>{

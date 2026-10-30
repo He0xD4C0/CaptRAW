@@ -6,8 +6,8 @@ import {resolve,join} from 'node:path';
 import {ENGINE_VERSION,mergeAdjustmentPatch,partialAdjustmentGroups} from '@captraw/contracts';
 import {Documents} from '@captraw/desktop-core/documents';
 import {Presets} from '@captraw/desktop-core/presets';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {XMP,CRS,lookup,property,text} from '@captraw/desktop-core/xmp';
+import {Synchronizer} from '@captraw/desktop-core/presets';
+import {XMP,CRS,lookup,property,text} from '@captraw/desktop-core/documents';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {adobePartialFields,adobePartialFixture,partialTargetSettings} from '../../support/xmp-test.mjs';
 

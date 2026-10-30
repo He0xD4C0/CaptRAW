@@ -5,7 +5,7 @@ import {join,resolve} from 'node:path';
 import {POINT_CURVE_PRESETS,pointCurveName} from '@captraw/contracts';
 import {adjustmentCommand,applyEditCommand,synchronizedAdjustments} from '@captraw/contracts/synchronize';
 import {capturePreset} from '@captraw/contracts/presets';
-import {XMP,CRS,property,text,lookup,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,property,text,lookup,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 const work=mkdtempSync(join(tmpdir(),'captraw-point-curve-presets-')),xmp=new XMP(resolve('build/xmp/captraw-xmp')),documents=new Documents(xmp),checks=[];
 const reference=resolve('artifacts/stage-0/acr-reference/curves-refine-tiff-187'),pass=s=>{checks.push(s);console.log('PASS',s);};let passed=false;

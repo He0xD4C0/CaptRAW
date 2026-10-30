@@ -6,7 +6,7 @@ import {join,resolve} from 'node:path';
 import {POINT_CURVE_PRESETS,validateCurveRefine,ENGINE_VERSION} from '@captraw/contracts';
 import {adjustmentCommand,applyEditCommand,synchronizedAdjustments} from '@captraw/contracts/synchronize';
 import {capturePreset,presetAmount} from '@captraw/contracts/presets';
-import {XMP,CRS,CT,property,text,lookup,readExtension,encode,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,property,text,lookup,readExtension,encode,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 const work=mkdtempSync(join(tmpdir(),'captraw-curve-refine-contracts-')),xmp=new XMP(resolve('build/xmp/captraw-xmp')),documents=new Documents(xmp),checks=[];
 const ns='https://example.com/refine-fixture/1.0/',base={exposure:0,temperature:6500,tint:0,contrast:25,saturation:0,vibrance:0,curve:structuredClone(POINT_CURVE_PRESETS['Medium Contrast']),curveName:'Medium Contrast',redCurve:[{x:0,y:0},{x:.375,y:.5625},{x:1,y:1}],greenCurve:structuredClone(POINT_CURVE_PRESETS.Linear),blueCurve:structuredClone(POINT_CURVE_PRESETS.Linear),rotation:0,crop:null,masks:[]};

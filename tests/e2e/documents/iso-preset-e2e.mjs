@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {expect} from '@playwright/test';
 import {mkdtemp,copyFile,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join,resolve,basename,extname} from 'node:path';
+import {join,resolve,basename} from 'node:path';
 import {createHash} from 'node:crypto';
 import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
 import {readDocument} from '../../support/xmp-test.mjs';
@@ -19,7 +19,7 @@ let app,page,passed=false;
 const button=name=>page.getByRole('button',{name,exact:true});
 const input=name=>page.getByRole('spinbutton',{name,exact:true});
 const photo=i=>page.locator('.film-item').filter({hasText:basename(files[i])}).locator('.film-open');
-const sidecar=i=>files[i].slice(0,-extname(files[i]).length)+'.xmp';
+const sidecar=i=>files[i]+'.captraw';
 const pixels=async()=>hash(await page.locator('canvas').evaluate(c=>c.toDataURL()));
 async function idle(){await expect(button('打开')).toBeEnabled();await expect(page.locator('.workbench')).not.toHaveAttribute('inert','');await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>{const frame=window.__isoFrames.filter(f=>f.kind==='fit').at(-1);return frame&&document.querySelector('canvas')?.dataset.frame===frame.url;});}
 async function choose(paths=files){await app.evaluate(({dialog},paths)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:paths});},paths);await button('打开').click();await expect(page.locator('.film-item')).toHaveCount(paths.length);await idle();}
@@ -27,7 +27,7 @@ async function select(i,modifiers=[]){await photo(i).scrollIntoViewIfNeeded();aw
 async function value(name,value){const control=input(name);await control.scrollIntoViewIfNeeded();await expect(control).toBeInViewport();await expect(control).toBeEnabled();await control.fill(String(value));await control.press('Tab');await idle();await expect(control).toHaveValue(String(value));}
 async function launch(){
  app=await electron.launch({env:{CAPTRAW_E2E_USER_DATA:join(root,'user-data'),CAPTRAW_DEV_URL:''}});page=await app.firstWindow();page.setDefaultTimeout(60000);page.on('pageerror',e=>errors.push(String(e)));
- await app.evaluate(({dialog})=>{dialog.showMessageBox=async(_,options)=>{if(options.message==='确认保存这些 XMP 旁车？')return {response:1};throw new Error('Unexpected dialog: '+options.message);};});
+ await app.evaluate(({dialog})=>{dialog.showMessageBox=async(_,options)=>{if(options.message==='确认保存这些 CaptRAW 编辑文件？')return {response:1};throw new Error('Unexpected dialog: '+options.message);};});
  await page.evaluate(()=>{window.__isoFrames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__isoFrames.push(e.frame);});});
 }
 function pass(message){checks.push(message);console.log('PASS',message);}
@@ -54,7 +54,7 @@ try{
  await closeElectron(app);app=undefined;await launch();await choose([files[1]]);await button('编辑').click();
  await expect(input('颗粒大小')).toHaveValue(String(size));await expect(input('颗粒粗糙度')).toHaveValue(String(roughness));assert.equal(await pixels(),after);
  await button('预设').click();await expect(page.getByRole('button',{name:'ISO 颗粒往返 · ISO',exact:true})).toBeVisible();
- pass('fresh app process restores ordinary saved XMP parameters, exact canvas pixels and the user ISO preset');
+ pass('fresh app process restores native saved parameters, exact canvas pixels and the user ISO preset');
  for(const [i,path] of sources.entries()){assert.equal(hash(await readFile(path)),original[i]);assert.equal(hash(await readFile(files[i])),original[i]);}
  for(const [path,expected] of Object.entries(cohort))assert.equal(hash(await readFile(path)),expected);
  assert.deepEqual(errors,[]);passed=true;

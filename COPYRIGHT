@@ -1,0 +1,27 @@
+CaptRAW
+Copyright (C) 2026 CaptRAW Contributors
+
+CaptRAW is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option)
+any later version.
+
+CaptRAW is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+more details.
+
+You should have received a copy of the GNU General Public License along
+with this program. If not, see <https://www.gnu.org/licenses/>.
+
+The collective name "CaptRAW Contributors" covers everyone who has
+contributed code to the project. Individual authorship is recorded in the
+repository's Git history; no separate contributor list is maintained.
+
+CaptRAW is an independent project containing modifications and components
+derived from ART and RawTherapee. Copyright notices and license terms for
+ART, RawTherapee, and other third-party software and assets are retained in
+THIRD_PARTY.md and the files bundled under the application's licenses
+directory.
+
+Source code: https://github.com/He0xD4C0/CaptRAW

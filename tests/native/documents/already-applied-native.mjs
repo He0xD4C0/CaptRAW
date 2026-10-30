@@ -11,11 +11,11 @@ import {stripTypeScriptTypes} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {DEFAULT_EXPORT_OPTIONS} from '@captraw/contracts/export-options';
-import {XMP,CRS,CT,XMP_BASIC,lookup,property,text,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,XMP_BASIC,lookup,property,text,decodeAdjustments} from '@captraw/desktop-core/documents';
 import {NativeEngine} from '@captraw/desktop-core/engine';
-import {saveRecipeWithMasks} from '@captraw/desktop-core/mask-assets';
-import {captureSourceIdentity,verifySourceIdentity} from '@captraw/desktop-core/source-identity';
-import {documentRelativePath} from '@captraw/desktop-core/runtime';
+import {saveRecipeWithMasks} from '@captraw/desktop-core/documents';
+import {captureSourceIdentity,verifySourceIdentity} from '@captraw/desktop-core/engine';
+import {documentRelativePath} from '@captraw/desktop-core/engine';
 
 const scratch=await mkdtemp(join(tmpdir(),'captraw-already-applied-native-'));
 let moduleDirectory;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {AutoPerspective} from '@captraw/desktop-core/auto-perspective';
+import {AutoPerspective} from '@captraw/desktop-core/editing';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {mkdtempSync,mkdirSync,writeFileSync,readdirSync,rmSync} from 'node:fs';
 import {resolve,join} from 'node:path';

@@ -5,7 +5,7 @@ import {join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {XMP,CRS,lookup,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,lookup,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const probe=resolve(process.env.CAPTRAW_WB_PROBE||'build/native/captraw-wb-probe');

@@ -9,7 +9,7 @@ const scratch=await mkdtemp(join(tmpdir(),'captraw-session-workflow-'));
 const source=resolve('build/samples/synthetic.dng'),original=await readFile(source);
 const files=['来源 照片.dng','目标 照片.dng','未选 照片.dng'].map(name=>join(scratch,name));
 for(const file of files)await copyFile(source,file);
-const sidecar=i=>files[i].replace(/\.dng$/,'.xmp'),checks=[],errors=[];
+const sidecar=i=>files[i]+'.captraw',checks=[],errors=[];
 let app,page,passed=false;
 const pass=message=>{checks.push(message);console.log('PASS',message);};
 const photo=i=>page.locator('.film-item').filter({hasText:basename(files[i])});
@@ -32,7 +32,7 @@ async function selected(){await select(0);await photo(1).locator('.film-open').c
 async function saveSelected(){await page.getByRole('button',{name:'保存所选…',exact:true}).click();const d=page.getByRole('dialog',{name:'保存照片编辑',exact:true});await expect(d.getByRole('button',{name:'返回编辑',exact:true})).toBeVisible();await d.getByRole('button',{name:'返回编辑',exact:true}).click();await idle();}
 try{
  app=await electron.launch();page=await app.firstWindow();page.setDefaultTimeout(45000);page.on('pageerror',e=>errors.push(String(e)));
- await app.evaluate(({dialog})=>{globalThis.__savePrompts=[];globalThis.__discard=false;dialog.showMessageBox=async(_,options)=>{if(options.message==='确认保存这些 XMP 旁车？'){globalThis.__savePrompts.push(options.detail);return {response:1};}if(options.message.startsWith('放弃 '))return {response:globalThis.__discard?1:0};return {response:1};};});
+ await app.evaluate(({dialog})=>{globalThis.__savePrompts=[];globalThis.__discard=false;dialog.showMessageBox=async(_,options)=>{if(options.message==='确认保存这些 CaptRAW 编辑文件？'){globalThis.__savePrompts.push(options.detail);return {response:1};}if(options.message.startsWith('放弃 '))return {response:globalThis.__discard?1:0};return {response:1};};});
  await page.evaluate(()=>{window.__frames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__frames.push(e.frame);});});
  await open();await select(1);await value('对比度',-20);await value('饱和度',17);await save();
  await select(0);await value('对比度',24);await save();

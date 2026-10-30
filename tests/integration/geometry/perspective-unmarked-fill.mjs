@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,copyFile,readFile,rm,writeFile} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';import {createHash} from 'node:crypto';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {adjustmentCommand} from '@captraw/contracts/synchronize';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
+import {Synchronizer} from '@captraw/desktop-core/presets';
 const root=await mkdtemp(join(tmpdir(),'captraw-unmarked-fill-')),path=join(root,'grid.tif'),binary=resolve('build/native/captraw-engine'),sha=b=>createHash('sha256').update(b).digest('hex'),characterize=process.argv.includes('--characterize');let core,passed=false,revision=0;
 const field=(profile,group,key)=>{const section=profile.split('['+group+']')[1]?.split('\n[')[0];return section?.split('\n').find(line=>line.startsWith(key+'='))?.slice(key.length+1);};
 const mapError=(a,b)=>Math.max(...a.map((p,i)=>Math.hypot(p.x-b[i].x,p.y-b[i].y)));

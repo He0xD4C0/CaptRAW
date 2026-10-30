@@ -1,6 +1,6 @@
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 import {readDocument} from '../../support/xmp-test.mjs';
 import {expect} from '@playwright/test';
 import {electron} from '../../support/electron-background.mjs';

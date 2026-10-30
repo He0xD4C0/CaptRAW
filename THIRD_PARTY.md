@@ -1,6 +1,6 @@
 # 开源组件与资源
 
-CaptRAW 原型采用 GPL-3.0-or-later；完整条款和上游作者声明见 `LICENSE`。0.29 随包分发本地 SAM2.1 Small 模型与 ONNX Runtime。没有闭源 RAW 解码器或云显影服务。
+CaptRAW 原型采用 GPL-3.0-or-later；项目版权声明见 `COPYRIGHT`，完整条款见 `LICENSE`。0.29 随包分发本地 SAM2.1 Small 模型与 ONNX Runtime。没有闭源 RAW 解码器或云显影服务。
 
 | 组件 | 用途 | 许可依据 |
 |---|---|---|

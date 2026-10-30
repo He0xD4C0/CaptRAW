@@ -1,7 +1,7 @@
 // Isolated ARP candidates only. No renderer, production parameter or source patch is used.
 import assert from 'node:assert/strict';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {XMP,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,decodeAdjustments} from '@captraw/desktop-core/documents';
 import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';

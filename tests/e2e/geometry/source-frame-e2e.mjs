@@ -4,7 +4,7 @@ import {expect} from '@playwright/test';
 import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP,CRS} from '@captraw/desktop-core/xmp';
+import {XMP,CRS} from '@captraw/desktop-core/documents';
 import {mkdtemp,readFile,writeFile,copyFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';

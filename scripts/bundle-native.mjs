@@ -51,10 +51,17 @@ collect(join(root,'build/native/captraw-engine'),join(output,'captraw-engine'),t
 collect(join(root,'build/xmp/captraw-xmp'),join(output,'captraw-xmp'),true);
 cpSync(join(root,'build/native/resources'),join(output,'resources'),{recursive:true});
 const licenses=join(output,'licenses');mkdirSync(licenses,{recursive:true});
+for(const [source,name] of [['LICENSE','CaptRAW-LICENSE.txt'],['COPYRIGHT','CaptRAW-COPYRIGHT.txt'],['THIRD_PARTY.md','README.md']]){
+  const from=join(root,source),to=join(licenses,name);
+  if(!existsSync(from))throw new Error(`Missing project distribution notice: ${source}`);
+  cpSync(from,to);
+}
 cpSync(join(upstream,'LICENSE.txt'),join(licenses,'ART-GPL-3.0.txt'));
 cpSync(join(upstream,'AUTHORS.txt'),join(licenses,'ART-AUTHORS.txt'));
 cpSync(join(upstream,'licenses'),join(licenses,'ART-components'),{recursive:true});
 const manifest=[];
+const projectPackage=JSON.parse(readFileSync(join(root,'package.json'),'utf8'));
+manifest.push({name:'CaptRAW',version:projectPackage.version,license:'GPL-3.0-or-later',copyright:'Copyright (C) 2026 CaptRAW Contributors',source:'https://github.com/He0xD4C0/CaptRAW'});
 const avifSource=join(root,'build/upstream/libavif-1.4.2'),avifBuild=join(root,'build/vendor/libavif');
 mkdirSync(join(licenses,'libavif'),{recursive:true});cpSync(join(avifSource,'LICENSE'),join(licenses,'libavif/LICENSE'));cpSync(join(avifBuild,'build.json'),join(licenses,'libavif/build.json'));
 manifest.push({name:'libavif',license:'BSD-2-Clause and bundled notices',...JSON.parse(readFileSync(join(avifBuild,'build.json'),'utf8'))});
@@ -114,7 +121,6 @@ const require=createRequire(join(root,'package.json')),electronDist=join(dirname
 cpSync(join(electronDist,'LICENSE'),join(licenses,'Electron-LICENSE'));
 cpSync(join(electronDist,'LICENSES.chromium.html'),join(licenses,'Chromium-LICENSES.html'));
 writeFileSync(join(licenses,'web-dependencies.json'),JSON.stringify(web,null,2)+'\n');
-if(existsSync(join(root,'THIRD_PARTY.md')))cpSync(join(root,'THIRD_PARTY.md'),join(licenses,'README.md'));
 const audit=[];
 for(const destination of visited.values()){
   const links=deps(destination);

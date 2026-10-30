@@ -8,7 +8,7 @@ import {createHash} from 'node:crypto';
 import {performance} from 'node:perf_hooks';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {NativeEngine} from '@captraw/desktop-core/engine';
-import {BrushPreparation} from '@captraw/desktop-core/brush';
+import {BrushPreparation} from '@captraw/desktop-core/editing';
 const option=(name,fallback)=>{const value=Number(process.argv.find(arg=>arg.startsWith('--'+name+'='))?.split('=')[1]??fallback);if(!Number.isInteger(value)||value<0||value>32)throw new Error('Invalid benchmark '+name);return value;};
 const strokeCount=option('strokes',1),updates=option('updates',0);assert(strokeCount>=1);
 const root=await mkdtemp(join(tmpdir(),'captraw-brush-45mp-')),python=resolve('build/qa-venv/bin/python'),path=join(root,'source.png');

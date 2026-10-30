@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {readFileSync} from 'node:fs';import {join,resolve} from 'node:path';import {tmpdir} from 'node:os';
-import {Documents} from '@captraw/desktop-core/documents';import {XMP,decodeAdjustments,CRS,lookup} from '@captraw/desktop-core/xmp';
+import {Documents} from '@captraw/desktop-core/documents';import {XMP,decodeAdjustments,CRS,lookup} from '@captraw/desktop-core/documents';
 const fixture=JSON.parse(readFileSync('tests/fixtures/assets/linear-gradient-legacy.json','utf8')),work=await mkdtemp(join(tmpdir(),'captraw-linear-xmp-')),xmp=new XMP(resolve('build/xmp/captraw-xmp')),docs=new Documents(xmp);let passed=false;
 try{
  const legacy=fixture.legacyAdjustments,newValue=structuredClone(legacy);newValue.masks[0].components[0].linearGradientModel='full-zero-v1';newValue.masks[0].components[0].feather=0;

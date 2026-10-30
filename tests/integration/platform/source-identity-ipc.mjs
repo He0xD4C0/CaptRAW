@@ -4,7 +4,7 @@ import {mkdtemp,copyFile,readFile,writeFile,rm,rename,readdir,mkdir,symlink,link
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
-import {captureSourceIdentity} from '@captraw/desktop-core/source-identity';
+import {captureSourceIdentity} from '@captraw/desktop-core/engine';
 import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
 async function scenario(run){
  const root=await mkdtemp(join(tmpdir(),'captraw-source-ipc-'));let app,passed=false;

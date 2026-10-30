@@ -8,9 +8,9 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 import {Presets} from '@captraw/desktop-core/presets';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
+import {Synchronizer} from '@captraw/desktop-core/presets';
 const root=await mkdtemp(join(tmpdir(),'captraw-perspective-manual-native-')),python=resolve('build/qa-venv/bin/python');
 const binary=resolve(process.env.CAPTRAW_ENGINE||'build/native/captraw-engine'),resources=resolve('build/native/resources');
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex'),engineSHA=hash(await readFile(binary));
@@ -99,17 +99,17 @@ print(json.dumps(dict(copied=float(np.abs(src-dst).max()),changed=float(np.abs(d
  await core.call('export',{path,artProfile:result.artProfile,output:direct,format:'tiff',colorSpace:'srgb'});
  const worker=new EngineClient({cache:join(root,'independent'),executable:binary});try{await worker.call('export',{path,artProfile:result.artProfile,output:independent,format:'tiff',colorSpace:'srgb'});}finally{await worker.stop();}
  execFileSync(python,['-c',"import tifffile,numpy as np,sys;a,b=[tifffile.imread(p) for p in sys.argv[1:]];assert a.dtype==b.dtype==np.uint16;assert np.array_equal(a,b)",direct,independent]);
- const xmp=new XMP(resolve('build/xmp/captraw-xmp')),documents=new Documents(xmp),recipe=join(root,'manual.xmp');
+ const xmp=new XMP(resolve('build/xmp/captraw-xmp')),documents=new Documents(xmp),recipe=join(root,'manual.captraw');
  const stored={source:{path:'grid.png',size:(await readFile(path)).length,sha256:sourceHash},artProfile:result.artProfile,adjustments:settings};
  const packet=await documents.serialize(stored);await writeFile(recipe,packet);assert.deepEqual((await documents.read(recipe)).adjustments.perspective,settings.perspective);
- await writeFile(recipe,await documents.serialize({...stored,xmpPacket:packet,adjustments:{...settings,perspective:base}}));
- assert.deepEqual((await documents.read(recipe)).adjustments.perspective,base,'removed manual fields cannot revive during unknown-RDF merging');
+ await writeFile(recipe,await documents.serialize({...stored,adjustments:{...settings,perspective:base}}));
+ assert.deepEqual((await documents.read(recipe)).adjustments.perspective,base,'removed manual fields cannot revive from native document state');
  const targetPath=join(root,'target.png');await copyFile(path,targetPath);const targetImage=await core.call('open',{path:targetPath,sessionId:'target'});
  const target={image:targetImage,adjustments:targetImage.adjustments,profile:targetImage.artProfile},source={image,adjustments:settings,profile:result.artProfile};
  sync=new Synchronizer(binary,resources,join(root,'sync'),()=>{});const copied=await sync.run({source,targets:[target],groups:['perspective']});assert.deepEqual(copied[0].adjustments.perspective,settings.perspective);
  const store=new Presets(join(root,'presets'),core,join(root,'presets-cache'),xmp),preset=await store.create({name:'Manual',group:'Geometry',groups:['perspective'],adjustments:settings,artProfile:result.artProfile});
- const portable=join(root,'preset.xmp');await store.exportFile(preset.id,portable);const imported=await store.importFile(portable),applied=await store.apply(imported.id,target,sync);assert.deepEqual(applied[0].adjustments.perspective,settings.perspective);
- checks.push('independent TIFF16 exact; typed XMP persistence/removal ownership; real sync and portable preset apply retain the complete manual model');
+ const portable=join(root,'preset.captrawpreset');await store.exportFile(preset.id,portable);const imported=await store.importFile(portable),applied=await store.apply(imported.id,target,sync);assert.deepEqual(applied[0].adjustments.perspective,settings.perspective);
+ checks.push('independent TIFF16 exact; typed native document persistence/removal ownership; real sync and portable preset apply retain the complete manual model');
  assert.equal(hash(await readFile(path)),sourceHash);assert.equal(hash(await readFile(binary)),engineSHA);passed=true;console.log(JSON.stringify({engineSHA,checks},null,2));
 }catch(error){await writeFile(join(root,'failure.json'),JSON.stringify({error:String(error.stack||error),engineSHA,checks,diagnostics:core?.diagnostics},null,2));throw error;}
 finally{sync?.cancel();await core?.stop();if(passed)await rm(root,{recursive:true,force:true});else console.error('Retained manual native failure:',root);}

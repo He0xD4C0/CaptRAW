@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import type {Adjustments,PreviewFrame} from '@captraw/contracts';
-import type {DocumentState} from './useWorkbench';
+import type {DocumentState} from './workbench/model';
 
 // The preview process never changes the document or participates in its history.
 export function usePresetPreview(active:DocumentState|undefined){

@@ -1,5 +1,5 @@
 import {readDocument} from '../../support/xmp-test.mjs';
-import {restoreRecipeMasks} from '@captraw/desktop-core/mask-assets';
+import {restoreRecipeMasks} from '@captraw/desktop-core/documents';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {resolve} from 'node:path';
 let recipe=await readDocument(process.argv[2]||'artifacts/人工 验收.xmp');

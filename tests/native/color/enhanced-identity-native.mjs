@@ -4,7 +4,7 @@ import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 import {enhancedFixtures} from '../../support/enhanced-profile-fixtures.mjs';
 import {rgbTable,lookDefinition} from './enhanced-table-native.mjs';
 const root=await mkdtemp(join(tmpdir(),'captraw-enhanced-identity-'));let engine,passed=false;

@@ -3,7 +3,7 @@ import {mkdtempSync,readFileSync,writeFileSync,copyFileSync,rmSync} from 'node:f
 import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';import {execFileSync} from 'node:child_process';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {XMP,CRS,CT,encode,property,lookup,readExtension,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,encode,property,lookup,readExtension,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {capturePreset} from '@captraw/contracts/presets';

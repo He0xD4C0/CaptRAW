@@ -31,7 +31,7 @@ const empty=structuredClone(curveOnly);delete empty.curve;assert.match(probe([{p
 console.log('PASS curve-only zero-table Look accepts and changes pixels; zero curve amount bypasses; a missing referenced table and metadata-only placeholder still reject');
 if(process.env.CAPTRAW_ENHANCED_INSTALLED_MANIFEST){
  const manifest=JSON.parse(await readFile(process.env.CAPTRAW_ENHANCED_INSTALLED_MANIFEST,'utf8'));
- const {XMP,CRS}=await import('@captraw/desktop-core/xmp'),xmp=new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp'));
+ const {XMP,CRS}=await import('@captraw/desktop-core/documents'),xmp=new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp'));
  const root=process.env.CAPTRAW_ENHANCED_INSTALLED_ROOT||'/Library/Application Support/Adobe/CameraRaw/Settings/Adobe/Profiles',seen=new Set();let declarations=0;
  for(const source of manifest.files){
   const file=join(root,source.file),data=await readFile(file);assert.equal(hash('sha256',data),source.sha256,source.file);

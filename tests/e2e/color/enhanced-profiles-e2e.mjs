@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve,basename} from 'node:path';
 import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
 import {enhancedFixtures,digest} from '../../support/enhanced-profile-fixtures.mjs';
-import {XMP,CRS,CT,lookup,property} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,lookup,property} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 const scratch=await mkdtemp(join(tmpdir(),'captraw-enhanced-gui-')),xmp=new XMP(resolve('build/xmp/captraw-xmp')),documents=new Documents(xmp);
 let app,page,passed=false,beforeReopen;const errors=[],checks=[],regressions=[];

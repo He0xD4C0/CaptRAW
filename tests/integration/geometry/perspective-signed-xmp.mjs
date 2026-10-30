@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,copyFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';import {createHash} from 'node:crypto';
-import {XMP,CRS,lookup,readExtension,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,lookup,readExtension,decodeAdjustments} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 const root=await mkdtemp(join(tmpdir(),'captraw-signed-xmp-')),xmp=new XMP(resolve('build/xmp/captraw-xmp')),documents=new Documents(xmp),sha=b=>createHash('sha256').update(b).digest('hex');let passed=false;
 try{

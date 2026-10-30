@@ -5,7 +5,7 @@ import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';import {createHash} from 'node:crypto';
 import {execFile} from 'node:child_process';import {promisify} from 'node:util';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {XMP,CRS,lookup,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,lookup,decodeAdjustments} from '@captraw/desktop-core/documents';
 const run=promisify(execFile),root=await mkdtemp(join(tmpdir(),'captraw-keystone-probe-')),sha=b=>createHash('sha256').update(b).digest('hex');
 const source=resolve('artifacts/stage-0/acr-reference/source/acr-geometry-keystone.tif'),refs=resolve('artifacts/stage-0/acr-reference/geometry-manual-187'),binary=resolve('build/native/captraw-engine'),python=resolve('build/qa-venv/bin/python');
 const files=[binary,source,join(refs,'geometry-keystone.xmp'),...['unconstrained','constrained'].flatMap(n=>[join(refs,'inputs/geometry-keystone-v20-'+n+'.tif'),join(refs,'geometry-keystone-v20-'+n+'.xmp')])];

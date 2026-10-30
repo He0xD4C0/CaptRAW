@@ -1,4 +1,4 @@
-import {XMP,CT,property,encode} from '@captraw/desktop-core/xmp';
+import {XMP,CT,property,encode} from '@captraw/desktop-core/documents';
 import {SYNC_GROUPS} from '@captraw/contracts/synchronize';
 import {readDocument} from '../../support/xmp-test.mjs';
 import {expect} from '@playwright/test';import {electron} from '../../support/electron-background.mjs';import {resolve,join} from 'node:path';import {readFileSync,writeFileSync,mkdirSync,rmSync,existsSync} from 'node:fs';import {createHash} from 'node:crypto';

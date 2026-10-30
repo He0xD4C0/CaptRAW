@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/documents';
 const root=await mkdtemp(join(tmpdir(),'captraw-geometry-reference-'));
 const python=resolve('build/qa-venv/bin/python'),path=join(root,'image.png');
 let engine,passed=false,revision=0;

@@ -3,7 +3,7 @@ import {expect as playwrightExpect} from '@playwright/test';
 import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,existsSync,statSync,copyFileSync} from 'node:fs';
 import {resolve,join,dirname} from 'node:path';

@@ -5,8 +5,8 @@ import {tmpdir} from 'node:os';import {join} from 'node:path';
 import {validatePerspective} from '@captraw/contracts';
 import {adjustmentCommand,applyEditCommand,validateEditCommand} from '@captraw/contracts/synchronize';
 import * as editCommands from '@captraw/contracts/synchronize';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {encodeAdjustments,decodeAdjustments,CRS,CT,property,text,encode,lookup,readExtension} from '@captraw/desktop-core/xmp';
+import {Synchronizer} from '@captraw/desktop-core/presets';
+import {encodeAdjustments,decodeAdjustments,CRS,CT,property,text,encode,lookup,readExtension} from '@captraw/desktop-core/documents';
 const old={enabled:true,horizontal:0,vertical:0,angle:0,shear:0,focalLength:0,cropFactor:1,aspect:1,manualModel:'art-perspective-v1',scale:1,offsetX:0,offsetY:0,constrainCrop:false};
 const signed=extra=>({...old,aspect:0,manualModel:'signed-framing-v1',...extra});
 test('native UI ranges have a distinct model; legacy ART ranges remain valid',()=>{

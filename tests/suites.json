@@ -1,0 +1,221 @@
+{
+  "schemaVersion": 1,
+  "gates": {
+    "pr": ["unit"],
+    "macos-smoke": ["unit", "native.geometry-core", "native.documents-core", "integration.documents-qname", "e2e.smoke"],
+    "release": ["unit", "native.geometry-core", "native.documents-core", "integration.documents-qname", "e2e.smoke"]
+  },
+  "suites": [
+    {
+      "id": "unit",
+      "layer": "unit",
+      "domain": "all",
+      "command": ["node", "--test"],
+      "files": ["tests/unit/*.test.mjs"],
+      "requirements": [],
+      "parallel": false,
+      "exclusive": false,
+      "pathTriggers": ["tests/unit/**", "tests/support/**", "tests/fixtures/**", "native/patches/**", "apps/desktop/src/lib/**"]
+    },
+    {
+      "id": "native.geometry-core",
+      "layer": "native",
+      "domain": "geometry",
+      "command": ["node"],
+      "files": ["tests/native/geometry/geometry-reference-test.mjs", "tests/native/geometry/perspective-manual-test.mjs"],
+      "requirements": ["candidate", "platform:darwin", "file:build/native/captraw-engine", "file:build/native/resources"],
+      "parallel": false,
+      "exclusive": true,
+      "pathTriggers": ["apps/desktop/src/lib/geometry.ts", "packages/contracts/index.ts", "packages/desktop-core/src/editing/**", "native/**", "tests/native/geometry/**"]
+    },
+    {
+      "id": "native.documents-core",
+      "layer": "native",
+      "domain": "documents",
+      "command": ["node"],
+      "files": ["tests/native/documents/native-documents.mjs"],
+      "requirements": ["candidate", "platform:darwin", "file:build/native/captraw-engine", "file:build/xmp/captraw-xmp"],
+      "parallel": false,
+      "exclusive": true,
+      "pathTriggers": ["packages/desktop-core/src/documents/**", "packages/contracts/presets.ts", "native/src/xmp*", "native/src/recipe.cc", "tests/native/documents/**"]
+    },
+    {
+      "id": "integration.documents-qname",
+      "layer": "integration",
+      "domain": "documents",
+      "command": ["node"],
+      "files": ["tests/integration/documents/already-applied-qname.mjs"],
+      "requirements": ["candidate", "platform:darwin", "file:build/native/captraw-engine", "file:build/xmp/captraw-xmp"],
+      "parallel": false,
+      "exclusive": true,
+      "pathTriggers": ["packages/desktop-core/src/documents/**", "native/src/xmp*", "native/include/xmp*", "tests/integration/documents/**"]
+    },
+    {
+      "id": "e2e.smoke",
+      "layer": "e2e",
+      "domain": "workflows",
+      "command": ["node"],
+      "files": ["tests/e2e/workflows/smoke.mjs"],
+      "requirements": ["candidate", "electron", "platform:darwin", "file:build/samples/nikon-d850.NEF"],
+      "parallel": false,
+      "exclusive": true,
+      "pathTriggers": ["apps/desktop/**", "packages/**", "native/**", "tests/e2e/workflows/smoke.mjs"]
+    },
+    {
+      "id": "integration.documents",
+      "layer": "integration",
+      "domain": "documents",
+      "command": ["node"],
+      "files": ["tests/integration/documents/*.mjs"],
+      "requirements": ["candidate", "platform:darwin", "file:build/native/captraw-engine", "file:build/xmp/captraw-xmp"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["packages/desktop-core/src/documents/**", "tests/integration/documents/**"]
+    },
+    {
+      "id": "native.color",
+      "layer": "native",
+      "domain": "color",
+      "command": ["node"],
+      "files": ["tests/native/color/*-native.mjs"],
+      "requirements": ["candidate", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["native/src/grading.cc", "native/src/effects.cc", "native/src/white-balance.cc", "tests/native/color/**"]
+    },
+    {
+      "id": "native.masks",
+      "layer": "native",
+      "domain": "masks",
+      "command": ["node"],
+      "files": ["tests/native/masks/*-test.mjs"],
+      "requirements": ["candidate", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["native/src/brush.cc", "packages/desktop-core/src/editing/**", "tests/native/masks/**"]
+    },
+    {
+      "id": "native.platform",
+      "layer": "native",
+      "domain": "platform",
+      "command": ["node"],
+      "files": ["tests/native/platform/*-native.mjs"],
+      "requirements": ["candidate", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["packages/desktop-core/src/engine/source-identity.ts", "tests/native/platform/**"]
+    },
+    {
+      "id": "integration.geometry",
+      "layer": "integration",
+      "domain": "geometry",
+      "command": ["node"],
+      "files": ["tests/integration/geometry/*.mjs"],
+      "requirements": ["candidate", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["apps/desktop/src/lib/geometry.ts", "native/src/geometry-*", "tests/integration/geometry/**"]
+    },
+    {
+      "id": "integration.color",
+      "layer": "integration",
+      "domain": "color",
+      "command": ["node"],
+      "files": ["tests/integration/color/*.mjs"],
+      "requirements": ["candidate", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["native/src/grading.cc", "native/src/effects.cc", "native/src/white-balance.cc", "tests/integration/color/**"]
+    },
+    {
+      "id": "integration.masks",
+      "layer": "integration",
+      "domain": "masks",
+      "command": ["node"],
+      "files": ["tests/integration/masks/*.mjs"],
+      "requirements": ["candidate", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["native/src/brush.cc", "native/src/segmentation*", "tests/integration/masks/**"]
+    },
+    {
+      "id": "e2e.geometry",
+      "layer": "e2e",
+      "domain": "geometry",
+      "command": ["node"],
+      "files": ["tests/e2e/geometry/*-e2e.mjs"],
+      "requirements": ["candidate", "electron", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["apps/desktop/src/components/CropControls.tsx", "apps/desktop/src/components/PerspectivePanel.tsx", "tests/e2e/geometry/**"]
+    },
+    {
+      "id": "e2e.documents",
+      "layer": "e2e",
+      "domain": "documents",
+      "command": ["node"],
+      "files": ["tests/e2e/documents/*-e2e.mjs"],
+      "requirements": ["candidate", "electron", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["packages/desktop-core/src/documents/**", "apps/desktop/src/components/PresetsPanel.tsx", "tests/e2e/documents/**"]
+    },
+    {
+      "id": "e2e.color",
+      "layer": "e2e",
+      "domain": "color",
+      "command": ["node"],
+      "files": ["tests/e2e/color/*-e2e.mjs"],
+      "requirements": ["candidate", "electron", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["apps/desktop/src/components/ColorGradingPanel.tsx", "native/src/grading.cc", "tests/e2e/color/**"]
+    },
+    {
+      "id": "e2e.masks",
+      "layer": "e2e",
+      "domain": "masks",
+      "command": ["node"],
+      "files": ["tests/e2e/masks/*-e2e.mjs"],
+      "requirements": ["candidate", "electron", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["apps/desktop/src/components/Viewport.tsx", "native/src/brush.cc", "tests/e2e/masks/**"]
+    },
+    {
+      "id": "e2e.workflows",
+      "layer": "e2e",
+      "domain": "workflows",
+      "command": ["node"],
+      "files": ["tests/e2e/workflows/*-e2e.mjs"],
+      "requirements": ["candidate", "electron", "platform:darwin"],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["apps/desktop/src/app/**", "apps/desktop/src/hooks/**", "tests/e2e/workflows/**"]
+    },
+    {
+      "id": "probes",
+      "layer": "probes",
+      "domain": "all",
+      "command": ["node"],
+      "files": ["tests/probes/**/*.mjs"],
+      "requirements": [],
+      "parallel": false,
+      "exclusive": true,
+      "manual": true,
+      "pathTriggers": ["tests/probes/**"]
+    }
+  ]
+}

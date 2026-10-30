@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {XMP,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,decodeAdjustments} from '@captraw/desktop-core/documents';
 
 const candidate=resolve(process.argv[2]||'/var/folders/61/zp95tf4d2td4q8j8th6jn__c0000gn/T/captraw-glow-maxgate-dT2Ck3/captraw-engine');
 const shared=resolve('build/native/captraw-engine'),reference=resolve('artifacts/stage-0/acr-reference/glow-tiff-187');

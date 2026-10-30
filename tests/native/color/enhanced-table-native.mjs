@@ -78,7 +78,7 @@ async function main(){
   const manifest=JSON.parse(await readFile('native/config/enhanced-profile-sources.json','utf8'));assert.equal(manifest.commit,'e0251f9da4b8b70678388f4ec357ba88f416ac32');assert.equal(createHash('sha256').update(await readFile('native/config/enhanced-profile.LICENSE')).digest('hex'),manifest.files.find(f=>f.path==='LICENSE').sha256);
   if(process.env.CAPTRAW_ENHANCED_INSTALLED_MANIFEST){
    const installed=JSON.parse(await readFile(process.env.CAPTRAW_ENHANCED_INSTALLED_MANIFEST,'utf8'));
-   const {XMP,CRS}=await import('@captraw/desktop-core/xmp'),xmp=new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp'));
+   const {XMP,CRS}=await import('@captraw/desktop-core/documents'),xmp=new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp'));
    const installedRoot=process.env.CAPTRAW_ENHANCED_INSTALLED_ROOT||'/Library/Application Support/Adobe/CameraRaw/Settings/Adobe/Profiles',seen=new Set();let count=0;
    for(const source of installed.files){
     const bytes=await readFile(join(installedRoot,source.file));assert.equal(createHash('sha256').update(bytes).digest('hex'),source.sha256,'Installed source changed: '+source.file);

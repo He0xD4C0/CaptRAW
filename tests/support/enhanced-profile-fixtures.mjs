@@ -3,7 +3,7 @@ import {writeFile,copyFile,readFile} from 'node:fs/promises';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {rgbTable,hsvTable,lookDefinition} from '../native/color/enhanced-table-native.mjs';
-import {CRS,property,text} from '@captraw/desktop-core/xmp';
+import {CRS,property,text} from '@captraw/desktop-core/documents';
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function profilePacket(xmp,profile,{missing=false,unsupported=false}={}){
  const fields=[property(CRS,'PresetType',text('Look')),property(CRS,'UUID',text(profile.uuid)),property(CRS,'Name',{localized:profile.name}),property(CRS,'Group',{localized:profile.group}),property(CRS,'Copyright',text(profile.copyright)),property(CRS,'SupportsAmount',text(profile.supportsAmount?'True':'False'))];

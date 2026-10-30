@@ -4,7 +4,7 @@ import {electron,closeElectron,electronDiagnostics} from '../../support/electron
 import {mkdtempSync,copyFileSync,readFileSync,existsSync,rmSync,writeFileSync,renameSync,mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-import {Documents} from '@captraw/desktop-core/documents';import {XMP} from '@captraw/desktop-core/xmp';
+import {Documents} from '@captraw/desktop-core/documents';import {XMP} from '@captraw/desktop-core/documents';
 import {EngineClient} from '../../support/engine-client.mjs';
 const sourceName='曲线 照片 '+ '长文件名'.repeat(10)+'.tif';
 const work=mkdtempSync(join(tmpdir(),'captraw-curve-sample-gui-')),source=join(work,sourceName),target=join(work,'另一张.tif');

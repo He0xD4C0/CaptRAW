@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {execFileSync} from 'node:child_process';
-import {Segmenter} from '@captraw/desktop-core/segmentation';
+import {Segmenter} from '@captraw/desktop-core/editing';
 
 const out=resolve(process.env.CAPTRAW_PERSON_PARTS_OUT||'artifacts/person-parts');
 const source=resolve(process.env.CAPTRAW_PERSON_PARTS_IMAGE||'artifacts/person-parts-probe/grace-hopper.png');

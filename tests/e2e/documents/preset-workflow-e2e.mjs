@@ -15,7 +15,7 @@ async function idle(){await expect(page.getByRole('button',{name:'打开',exact:
 async function select(i){await photo(i).locator('.film-open').click();await expect(photo(i).locator('.film-open')).toHaveAttribute('aria-current','true');await idle();}
 async function value(name,v){await input(name).fill(String(v));await input(name).press('Tab');await idle();}
 async function save(){await page.getByRole('button',{name:'保存所选…',exact:true}).click();const d=page.getByRole('dialog',{name:'保存照片编辑',exact:true});await d.getByRole('button',{name:'返回编辑',exact:true}).click();await idle();}
-const sidecar=i=>files[i].replace('.dng','.xmp'),pixels=async()=>createHash('sha256').update(await page.locator('canvas').evaluate(c=>c.toDataURL())).digest('hex');
+const sidecar=i=>files[i]+'.captraw',pixels=async()=>createHash('sha256').update(await page.locator('canvas').evaluate(c=>c.toDataURL())).digest('hex');
 async function canvasSnapshot(name){const value=await page.locator('canvas').evaluate(c=>({url:c.toDataURL(),width:c.width,height:c.height,data:{...c.dataset}}));await writeFile(join(scratch,name+'.png'),Buffer.from(value.url.split(',')[1],'base64'));return {...value,url:undefined,hash:createHash('sha256').update(value.url).digest('hex')};}
 try{
  app=await electron.launch();page=await app.firstWindow();page.setDefaultTimeout(45000);page.on('pageerror',e=>errors.push(String(e)));
@@ -35,7 +35,7 @@ try{
  await page.getByRole('button',{name:'预设',exact:true}).click();const builtin=page.getByRole('button',{name:'曝光 +0.50 · 内置',exact:true});await expect(builtin).toBeVisible();
  await builtin.hover();await expect(page.getByText('预设预览 · 移开指针恢复，单击应用',{exact:true})).toBeVisible();expect(await pixels()).not.toBe(before);await expect(photo(0).locator('.dirty-dot')).toHaveCount(0);await expect(photo(1).locator('.dirty-dot')).toHaveCount(0);expect(await photo(1).locator('img').getAttribute('src')).toBe(thumb);expect(await readFile(sidecar(0),'utf8')).toBe(xmpBefore);
  await page.getByRole('searchbox',{name:'搜索预设',exact:true}).hover();await expect(page.getByText('预设预览 · 移开指针恢复，单击应用',{exact:true})).toHaveCount(0);await expect.poll(pixels).toBe(before);
- pass('hover displays actual preset pixels only on the active canvas and restores without changing history, dirty state, thumbnails or XMP');
+ pass('hover displays actual preset pixels only on the active canvas and restores without changing history, dirty state, thumbnails or saved edits');
  await builtin.click();await page.getByRole('searchbox',{name:'搜索预设',exact:true}).hover();await idle();await save();
  for(const i of [0,1])expect((await readDocument(sidecar(i))).adjustments.exposure).toBe(.5);expect((await readDocument(sidecar(1))).adjustments.saturation).toBe(17);
  pass('a preset applies atomically to every selected visible photo while preserving unrelated target controls');

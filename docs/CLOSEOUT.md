@@ -7,8 +7,8 @@
 | 项目 | 当前状态 | 唯一阻挡 | 下一项决定性验证 | 完成条件／证据 |
 |---|---|---|---|---|
 | A 统一基线 | 已完成 | 无 | 仅后续相关改动触发回归 | [候选cda4985d708663da](../build/candidates/cda4985d708663da/manifest.json)、[集中结果](../build/candidates/cda4985d708663da/checks.json)、对应source.tar.gz；类型检查、91单测、XMP及4项工作流专项通过；未验收身份层已隔离 |
-| B 原生文档与导入 | 施工中 | 现有保存／预设仍依赖XMP编码 | 原生保存／旧编辑转存／Adobe显式导入闭环 | 安装体验候选完成导入→编辑→撤销→保存→重开→输出 |
-| C 软件色彩链路 | 未开始 | 等待 B 退出 | 输入解释与浮点P3监看／ICC输出独立对照 | 非裁剪色块 ΔE00平均≤0.2、最大≤1；无重复转换／隐藏中间裁剪 |
+| B 原生文档与导入 | 已完成 | 无 | 仅相关改动触发回归 | [0.65.0-beta.1安装体验候选](../release/0.65.0-beta.1/CaptRAW-0.65.0-beta.1-arm64.dmg)、[统一证据](../release/0.65.0-beta.1/evidence/release.json)、[界面](../release/0.65.0-beta.1/evidence/native-edit.png)；安装版隐藏工作流及断网／禁Homebrew核心通过；计数见[验收记录](ACCEPTANCE.md#阶段b安装体验候选2026-10-30)；对应源码与许可同目录；颜色链路及人工可见验收待完成 |
+| C 软件色彩链路 | 审计中 | 当前浮点帧为线性Rec.709、画布声明sRGB，尚未完成P3及输入／输出数值核验 | 固定ICC宽色域色块与实际画布链路对照 | 非裁剪色块 ΔE00平均≤0.2、最大≤1；无重复转换／隐藏中间裁剪 |
 | D 摄影工作流收尾 | 未开始 | 等待 C 退出 | 安装包完整摄影任务及性能／稳定性 | 必需阻挡关闭、人工体验、最终包与源码／许可／多平台清单 |
 
 ## 原生文档约定
@@ -30,8 +30,10 @@
 
 `pnpm candidate:build` 冻结当前工作源码（含未跟踪实现）、构建核心/XMP/桌面，并复用macOS打包器收集真实原生依赖，再验证构建输入未改变。成功后输出唯一ID，产物位于 `build/candidates/<id>/`：`manifest.json`、对应 `source.tar.gz`。`latest.json`仅作索引，不能代替ID。
 
-`pnpm candidate:verify <id>` 核对当前构建输入、程序、桌面资源、原生资源和依赖；改变后拒绝沿用旧候选。
+`pnpm candidate:verify <id>` 核对当前构建输入、程序、桌面资源、原生资源和依赖；构建输入或产物改变后拒绝沿用旧候选；JS验证脚本独立记录校验值，避免无关测试新增触发产品重建。
 
 `pnpm candidate:check <id> <检查名> <命令> [参数]` 在检查前后核对同一候选，每项独立记入 `checks/`，避免并行覆盖。整批结束后执行 `pnpm candidate:report <id>` 统一生成 `checks.json`。成功只保留简要结果；失败保留对应日志，修复通过后清理。同ID的检查结果不是新安装包验收。
+
+`tests/suites.json` 是测试层、功能域、依赖、并行和发布 gate 的机器可读入口。`pnpm test:gate <name>` 只接受有效 candidate；直接调试使用 `--dev-unverified` 时不登记为通过。`pnpm candidate:suite <id> <suite>` 会在 suite 前后校验同一候选，并继续记录其他失败。统一 `pnpm build` 通过 Turbo 根任务协调 contracts、原生、XMP 和 UI，最终校验契约与原生处理版本一致。
 
 历史依据：[验收记录](ACCEPTANCE.md)、[既有对齐调查](ACR-PARITY.md)、[下一轮平台边界](PLATFORMS.md)。

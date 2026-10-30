@@ -5,17 +5,24 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {deflateSync} from 'node:zlib';
 import {tmpdir} from 'node:os';
-import {join,resolve} from 'node:path';
-import {SessionDocumentSaver,validateSessionSave} from '@captraw/desktop-core/session-save';
-import {restoreRecipeMasks} from '@captraw/desktop-core/mask-assets';
+import {join,resolve,basename} from 'node:path';
+import {SessionDocumentSaver,validateSessionSave} from '@captraw/desktop-core/documents';
+import {restoreRecipeMasks} from '@captraw/desktop-core/documents';
 import {NativeEngine} from '@captraw/desktop-core/engine';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP,CRS,CT,lookup,encode,property} from '@captraw/desktop-core/xmp';
+import {encodeNativeEdit,decodeNativeEdit} from '@captraw/desktop-core/documents';
+import {ENGINE_VERSION} from '@captraw/contracts';
+import {XMP,CRS,CT,lookup,encode,property} from '@captraw/desktop-core/documents';
 import {presetValidationBase} from '@captraw/contracts/presets';
 const binary=resolve(process.env.CAPTRAW_ENGINE||'build/native/captraw-engine');
 const resources=resolve(process.env.CAPTRAW_RESOURCES||'build/native/resources');
 const xmp=new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp'));
-const fixture=(label='original')=>`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:u="urn:session-save-test" xmlns:c="${CRS}" c:Exposure2012="0"><u:Struct rdf:parseType="Resource"><u:Nested>${label}</u:Nested></u:Struct><u:Qualified rdf:parseType="Resource"><rdf:value>keep</rdf:value><u:Qualifier>custom</u:Qualifier></u:Qualified><u:List><rdf:Seq><rdf:li xml:lang="zh-CN">未知字段</rdf:li></rdf:Seq></u:List></rdf:Description></rdf:RDF></x:xmpmeta>`;
+const sourceXML=(label='original')=>`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:u="urn:session-save-test" xmlns:c="${CRS}" c:Exposure2012="0"><u:Struct rdf:parseType="Resource"><u:Nested>${label}</u:Nested></u:Struct><u:Qualified rdf:parseType="Resource"><rdf:value>keep</rdf:value><u:Qualifier>custom</u:Qualifier></u:Qualified><u:List><rdf:Seq><rdf:li xml:lang="zh-CN">未知字段</rdf:li></rdf:Seq></u:List></rdf:Description></rdf:RDF></x:xmpmeta>`;
+async function fixture(doc,label='original'){
+ const bytes=await readFile(doc.path);
+ return encodeNativeEdit({engineVersion:ENGINE_VERSION,baselineVersion:4,source:{path:basename(doc.path),size:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')},artProfile:doc.artProfile,adjustments:doc.adjustments,rating:doc.rating,xmpPacket:label.startsWith('<')?label:sourceXML(label)});
+}
+
 async function scenario(run){
  const root=await mkdtemp(join(tmpdir(),'captraw-session-save-'));let passed=false;
  try{
@@ -23,7 +30,7 @@ async function scenario(run){
   const doc={path:source,width:1024,height:768,artProfile:'',adjustments:structuredClone(presetValidationBase),rating:3};
   const prompts=[],documents=new Documents(xmp),cache=join(root,'cache');
   const saver=new SessionDocumentSaver(binary,resources,cache,documents,async targets=>{prompts.push(targets);return true;},()=>{});
-  await run({root,source,doc,prompts,documents,saver,output:join(root,'photo.xmp')});
+  await run({root,source,doc,prompts,documents,saver,output:source+'.captraw'});
   assert.deepEqual(await readdir(cache).catch(()=>[]),[],'workers leave no cache');
   assert(!(await readdir(root)).some(name=>name.startsWith('.session-save-')),'staging is cleaned');
   assert.deepEqual(await readFile(source),await readFile(resolve('build/samples/synthetic.dng')),'RAW stays unchanged');
@@ -31,13 +38,13 @@ async function scenario(run){
  }finally{if(passed)await rm(root,{recursive:true,force:true});else console.error('Retained failure:',root);}
 }
 const request=(doc,sessionId='session-a')=>({sessionId,documents:[doc]});
-const success=result=>{assert.equal(result?.cancelled,false);assert(result.results.length);for(const row of result.results){assert.equal(row.error,undefined);assert(row.output);assert.equal(typeof row.xmpPacket,'string');}};
+const success=result=>{assert.equal(result?.cancelled,false);assert(result.results.length);for(const row of result.results){assert.equal(row.error,undefined);assert(row.output);assert.equal(typeof row.nativePacket,'string');decodeNativeEdit(row.nativePacket);}};
 
 test('native session save keeps unknown RDF, qualifiers and RAW, remembers confirmation per session',()=>scenario(async({saver,doc,output,prompts})=>{
- await writeFile(output,fixture());success(await saver.run(request(doc)));
+ await writeFile(output,await fixture(doc));success(await saver.run(request(doc)));
  assert.equal(prompts.length,1);assert.equal(prompts[0][0].exists,true);
  const packet=await readFile(output,'utf8');for(const value of ['Nested','original','Qualifier','custom','未知字段','zh-CN'])assert(packet.includes(value),value);
- assert.equal(Number(lookup((await xmp.read(output)).properties,CRS,'Exposure2012').value),doc.adjustments.exposure);
+ assert.equal((await new Documents(xmp).read(output)).adjustments.exposure,doc.adjustments.exposure);
  success(await saver.run(request({...doc,rating:5})));assert.equal(prompts.length,1);
  success(await saver.run(request(doc,'session-b')));assert.equal(prompts.length,2);
 }));
@@ -45,34 +52,34 @@ test('native session save keeps unknown RDF, qualifiers and RAW, remembers confi
 test('native save re-confirms edits after the initial dialog and during serialization, merging latest RDF',()=>scenario(async({root,doc,documents,output})=>{
  const prompts=[];let changed=false;
  const saver=new SessionDocumentSaver(binary,resources,join(root,'cache'),documents,async targets=>{
-  prompts.push(targets);if(prompts.length===1)await writeFile(output,fixture('during-dialog'));return true;
+  prompts.push(targets);if(prompts.length===1)await writeFile(output,await fixture(doc,'during-dialog'));return true;
  },()=>{});
  const serialize=documents.serialize.bind(documents);
- documents.serialize=async value=>{const packet=await serialize(value);if(!changed){changed=true;await writeFile(output,fixture('during-serialize'));}return packet;};
+ documents.serialize=async value=>{const packet=await serialize(value);if(!changed){changed=true;await writeFile(output,await fixture(doc,'during-serialize'));}return packet;};
  success(await saver.run(request(doc)));assert.equal(prompts.length,3);assert(prompts[1][0].changed);assert(prompts[2][0].changed);
  assert((await readFile(output,'utf8')).includes('during-serialize'));
- await writeFile(output,fixture('external-later'));const saved=await saver.run(request(doc));success(saved);assert.equal(prompts.length,4);
+ await writeFile(output,await fixture(doc,'external-later'));const saved=await saver.run(request(doc));success(saved);assert.equal(prompts.length,4);
  assert(saved.results[0].xmpPacket.includes('external-later'));assert(saved.results[0].xmpPacket.includes('custom'));
- assert.equal(saved.results[0].xmpPacket,await readFile(output,'utf8'));
- const alternate=join(root,'alternate.xmp');
+ assert.equal(saved.results[0].nativePacket,await readFile(output,'utf8'));
+ const alternate=join(root,'alternate.captraw');
  const copied=await saver.run(request({...doc,xmpPacket:saved.results[0].xmpPacket}),alternate);success(copied);
- assert(copied.results[0].xmpPacket.includes('external-later'));assert.equal(copied.results[0].xmpPacket,await readFile(alternate,'utf8'));
+ assert(copied.results[0].xmpPacket.includes('external-later'));assert.equal(copied.results[0].nativePacket,await readFile(alternate,'utf8'));
 }));
 
 test('native save declines safely, including external-change confirmation',()=>scenario(async({root,doc,documents,output})=>{
  let prompts=0;const saver=new SessionDocumentSaver(binary,resources,join(root,'cache'),documents,async()=>++prompts===1,()=>{});
- await writeFile(output,fixture());success(await saver.run(request(doc)));
- const external=fixture('external');await writeFile(output,external);
+ await writeFile(output,await fixture(doc));success(await saver.run(request(doc)));
+ const external=await fixture(doc,'external');await writeFile(output,external);
  assert.equal(await saver.run(request(doc)),null);assert.equal(await readFile(output,'utf8'),external);
 }));
 
-test('native per-image failures preserve old XMP and assets; explicit retry remembers new target',()=>scenario(async({root,doc,saver,output,prompts})=>{
+test('native per-image failures preserve old native document and assets; explicit retry remembers new target',()=>scenario(async({root,doc,saver,output,prompts})=>{
  await writeFile(output,'broken XML');await mkdir(output+'.assets');await writeFile(join(output+'.assets','keep.bin'),'old asset');
  const other=join(root,'other.dng');await cp(doc.path,other);
  const result=await saver.run({sessionId:'session-a',documents:[doc,{...doc,path:other}]});
- assert(result.results[0].error);assert.equal(result.results[1].output,join(root,'other.xmp'));
+ assert(result.results[0].error);assert.equal(result.results[1].output,join(root,'other.dng.captraw'));
  assert.equal(await readFile(output,'utf8'),'broken XML');assert.equal(await readFile(join(output+'.assets','keep.bin'),'utf8'),'old asset');
- const target=join(root,'retry.xmp');success(await saver.run(request(doc),target));
+ const target=join(root,'retry.captraw');success(await saver.run(request(doc),target));
  const count=prompts.length;success(await saver.run(request(doc)));assert.equal(prompts.length,count);
  assert.equal(await readFile(output,'utf8'),'broken XML');
 }));
@@ -81,21 +88,21 @@ test('native cancellation during atomic serialization completes current file and
  const other=join(root,'other.dng');await cp(doc.path,other);
  const serialize=documents.serialize.bind(documents);documents.serialize=async value=>{saver.cancel();return serialize(value);};
  const result=await saver.run({sessionId:'session-a',documents:[doc,{...doc,path:other}]});
- assert.equal(result.cancelled,true);assert.equal(result.results.length,1);assert.deepEqual(result.results[0],{source:doc.path,output,xmpPacket:await readFile(output,'utf8')});
- await assert.rejects(readFile(join(root,'other.xmp')),{code:'ENOENT'});
+ assert.equal(result.cancelled,true);assert.equal(result.results.length,1);assert.equal(result.results[0].source,doc.path);assert.equal(result.results[0].output,output);assert.equal(result.results[0].nativePacket,await readFile(output,'utf8'));
+ await assert.rejects(readFile(join(root,'other.dng.captraw')),{code:'ENOENT'});
 }));
 
-test('native read-only target failure can be retried separately; symlinks and same-stem collisions are rejected',()=>scenario(async({root,doc,saver,output})=>{
+test('native read-only target failure can be retried separately; symlinks are rejected and same-stem inputs remain distinct',()=>scenario(async({root,doc,saver,output})=>{
  await symlink(doc.path,output);let result=await saver.run(request(doc));assert(result.results[0].error);await rm(output);
  const other=join(root,'photo.nef');await cp(doc.path,other);
- result=await saver.run({sessionId:'session-a',documents:[doc,{...doc,path:other}]});assert.equal(result.results.length,2);assert(result.results.every(row=>row.error));
+ result=await saver.run({sessionId:'session-a',documents:[doc,{...doc,path:other}]});assert.equal(result.results.length,2);assert(result.results.every(row=>!row.error));assert.notEqual(result.results[0].output,result.results[1].output);
  const locked=join(root,'locked');await mkdir(locked);await chmod(locked,0o555);
- try{result=await saver.run(request(doc),join(locked,'photo.xmp'));assert.match(result.results[0].error,/权限|只读/);}finally{await chmod(locked,0o755);}
- success(await saver.run(request(doc),join(root,'writable.xmp')));
+ try{result=await saver.run(request(doc),join(locked,'photo.captraw'));assert.match(result.results[0].error,/权限|只读/);}finally{await chmod(locked,0o755);}
+ success(await saver.run(request(doc),join(root,'writable.captraw')));
 }));
 
-test('native failed serialization retains old XMP and rejects concurrent sessions',()=>scenario(async({doc,documents,saver,output})=>{
- await writeFile(output,fixture());const before=await readFile(output);
+test('native failed serialization retains old native document and rejects concurrent sessions',()=>scenario(async({doc,documents,saver,output})=>{
+ await writeFile(output,await fixture(doc));const before=await readFile(output);
  const serialize=documents.serialize.bind(documents);
  documents.serialize=async value=>{
   await assert.rejects(saver.run(request(doc,'other')),/正在运行/);
@@ -155,9 +162,9 @@ test('cancel during a pending initial confirmation does not cache consent',()=>s
  success(await saver.run(request(doc)));assert.equal(count,2);
 }));
 
-test('cancel while external-change confirmation is pending leaves external XMP intact',()=>scenario(async({root,doc,documents,output})=>{
+test('cancel while external-change confirmation is pending leaves external native document intact',()=>scenario(async({root,doc,documents,output})=>{
  let release,entered,count=0;const pending=new Promise(done=>release=done),shown=new Promise(done=>entered=done);
- const external=fixture('after-first-confirmation');
+ const external=await fixture(doc,'after-first-confirmation');
  const saver=new SessionDocumentSaver(binary,resources,join(root,'cache'),documents,async()=>{
   if(++count===1)await writeFile(output,external);else{entered();await pending;}return true;
  },()=>{});
@@ -166,7 +173,7 @@ test('cancel while external-change confirmation is pending leaves external XMP i
 }));
 
 test('session transitions release location consent; explicit release forgets a completed session',()=>scenario(async({root,doc,saver,prompts,output})=>{
- const target=join(root,'alternate.xmp');success(await saver.run(request(doc),target));
+ const target=join(root,'alternate.captraw');success(await saver.run(request(doc),target));
  const count=prompts.length;success(await saver.run(request(doc)));assert.equal(prompts.length,count);
  saver.forgetSession('unrelated');success(await saver.run(request(doc)));assert.equal(prompts.length,count);
  success(await saver.run(request(doc,'session-b')));assert.equal(prompts.length,count+1);
@@ -175,42 +182,27 @@ test('session transitions release location consent; explicit release forgets a c
  saver.forgetSession('session-a');success(await saver.run(request(doc)));assert.equal(prompts.length,count+3);
 }));
 
-test('native save preserves externally added fields inside managed RDF structures',()=>scenario(async({doc,saver,output})=>{
+test('native save preserves unknown document payload and source RDF while updating editable values',()=>scenario(async({doc,saver,output})=>{
  success(await saver.run(request(doc)));
- const packet=await readFile(output,'utf8'),properties=(await xmp.call('read',packet)).properties;
- const node=lookup(properties,CT,'ARTAdjustments');
- node.fields.push(property('urn:future-session-schema','FutureSetting',encode({nested:'keep'})));
- const external=(await xmp.call('write',packet,[property(CT,'ARTAdjustments',node)])).packet;
- await writeFile(output,external);
- success(await saver.run(request({...doc,rating:4})));
- const saved=(await xmp.read(output)).properties;
- assert.deepEqual(lookup(saved,CT,'ARTAdjustments').fields.find(p=>p.ns==='urn:future-session-schema').node,lookup((await xmp.call('read',external)).properties,CT,'ARTAdjustments').fields.find(p=>p.ns==='urn:future-session-schema').node);
- assert.equal(lookup(saved,'http://ns.adobe.com/xap/1.0/','Rating').value,'4');
+ const external=JSON.parse(await readFile(output,'utf8'));external.payload.FutureSetting={nested:'keep'};external.sourceXMP=sourceXML();await writeFile(output,JSON.stringify(external));
+ success(await saver.run(request({...doc,rating:4,adjustments:{...doc.adjustments,exposure:1,curve:[{x:0,y:0},{x:1,y:.8}]}})));
+ const saved=decodeNativeEdit(await readFile(output,'utf8'));assert.deepEqual(saved.FutureSetting,{nested:'keep'});assert.equal(saved.xmpPacket,external.sourceXMP);assert.equal(saved.rating,4);assert.equal(saved.adjustments.exposure,1);assert.deepEqual(saved.adjustments.curve,[{x:0,y:0},{x:1,y:.8}]);
 }));
 
-test('native save updates a managed curve array while preserving its arbitrary qualifier',()=>scenario(async({doc,saver,output})=>{
- const external=fixture().replace('</rdf:Description>','<c:ToneCurvePV2012 rdf:parseType="Resource"><rdf:value><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></rdf:value><u:CurveQualifier>keep-qualified-array</u:CurveQualifier></c:ToneCurvePV2012></rdf:Description>');
- await writeFile(output,external);await xmp.read(output);
- success(await saver.run(request({...doc,adjustments:{...doc.adjustments,curve:[{x:0,y:0},{x:1,y:.8}]}})));
- const curve=lookup((await xmp.read(output)).properties,CRS,'ToneCurvePV2012');
- assert.equal(curve.qualifiers.find(q=>q.name==='CurveQualifier').node.value,'keep-qualified-array');
- assert.deepEqual(curve.items.map(item=>item.value),['0, 0','255, 204']);
- assert.deepEqual((await new Documents(xmp).read(output)).adjustments.curve,[{x:0,y:0},{x:1,y:.8}]);
+test('native edits preserve source qualified curves and scalars without rewriting Adobe instructions',()=>scenario(async({doc,saver,output})=>{
+ const xml=sourceXML().replace(' c:Exposure2012="0"','').replace('</rdf:Description>','<c:Exposure2012 rdf:parseType="Resource"><rdf:value>0</rdf:value><u:ExposureQualifier>keep-scalar</u:ExposureQualifier></c:Exposure2012><c:ToneCurvePV2012 rdf:parseType="Resource"><rdf:value><rdf:Seq><rdf:li>0, 0</rdf:li><rdf:li>255, 255</rdf:li></rdf:Seq></rdf:value><u:CurveQualifier>keep-qualified-array</u:CurveQualifier></c:ToneCurvePV2012></rdf:Description>');
+ await writeFile(output,await fixture(doc,xml));
+ success(await saver.run(request({...doc,adjustments:{...doc.adjustments,exposure:1,curve:[{x:0,y:0},{x:1,y:.8}]}})));
+ const saved=await new Documents(xmp).read(output);assert.equal(saved.xmpPacket,xml);assert.equal(saved.adjustments.exposure,1);assert.deepEqual(saved.adjustments.curve,[{x:0,y:0},{x:1,y:.8}]);
 }));
 
-test('native save still edits a qualified standard scalar without dropping its qualifier',()=>scenario(async({doc,saver,output})=>{
- const external=fixture().replace(' c:Exposure2012="0"','').replace('</rdf:Description>','<c:Exposure2012 rdf:parseType="Resource"><rdf:value>0</rdf:value><u:ExposureQualifier>keep-scalar</u:ExposureQualifier></c:Exposure2012></rdf:Description>');
- await writeFile(output,external);success(await saver.run(request({...doc,adjustments:{...doc.adjustments,exposure:1}})));
- assert((await readFile(output,'utf8')).includes('keep-scalar'));
-}));
-
-test('native asset publication followed by real rename failure keeps assets and old XMP, cleans staging and continues',{skip:process.platform!=='darwin'},()=>scenario(async({root,doc,saver,output})=>{
- const {masked,id,png}=await rasterDocument(root,doc),external=fixture();await writeFile(output,external);
+test('native asset publication followed by real rename failure keeps assets and old native document, cleans staging and continues',{skip:process.platform!=='darwin'},()=>scenario(async({root,doc,saver,output})=>{
+ const {masked,id,png}=await rasterDocument(root,doc),external=await fixture(doc);await writeFile(output,external);
  const other=join(root,'next.dng');await cp(doc.path,other);
  execFileSync('/usr/bin/chflags',['uchg',output]);
  try{
   const result=await saver.run({sessionId:'session-a',documents:[masked,{...doc,path:other}]});
-  assert.match(result.results[0].error,/权限|permitted/);assert.equal(result.results[1].output,join(root,'next.xmp'));
+  assert.match(result.results[0].error,/权限|permitted/);assert.equal(result.results[1].output,join(root,'next.dng.captraw'));
   assert.equal(await readFile(output,'utf8'),external);
   assert.deepEqual(await readFile(join(output+'.assets',id+'.png')),png,'published immutable asset must not be rolled back');
   assert(!(await readdir(root)).some(name=>name.startsWith('.session-save-')));
@@ -242,19 +234,10 @@ test('native bridge captures and rewrites qualifier namespaces, URI values and l
  const rebuilt=await xmp.call('write','',updated.properties);assert.deepEqual(rebuilt.properties,updated.properties,'all exposed qualifiers survive writing into an empty packet');
 }));
 
-test('session merge preserves unknown nested state and attaches qualifiers to stable IDs when masks reorder',()=>scenario(async({doc,saver,output})=>{
+test('session edits reorder native masks without changing opaque source structures',()=>scenario(async({doc,saver,output})=>{
  const mask=id=>({id,name:id,type:'radial',enabled:true,inverted:false,feather:10,points:[],start:{x:.2,y:.2},end:{x:.8,y:.8},brightness:.25,contrast:0,saturation:0});
- const a=mask('mask-a'),b=mask('mask-b'),snapshot={...doc,adjustments:{...doc.adjustments,masks:[a,b]}};
+ const a=mask('mask-a'),b=mask('mask-b'),snapshot={...doc,xmpPacket:sourceXML('opaque mask provenance'),adjustments:{...doc.adjustments,masks:[a,b]}};
  success(await saver.run(request(snapshot)));
- const packet=await readFile(output,'utf8'),properties=(await xmp.call('read',packet)).properties;
- const adjustment=lookup(properties,CT,'ARTAdjustments'),masks=lookup(adjustment.fields,CT,'masks');
- const first=masks.items[0];first.qualifiers=[property('urn:mask-origin','Origin',{value:'belongs-to-a'})];
- first.fields.push(property('urn:mask-origin','Future',{fields:[property(CT,'path',encode('opaque path'))]}));
- const external=(await xmp.call('write',packet,[property(CT,'ARTAdjustments',adjustment)])).packet;await writeFile(output,external);
  success(await saver.run(request({...snapshot,adjustments:{...snapshot.adjustments,masks:[b,{...a,brightness:.6}]}})));
- const saved=lookup(lookup((await xmp.read(output)).properties,CT,'ARTAdjustments').fields,CT,'masks').items;
- assert.equal(lookup(saved[0].fields,CT,'id').value,'mask-b');assert(!saved[0].qualifiers?.some(q=>q.name==='Origin'));
- assert.equal(lookup(saved[1].fields,CT,'id').value,'mask-a');assert.equal(lookup(saved[1].fields,CT,'brightness').value,'0.6');
- assert.equal(saved[1].qualifiers.find(q=>q.name==='Origin').node.value,'belongs-to-a');
- const nested=lookup(saved[1].fields,'urn:mask-origin','Future');assert.equal(lookup(nested.fields,CT,'path').value,'opaque path');
+ const saved=decodeNativeEdit(await readFile(output,'utf8'));assert.equal(saved.xmpPacket,snapshot.xmpPacket);assert.deepEqual(saved.adjustments.masks.map(m=>m.id),['mask-b','mask-a']);assert.equal(saved.adjustments.masks[1].brightness,.6);
 }));

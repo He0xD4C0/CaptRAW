@@ -7,8 +7,8 @@ import {EngineClient} from '../../support/engine-client.mjs';
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {Documents} from '@captraw/desktop-core/documents';
 import {Presets} from '@captraw/desktop-core/presets';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {XMP,CT,CRS,property,encode,encodeAdjustments} from '@captraw/desktop-core/xmp';
+import {Synchronizer} from '@captraw/desktop-core/presets';
+import {XMP,CT,CRS,property,encode,encodeAdjustments} from '@captraw/desktop-core/documents';
 
 const out=resolve(process.env.CAPTRAW_MASK_REFERENCE_OUT||'artifacts/mask-reference');mkdirSync(out,{recursive:true});
 const path=join(out,'source.png'),targetPath=join(out,'target.png'),python=resolve('build/qa-venv/bin/python');

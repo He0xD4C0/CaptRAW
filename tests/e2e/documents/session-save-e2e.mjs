@@ -11,7 +11,7 @@ const photos=join(scratch,'中文 空格目录');await mkdir(photos);
 const source=resolve('build/samples/synthetic.dng'),original=await readFile(source);
 const files=['首张 编辑.dng','第二张 编辑.dng','失败 待另存.dng'].map(name=>join(photos,name));
 for(const file of files)await copyFile(source,file);
-const sidecar=i=>files[i].replace(/\.dng$/,'.xmp');
+const sidecar=i=>files[i]+'.captraw';
 const checks=[],errors=[],artifacts={};let app,page,passed=false,failure;
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 for(const name of ['apps/desktop/dist/electron/main.cjs','apps/desktop/dist/electron/preload.cjs','apps/desktop/dist/renderer/index.html'])artifacts[name]={sha256:hash(await readFile(name)),mtime:(await stat(name)).mtime.toISOString()};
@@ -83,7 +83,7 @@ try{
   const save=ipcMain._invokeHandlers.get('session:save');
   ipcMain.removeHandler('session:save');ipcMain.handle('session:save',async(...args)=>{const result=await save(...args);state.results.push(result);return result;});
   dialog.showMessageBox=async(_,options)=>{
-   if(options.message==='确认保存这些 XMP 旁车？'){state.prompts.push(options);return {response:state.save};}
+   if(options.message==='确认保存这些 CaptRAW 编辑文件？'){state.prompts.push(options);return {response:state.save};}
    if(options.message.startsWith('保存“')){state.closePrompts.push(options);return {response:state.close};}
    if(options.message.startsWith('放弃 '))return {response:state.discard};
    throw new Error('Unexpected native dialog: '+options.message);
@@ -93,18 +93,18 @@ try{
  await page.evaluate(()=>{window.__saveFrames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__saveFrames.push(e.frame);});});
  await open();await select(0);await exposure(.3);await settings({save:0});await button('保存').click();await idle();await dirty(0,true);await assert.rejects(readFile(sidecar(0)),{code:'ENOENT'});
  const first=await app.evaluate(()=>globalThis.__saveDialogs.prompts[0]);assert(first.detail.includes(sidecar(0))&&first.detail.includes('新建'));
- await pass('first default sidecar confirmation lists the Chinese/space target; Cancel retains dirty state and creates no XMP');
+ await pass('first default sidecar confirmation lists the Chinese/space target; Cancel retains dirty state and creates no native edit document');
  await settings({save:1});await button('保存').click();await idle();await dirty(0,false);expect((await readDocument(sidecar(0))).adjustments.exposure).toBe(.3);
  const confirmed=await promptCount();await exposure(.4);await button('保存').click();await idle();await dirty(0,false);expect(await promptCount()).toBe(confirmed);
  expect(await app.evaluate(()=>globalThis.__saveDialogs.saveAs.length)).toBe(0);
- await pass('accepted sidecar save uses real XMP; ordinary subsequent Save updates it without SaveAs or another confirmation');
- const external=unknown('第一次 外部更新');await writeFile(sidecar(0),external);await exposure(.8);await settings({save:0});await button('保存').click();await idle();await dirty(0,true);
+ await pass('accepted sidecar save uses typed native JSON; ordinary subsequent Save updates it without SaveAs or another confirmation');
+ const externalDocument=JSON.parse(await readFile(sidecar(0),'utf8'));externalDocument.sourceXMP=unknown('第一次 外部更新');const external=JSON.stringify(externalDocument);await writeFile(sidecar(0),external);await exposure(.8);await settings({save:0});await button('保存').click();await idle();await dirty(0,true);
  expect(await readFile(sidecar(0),'utf8')).toBe(external);expect(await promptCount()).toBe(confirmed+1);
  const changed=await app.evaluate(()=>globalThis.__saveDialogs.prompts.at(-1));assert(changed.detail.includes('已存在，将替换')&&changed.detail.includes('目标已变化'));
  // A second external version between attempts must be the version retained on acceptance.
- await writeFile(sidecar(0),unknown('第二次 外部更新'));await settings({save:1});await button('保存').click();await idle();await dirty(0,false);
+ externalDocument.sourceXMP=unknown('第二次 外部更新');await writeFile(sidecar(0),JSON.stringify(externalDocument));await settings({save:1});await button('保存').click();await idle();await dirty(0,false);
  const preserved=await readFile(sidecar(0),'utf8');
- const returned=await app.evaluate(()=>globalThis.__saveDialogs.results.at(-1).results[0]);expect(returned.xmpPacket).toBe(preserved);
+ const returned=await app.evaluate(()=>globalThis.__saveDialogs.results.at(-1).results[0]);expect(returned.nativePacket).toBe(preserved);expect(returned.xmpPacket).toBe(JSON.parse(preserved).sourceXMP);
  for(const text of ['第二次 外部更新','unknown-value','保留 限定符','外部 曝光限定符'])assert(preserved.includes(text),text);
  expect((await readDocument(sidecar(0))).adjustments.exposure).toBe(.8);
  await pass('external RDF/qualifier updates trigger replacement confirmation; decline retains bytes/dirty, acceptance merges the latest unknown metadata');
@@ -117,7 +117,7 @@ try{
  await select(1);await exposure(.5);await select(2);await exposure(-.2);await mkdir(sidecar(2));await page.locator('.status-actions').getByRole('button',{name:'完成',exact:true}).click();
  await expect(modal()).toBeVisible();await expect(modal()).toContainText('失败 1 张');await expect(modal().getByRole('button',{name:'重试未保存项',exact:true})).toBeVisible();await expect(page.locator('.film-item')).toHaveCount(2);
  await dirty(1,false);await dirty(2,true);expect((await readDocument(sidecar(1))).adjustments.exposure).toBe(.5);
- const alternate=join(photos,'明确 另存目标.xmp');await settings({saveAsPath:alternate});await modal().getByRole('button',{name:'另存此项…',exact:true}).click();await expect(page.locator('.film-item')).toHaveCount(0);await expect(modal()).toHaveCount(0);
+ const alternate=join(photos,'明确 另存目标.captraw');await settings({saveAsPath:alternate});await modal().getByRole('button',{name:'另存此项…',exact:true}).click();await expect(page.locator('.film-item')).toHaveCount(0);await expect(modal()).toHaveCount(0);
  expect((await readDocument(alternate)).adjustments.exposure).toBe(-.2);assert((await stat(sidecar(2))).isDirectory());
  const saveAs=await app.evaluate(()=>globalThis.__saveDialogs.saveAs);expect(saveAs.length).toBe(1);expect(saveAs[0].defaultPath).toBe(sidecar(2));
  await pass('partially failed Done preserves the session and successful sidecar; native SaveAs retries only the failed item, then ends the clean session');
@@ -136,7 +136,7 @@ try{
  const workers=await app.evaluate(()=>{const p=globalThis.__saveWorker;p.restore();return p.workers;});expect(workers.length).toBe(1);
  console.log('Real native cancellation evidence:',JSON.stringify(workers));
  await modal().getByRole('button',{name:'返回编辑',exact:true}).click();await idle();await expect(page.locator('.film-item')).toHaveCount(3);
- await pass('visible Stop calls the real saver during a live native compose: current XMP completes, worker exits and subsequent dirty files remain untouched');
+ await pass('visible Stop calls the real saver during a live native compose: current native document completes, worker exits and subsequent dirty files remain untouched');
  await settings({discard:0});await page.locator('.status-actions').getByRole('button',{name:'取消',exact:true}).click();await idle();await expect(page.locator('.film-item')).toHaveCount(3);await dirty(1,true);
  await settings({discard:1});await page.locator('.status-actions').getByRole('button',{name:'取消',exact:true}).click();await expect(page.locator('.film-item')).toHaveCount(0);
  expect(await readFile(sidecar(1))).toEqual(beforeCancel[1]);expect((await readDocument(sidecar(0))).adjustments.exposure).toBe(.15);

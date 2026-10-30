@@ -1,5 +1,5 @@
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP,CRS,lookup} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,lookup} from '@captraw/desktop-core/documents';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';

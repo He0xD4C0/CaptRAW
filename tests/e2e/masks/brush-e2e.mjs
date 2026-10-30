@@ -6,8 +6,8 @@ import {electron,closeElectron,electronDiagnostics} from '../../support/electron
 import {EngineClient} from '../../support/engine-client.mjs';
 import {readDocument} from '../../support/xmp-test.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
-import {restoreRecipeMasks} from '@captraw/desktop-core/mask-assets';
+import {XMP} from '@captraw/desktop-core/documents';
+import {restoreRecipeMasks} from '@captraw/desktop-core/documents';
 import {mkdtemp,writeFile,readFile,rm,stat,readdir} from 'node:fs/promises';
 import {existsSync,readFileSync} from 'node:fs';
 import {join,resolve,dirname} from 'node:path';

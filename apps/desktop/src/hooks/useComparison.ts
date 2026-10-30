@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import type {ComparisonLayout,PreviewFrame} from '@captraw/contracts';
-import type {DocumentState} from './useWorkbench';
+import type {DocumentState} from './workbench/model';
 export const comparisonLayouts:ComparisonLayout[]=['off','left-right','top-bottom','split-vertical','split-horizontal'];
 export const comparisonNames:Record<ComparisonLayout,string>={off:'单图', 'left-right':'左右对比','top-bottom':'上下对比','split-vertical':'左右分割','split-horizontal':'上下分割'};
 export function useComparison(active:DocumentState|undefined,linearPreview=false){

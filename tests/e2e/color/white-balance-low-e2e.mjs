@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import assert from 'node:assert/strict';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 const scratch=await mkdtemp(join(tmpdir(),'captraw-wb-low-e2e-'));
 const source=resolve('build/samples/synthetic.dng'),original=await readFile(source),photo=join(scratch,'低温 白平衡.dng'),sidecar=join(scratch,'低温 白平衡.xmp');await copyFile(source,photo);
 let app,page,passed=false,failure;const errors=[];

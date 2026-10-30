@@ -5,7 +5,7 @@ import {copyFileSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,statSy
 import {join,resolve} from 'node:path';
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP,CRS,lookup,decodeAdobeMaskGroups} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,lookup,decodeAdobeMaskGroups} from '@captraw/desktop-core/documents';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {adobeMaskFixture as fixture} from '../../support/xmp-test.mjs';
 

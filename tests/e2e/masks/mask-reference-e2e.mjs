@@ -4,7 +4,7 @@ import {electron,closeElectron,electronDiagnostics} from '../../support/electron
 import {EngineClient} from '../../support/engine-client.mjs';
 import {readDocument} from '../../support/xmp-test.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 import {mkdtemp,rm,copyFile,writeFile} from 'node:fs/promises';
 import {readFileSync,existsSync} from 'node:fs';
 import {join,resolve,dirname,basename} from 'node:path';

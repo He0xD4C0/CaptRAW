@@ -10,7 +10,7 @@ import {createHash} from 'node:crypto';
 import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP,CRS,property,text,lookup,readExtension} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,property,text,lookup,readExtension} from '@captraw/desktop-core/documents';
 const root=await mkdtemp(join(tmpdir(),'captraw-perspective-manual-app-')),python=resolve('build/qa-venv/bin/python');
 const binary=resolve(process.env.CAPTRAW_ENGINE||'build/native/captraw-engine'),hash=b=>createHash('sha256').update(b).digest('hex');
 const rendererHTML='apps/desktop/dist/renderer/index.html',asset=(await readFile(rendererHTML,'utf8')).match(/src="\.\/([^\"]+\.js)"/)[1];

@@ -4,13 +4,13 @@ import {mkdtemp,copyFile,readFile,writeFile,mkdir,rm,rename,readdir,open,utimes,
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
-import {captureSourceIdentity,verifySourceIdentity,validateSourceIdentity,prepareSourceIdentities} from '@captraw/desktop-core/source-identity';
+import {captureSourceIdentity,verifySourceIdentity,validateSourceIdentity,prepareSourceIdentities} from '@captraw/desktop-core/engine';
 import {Documents,BatchDocumentSaver,validateBatchSave} from '@captraw/desktop-core/documents';
-import {SessionDocumentSaver} from '@captraw/desktop-core/session-save';
-import {BatchExporter,validateBatch} from '@captraw/desktop-core/batch-export';
+import {SessionDocumentSaver} from '@captraw/desktop-core/documents';
+import {BatchExporter,validateBatch} from '@captraw/desktop-core/export';
 import {NativeEngine} from '@captraw/desktop-core/engine';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {Synchronizer} from '@captraw/desktop-core/presets';
+import {XMP} from '@captraw/desktop-core/documents';
 import {presetValidationBase} from '@captraw/contracts/presets';
 const binary=resolve('build/native/captraw-engine'),resources=resolve('build/native/resources');
 const documents=new Documents(new XMP(resolve('build/xmp/captraw-xmp'))),sha=bytes=>createHash('sha256').update(bytes).digest('hex');

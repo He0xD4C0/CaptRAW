@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {electron,closeElectron} from '../../support/electron-background.mjs';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {XMP,CRS,CT,property,text,encode,lookup,readExtension,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,property,text,encode,lookup,readExtension,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {capturePreset} from '@captraw/contracts/presets';

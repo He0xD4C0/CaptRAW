@@ -8,7 +8,7 @@ import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
-import {XMP,CRS,CT,TIFF,XMP_BASIC,lookup,property,text} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,TIFF,XMP_BASIC,lookup,property,text} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {DEFAULT_EXPORT_OPTIONS} from '@captraw/contracts/export-options';

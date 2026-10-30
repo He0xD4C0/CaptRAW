@@ -1,7 +1,7 @@
 import {readDocument} from '../../support/xmp-test.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
-import {saveRecipeWithMasks,restoreRecipeMasks as restore} from '@captraw/desktop-core/mask-assets';
+import {XMP} from '@captraw/desktop-core/documents';
+import {saveRecipeWithMasks,restoreRecipeMasks as restore} from '@captraw/desktop-core/documents';
 import {EngineClient} from '../../support/engine-client.mjs';
 import assert from 'node:assert/strict';
 import {resolve,join,basename,dirname} from 'node:path';

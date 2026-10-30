@@ -4,7 +4,7 @@ import {expect} from '@playwright/test';
 import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 import {mkdtemp,copyFile,readFile,writeFile,rm} from 'node:fs/promises';import {existsSync} from 'node:fs';import {tmpdir} from 'node:os';import {join,resolve,basename} from 'node:path';import {createHash} from 'node:crypto';
 const root=await mkdtemp(join(tmpdir(),'captraw-preset-fill-gui-')),hash=b=>createHash('sha256').update(b).digest('hex'),sidecar=p=>p.replace(/\.tif$/,'.xmp'),documents=new Documents(new XMP(resolve('build/xmp/captraw-xmp'))),checks=[],errors=[];
 const models=['art-perspective-v1','signed-framing-v1'],cases=models.map((model,i)=>({model,name:i?'新版 关闭填满':'ART 关闭填满',author:join(root,'author-'+i+'.tif'),target:join(root,'inherited-'+i+'.tif')}));

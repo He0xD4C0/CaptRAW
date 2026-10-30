@@ -3,7 +3,7 @@ import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,readdirSync,copyFileSyn
 import {join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
-import {ObjectSelection} from '@captraw/desktop-core/object-selection';
+import {ObjectSelection} from '@captraw/desktop-core/editing';
 import {EngineClient} from '../../support/engine-client.mjs';
 
 const root=resolve(process.env.CAPTRAW_OBJECT_GEOMETRY_OUT||'artifacts/object-geometry');mkdirSync(root,{recursive:true});

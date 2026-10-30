@@ -1,29 +1,20 @@
-import { app, BrowserWindow, dialog, ipcMain, protocol, net, Menu } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, net, Menu, shell } from 'electron';
 import { resolve, join, dirname, basename, extname } from 'node:path';
 import { readdir, stat, realpath, rename, mkdir, rm } from 'node:fs/promises';
 import { existsSync,rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import {AutoPerspective} from '@captraw/desktop-core/auto-perspective';
-import {CurveSampling} from '@captraw/desktop-core/curve-sampler';
-import { NativeEngine } from '@captraw/desktop-core/engine';
-import {saveRecipeWithMasks,restoreRecipeMasks} from '@captraw/desktop-core/mask-assets';
-import {ObjectSelection} from '@captraw/desktop-core/object-selection';
-import {BrushPreparation} from '@captraw/desktop-core/brush';
-import {Presets,PresetPreview} from '@captraw/desktop-core/presets';
-import {XMP} from '@captraw/desktop-core/xmp';
-import {Documents,BatchDocumentSaver,validateBatchSave} from '@captraw/desktop-core/documents';
-import {SessionDocumentSaver,validateSessionSave,saveTargetState} from '@captraw/desktop-core/session-save';
-import {InputProfiles} from '@captraw/desktop-core/input-profiles';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {BatchExporter,validateBatch} from '@captraw/desktop-core/batch-export';
-import {finishOutputMetadata} from '@captraw/desktop-core/output-metadata';
-import {nativeSidecar} from '@captraw/desktop-core/native-codec';
+import {AutoPerspective,CurveSampling,ObjectSelection,BrushPreparation} from '@captraw/desktop-core/editing';
+import {NativeEngine,executableName,isContainedFile,captureSourceIdentity,verifySourceIdentity} from '@captraw/desktop-core/engine';
+import {restoreRecipeMasks,XMP,Documents,BatchDocumentSaver,SessionDocumentSaver,nativeSidecar} from '@captraw/desktop-core/documents';
+import {Presets,PresetPreview,Synchronizer} from '@captraw/desktop-core/presets';
+import {InputProfiles} from '@captraw/desktop-core/profiles';
+import {BatchExporter} from '@captraw/desktop-core/export';
+import {registerIpc} from './ipc/index.js';
+import type {MainRuntime} from './ipc/context.js';
 import {SYNC_GROUPS} from '@captraw/contracts/synchronize';
-import {executableName,isContainedFile,documentRelativePath} from '@captraw/desktop-core/runtime';
-import {captureSourceIdentity,verifySourceIdentity} from '@captraw/desktop-core/source-identity';
-import type { ImageSession, EditDocument, EngineEvent, ExportRequest,SourceIdentity } from '@captraw/contracts';
-import {ENGINE_VERSION,OUTPUT_COLOR_SPACES,mergeAdjustmentPatch,partialAdjustmentGroups,sourceFrameOpenSnapshot,sourceFramePolicyForDocument} from '@captraw/contracts';
+import type { ImageSession, EditDocument, EngineEvent,SourceIdentity } from '@captraw/contracts';
+import {mergeAdjustmentPatch,partialAdjustmentGroups,sourceFrameOpenSnapshot,sourceFramePolicyForDocument} from '@captraw/contracts';
 protocol.registerSchemesAsPrivileged([{ scheme: 'captraw', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 const backgroundTest=process.env.CAPTRAW_E2E_BACKGROUND==='1';
 if(backgroundTest&&process.env.CAPTRAW_E2E_USER_DATA)app.setPath('userData',resolve(process.env.CAPTRAW_E2E_USER_DATA));
@@ -33,6 +24,7 @@ let presetPreview:PresetPreview;
 let presetPreviewStopping=false;
 let presetPreviewSynchronizer:Synchronizer;
 let documents:Documents;
+let xmp:XMP;
 let batchSaver:BatchDocumentSaver;
 let sessionSaver:SessionDocumentSaver;
 let savePending=false;
@@ -191,7 +183,7 @@ async function openImage(path: string,expectedSource?:SourceIdentity) {
         const {response}=await dialog.showMessageBox(win,{type:'question',message:'导入 Adobe 设置？',detail:`${basename(path)}\nCaptRAW使用自己的显影算法，结果可能与ACR不同。\n可转换的参数项：${fields}\n${loaded.warnings.join('\n')}\n保存将使用 .captraw，源XMP不修改。`,buttons:['使用默认显影','导入 Adobe 设置'],defaultId:0,cancelId:0,noLink:true});
         if(response===1)importedFromAdobe=true;
         else{
-          loaded={...loaded,adjustments:{},artProfile:'',metadataOnly:true,hasDevelopSettings:false,warnings:[]};
+          loaded.metadataOnly=true;loaded.hasDevelopSettings=false;loaded.warnings=[];
           recipe={...recipe,artProfile:image.artProfile,adjustments:structuredClone(image.adjustments),maskAssets:undefined,inputProfileAsset:undefined};
         }
       }else importedFromAdobe=adobeImport;
@@ -201,253 +193,40 @@ async function openImage(path: string,expectedSource?:SourceIdentity) {
     if(loaded)loaded.warnings=[...new Set(loaded.warnings)];
     openingDocuments.set(path,{loaded:structuredClone(loaded),recipeFile});
     stopComparison();const previous=engine;engine=candidate;previous?.terminate();
-    session={...image,sourceIdentity,rating:recipe?.rating??image.rating,label:recipe?.label??image.label,initialAdjustments:image.adjustments,initialArtProfile:image.artProfile,recipe,xmpWarnings:loaded?.warnings,importedFromAdobe,needsNativeSave:importedFromAdobe||loaded?.storageKind==='legacy-xmp'};
-    if(recipe)session.adjustments=recipe.adjustments;
-    return session;
+    const next:ImageSession={...image,sourceIdentity,rating:recipe?.rating??image.rating,label:recipe?.label??image.label,initialAdjustments:image.adjustments,initialArtProfile:image.artProfile,recipe,xmpWarnings:loaded?.warnings,importedFromAdobe,needsNativeSave:importedFromAdobe||loaded?.storageKind==='legacy-xmp'};
+    if(recipe)next.adjustments=recipe.adjustments;session=next;
+    return next;
   }catch(error){candidate.terminate();throw error;}finally{if(openingEngine===candidate)openingEngine=undefined;}
 }
 
 function registerIPC() {
-  ipcMain.handle('comparison:update',async(_,p)=>{
-    const current=requireSession(p.sessionId);stopComparison();if(!p.settings)return;
-    const sequence=comparisonSequence,directory=join(cache,'comparison-'+randomUUID()),worker=new NativeEngine(binary,resources,directory),displayed=new Map<string,string[]>();comparisonEngine=worker;
-    worker.child.once('close',()=>{void rm(directory,{recursive:true,force:true}).catch(()=>{});});
-    worker.on('engine-event',async message=>{
-      if(worker!==comparisonEngine||current.id!==session?.id)return;
-      if(message.event==='preview'){
-        try{await verifySourceIdentity(current.path,current.sourceIdentity);}
-        catch(error){
-          if(worker===comparisonEngine&&current.id===session?.id){stopComparison();send({event:'comparison-error',sessionId:current.id,revision:p.revision,message:error instanceof Error?error.message:String(error)});}
-          return;
-        }
-        if(worker!==comparisonEngine||current.id!==session?.id)return;
-        const frame=message.frame,file=resolve(frame.file);if(!isContainedFile(cache,file))return;
-        const key=`comparison/${sequence}/${basename(file)}`;comparisonFrames.set(key,file);
-        const registered=[key];
-        let linear=null;
-        if(frame.linear?.file&&isContainedFile(directory,resolve(frame.linear.file))){
-          const linearKey=`comparison/${sequence}/${basename(frame.linear.file)}`;comparisonFrames.set(linearKey,resolve(frame.linear.file));linear={...frame.linear,url:`captraw://preview/${linearKey}`};
-          registered.push(linearKey);
-        }
-        send({event:'comparison-preview',frame:{...frame,linear,url:`captraw://preview/${key}`}});
-        displayed.set(frame.kind,registered);const pinned=new Set([...displayed.values()].flat());
-        for(const [key,path] of [...comparisonFrames].slice(0,linear?-8:-4))if(!pinned.has(key)){comparisonFrames.delete(key);void rm(path,{force:true}).catch(()=>{});}
-      }else if(message.event==='error')send({event:'comparison-error',sessionId:current.id,revision:p.revision,message:message.message});
-    });
-    try{
-      await worker.ready;
-      await verifySourceIdentity(current.path,current.sourceIdentity);
-      if(worker!==comparisonEngine||current.id!==session?.id)return;
-      await worker.call('open',{path:current.path,sessionId:current.id,...sourceFrameOpenSnapshot(p.settings.adjustments,p.settings.artProfile,current.sourceFrame)});
-      await verifySourceIdentity(current.path,current.sourceIdentity);
-      if(worker!==comparisonEngine||current.id!==session?.id)return;
-      const {rotation,flipHorizontal,flipVertical,fineRotation,perspective,crop,lensCorrections,lensProfile,lensManualDistortion}=p.settings.geometry;
-      await worker.call('update',{revision:p.revision,artProfile:p.settings.artProfile,linearPreview:!!p.linearPreview,adjustments:{...p.settings.adjustments,rotation,flipHorizontal,flipVertical,fineRotation,perspective,crop,lensCorrections,lensProfile,lensManualDistortion}});
-    }catch(error){if(worker===comparisonEngine){stopComparison();throw error;}}
-  });
-  ipcMain.handle('comparison:viewport',async(_,p)=>{requireSession(p.sessionId);const worker=comparisonEngine;if(worker)await worker.call('viewport',p);});
-
-  ipcMain.handle('profiles:list',()=>session?inputProfiles.listFor(session.profileCamera||session.camera,session.inputKind!=='rendered'):inputProfiles.list());
-  ipcMain.handle('profiles:inspect',(_,reference)=>inputProfiles.inspect(reference));
-  ipcMain.handle('profiles:import',async(_,id)=>{
-    const current=requireSession(id);
-    const r=await dialog.showOpenDialog(win,{title:'导入输入配置文件 / Look',properties:['openFile'],filters:[{name:'DCP / ICC / Look XMP',extensions:['dcp','icc','icm','xmp']}]});
-    if(r.canceled||!r.filePaths.length)return null;requireSession(id);
-    return inputProfiles.importFile(r.filePaths[0],current.profileCamera||current.camera,current.inputKind!=='rendered');
-  });
-  ipcMain.handle('presets:list',()=>presets.list());
-  ipcMain.handle('presets:create',(_,input)=>presets.create({...input,sourceFrame:session?.sourceFrame,sourcePath:session?.path,sourceIdentity:session?.sourceIdentity}));
-  ipcMain.handle('presets:update',(_,p)=>presets.update(p.id,{...p.input,sourceFrame:session?.sourceFrame,sourcePath:session?.path,sourceIdentity:session?.sourceIdentity}));
-  ipcMain.handle('presets:rename',(_,p)=>presets.rename(p.id,p.name,p.group));
-  ipcMain.handle('presets:delete',(_,id)=>presets.remove(id));
-  ipcMain.handle('presets:apply',(_,p)=>{requireSession(p.target.image.id);return presets.apply(p.id,p.target,synchronizer);});
-  ipcMain.handle('presets:apply-many',(_,request)=>presets.applyMany(request,synchronizer));
-  ipcMain.handle('presets:create-iso',(_,input)=>presets.createISO(input));
-  ipcMain.handle('presets:favorite',(_,p)=>presets.favorite(p.id,p.favorite));
-  ipcMain.handle('presets:duplicate',(_,p)=>presets.duplicate(p.id,p.name,p.group));
-  ipcMain.handle('presets:packs',()=>presets.listPacks());
-  ipcMain.handle('presets:preview',(_,request)=>presetPreview.preview(request));
-  ipcMain.handle('presets:preview-cancel',()=>presetPreview.cancel());
-  ipcMain.handle('presets:import',async()=>{const r=await dialog.showOpenDialog(win,{title:'导入预设',properties:['openFile'],filters:[{name:'CaptRAW / Adobe 预设',extensions:['captrawpreset','xmp']}]});return r.canceled||!r.filePaths.length?null:presets.importFile(r.filePaths[0]);});
-  ipcMain.handle('presets:export',async(_,id)=>{const r=await dialog.showSaveDialog(win,{title:'导出 CaptRAW 预设',message:'移动预设时请同时保留配套 .assets 文件夹。',defaultPath:'预设.captrawpreset',filters:[{name:'CaptRAW 预设',extensions:['captrawpreset']}]});if(r.canceled||!r.filePath)return null;await presets.exportFile(id,r.filePath);return r.filePath;});
-  ipcMain.handle('object:begin',(_,p)=>objects.begin(requireSession(p.sessionId),p.adjustments,p.artProfile));
-  ipcMain.handle('object:predict',(_,p)=>objects.predict(p.id,p.prompts,p.box));
-  ipcMain.handle('object:parts',(_,id)=>objects.predictPersonParts(id));
-  ipcMain.handle('object:semantic',(_,id)=>objects.predictSemanticMasks(id));
-  ipcMain.handle('object:sky',(_,id)=>objects.predictSkyMask(id));
-  ipcMain.handle('object:commit',(_,p)=>objects.commit(p.id,p.revision,p.index));
-  ipcMain.handle('object:commit-part',(_,p)=>objects.commitPersonPart(p.id,p.revision,p.part));
-  ipcMain.handle('object:commit-semantic',(_,p)=>objects.commitSemanticMask(p.id,p.revision,p.part));
-  ipcMain.handle('object:commit-sky',(_,p)=>objects.commitSkyMask(p.id,p.revision));
-  ipcMain.handle('object:cancel',(_,id)=>objects.cancel(id));
-  ipcMain.handle('brush:prepare',async(_,request:import('@captraw/contracts').BrushPrepareRequest)=>{
-    const image=requireSession(request.sessionId),snapshot=brushSnapshot;
-    if(!snapshot||snapshot.sessionId!==image.id||snapshot.revision!==request.revision)throw new Error('照片已更新，请重新绘制画笔。');
-    const check=async()=>{requireSession(image.id);if(brushSnapshot!==snapshot)throw new Error('照片已更新，请重新绘制画笔。');};
-    await verifySourceIdentity(image.path,image.sourceIdentity);await check();
-    return brushes.prepare(image,request,snapshot.adjustments,snapshot.artProfile,check,async()=>{await verifySourceIdentity(image.path,image.sourceIdentity);await check();});
-  });
-  ipcMain.handle('brush:cancel',(_,id)=>brushes.cancel(id));
-  ipcMain.handle('images:export',async(_,request)=>{
-    if(exportPending)throw new Error('已有导出任务正在运行。');
-    validateBatch(request);exportPending=true;
-    try{
-      const result=await dialog.showOpenDialog(win,{title:`导出 ${request.documents.length} 张照片：选择文件夹`,properties:['openDirectory','createDirectory']});
-      if(result.canceled||!result.filePaths.length)return null;
-      return await batchExporter.run(request,result.filePaths[0]);
-    }finally{exportPending=false;}
-  });
-  ipcMain.handle('images:synchronize',(_,request)=>synchronizer.run(request));
-  ipcMain.handle('images:synchronize-cancel',()=>{presets.cancel();synchronizer.cancel();});
-  ipcMain.handle('curve:parametric',async(_,settings)=>native().call('parametricCurve',settings));
-  ipcMain.handle('documents:dirty',(_,paths:string[])=>{dirtyPaths.clear();for(const path of paths)dirtyPaths.add(resolve(path));dirtyCount=dirtyPaths.size;});
-  ipcMain.handle('document:confirm-close',async(_,name:string)=>{
-    const {response}=await dialog.showMessageBox(win,{type:'question',message:`保存“${name}”的更改？`,detail:'保存会写入 .captraw 编辑文件，不会改写原片或源XMP。放弃仅撤销未保存修改。',buttons:['保存','放弃更改','取消'],defaultId:0,cancelId:2,noLink:true});
-    return ['save','discard','cancel'][response];
-  });
-  ipcMain.handle('files:choose', async () => (await dialog.showOpenDialog(win, { title: '打开照片或编辑文件', properties: ['openFile', 'multiSelections'], filters: [{ name: '照片与编辑文件', extensions: ['nef','cr3','cr2','arw','raf','dng','orf','rw2','pef','tif','tiff','jpg','jpeg','png','captraw','xmp'] }] })).filePaths);
-  ipcMain.handle('image:open', async (_, path: string,expectedSource?:SourceIdentity) => {
-    if(openingImage)throw new Error('正在载入照片，请稍候。');
-    openingImage=true;
-    try{brushSnapshot=undefined;await curveSampling?.cancel();await brushes.invalidate();await objects.cancel();return await openImage(path,expectedSource);}finally{openingImage=false;}
-  });
-  ipcMain.handle('image:update', async (_, p) => { requireSession(p.sessionId);brushSnapshot=undefined;await curveSampling?.cancel();brushes.adopt(p.adjustments);await brushes.invalidate();objects.invalidate(p.sessionId,p.adjustments,p.artProfile||'');const result=await native().call('update', p);brushSnapshot={sessionId:p.sessionId,revision:p.revision,adjustments:structuredClone(p.adjustments),artProfile:result.artProfile};return result; });
-  ipcMain.handle('image:viewport', async (_, p) => { requireSession(p.sessionId); await native().call('viewport', p); });
-  ipcMain.handle('image:coordinates',async(_,p)=>{requireSession(p.sessionId);return native().call('coordinates',p);});
-  ipcMain.handle('image:repair-source',async(_,request)=>{requireSession(request.sessionId);return native().call('repairSource',request);});
-  ipcMain.handle('image:auto-perspective',async(_,request)=>{
-    const current=requireSession(request.sessionId);
-    await verifySourceIdentity(current.path,current.sourceIdentity);requireSession(request.sessionId);
-    const result=await autoPerspective.run(current.path,{...request,sourceFrame:current.sourceFrame});
-    if(result===null)return null;
-    requireSession(request.sessionId);await verifySourceIdentity(current.path,current.sourceIdentity);requireSession(request.sessionId);
-    return result;
-  });
-  ipcMain.handle('image:auto-perspective-cancel',(_,id)=>autoPerspective.cancel(id));
-  ipcMain.handle('image:straighten',async(_,p)=>{requireSession(p.sessionId);return native().call('straighten',p);});
-  ipcMain.handle('image:color-sample',async(_,p)=>{requireSession(p.sessionId);return native().call('sampleColor',p);});
-  ipcMain.handle('image:luminance-sample',async(_,p)=>{requireSession(p.sessionId);return native().call('sampleLuminance',p);});
-  ipcMain.handle('image:curve-sample',async(_,request)=>{
-    const current=requireSession(request.sessionId),snapshot=brushSnapshot;
-    if(!snapshot||snapshot.sessionId!==current.id||snapshot.revision!==request.revision)throw new Error('照片已更新，请等待预览后重新取样。');
-    curveSampling??=new CurveSampling(binary,resources,cache);
-    const valid=()=>!openingImage&&session===current&&brushSnapshot===snapshot;
-    return curveSampling.run(current,request,snapshot,valid);
-  });
-  ipcMain.handle('image:curve-sample-cancel',(_,id)=>curveSampling?.cancel(id));
-  app.once('will-quit',()=>{void curveSampling?.cancel();});
-  ipcMain.handle('image:white-balance',async(_,p)=>{requireSession(p.sessionId);return native().call('whiteBalance',p.request);});
-  ipcMain.handle('image:close', async () => {
-    autoPerspective.cancel();stopComparison();await objects.cancel();
-    brushSnapshot=undefined;await curveSampling?.cancel();await brushes.invalidate();const closing=engine;engine=undefined;session=undefined;
-    // Discarding a session must also work after its preview process has exited.
-    if(closing?.alive)await closing.call('close').catch(()=>{});
-    closing?.terminate();
-  });
-  ipcMain.handle('recipes:save',async(_,request)=>{
-    if(savePending)throw new Error('已有批量保存任务正在运行。');
-    validateBatchSave(request);savePending=true;
-    try{
-      const result=await dialog.showOpenDialog(win,{title:`保存 ${request.documents.length} 张照片的编辑：选择文件夹`,message:'每张照片生成独立 .captraw，包含蒙版和配置文件资产。同名文件保留，新文件自动编号。',properties:['openDirectory','createDirectory']});
-      if(result.canceled||!result.filePaths.length)return null;
-      return await batchSaver.run(request,result.filePaths[0]);
-    }finally{savePending=false;}
-  });
-  ipcMain.handle('session:save',async(_,request)=>{
-    if(savePending)throw new Error('已有保存任务正在运行。');
-    validateSessionSave(request);savePending=true;
-    try{return await sessionSaver.run(request);}finally{savePending=false;}
-  });
-  ipcMain.handle('session:save-as',async(_,request)=>{
-    if(savePending)throw new Error('已有保存任务正在运行。');
-    validateSessionSave(request);if(request.documents.length!==1)throw new Error('请仅选择一张失败照片另存。');
-    savePending=true;
-    try{
-      const source=request.documents[0].path;
-      const result=await dialog.showSaveDialog(win,{title:'将失败的编辑另存为 CaptRAW',defaultPath:nativeSidecar(source),filters:[{name:'CaptRAW 编辑文件',extensions:['captraw']}]});
-      if(result.canceled||!result.filePath)return null;
-      return await sessionSaver.run(request,result.filePath);
-    }finally{savePending=false;}
-  });
-  ipcMain.handle('session:confirm-discard',async(_,names:string[])=>{
-    if(!Array.isArray(names)||names.length>500||names.some(name=>typeof name!=='string'||!name.trim()))throw new Error('放弃更改的照片列表无效。');
-    if(!names.length)return true;
-    const {response}=await dialog.showMessageBox(win,{type:'warning',message:`放弃 ${names.length} 张照片的未保存更改？`,detail:names.join('\n'),buttons:['取消','放弃更改'],defaultId:0,cancelId:0,noLink:true});
-    return response===1;
-  });
-  ipcMain.handle('session:forget',(_,id:string)=>{
-    if(typeof id!=='string'||!id.trim())throw new Error('保存会话标识无效。');
-    sessionSaver.forgetSession(id);openingDocuments.clear();
-  });
-  ipcMain.handle('recipes:cancel',()=>{batchSaver.cancel();sessionSaver.cancel();});
-  ipcMain.handle('recipe:save', async (_, { session: supplied, artProfile }: { session: ImageSession; artProfile: string }) => {
-    const current = requireSession(supplied.id);
-    await verifySourceIdentity(current.path,current.sourceIdentity);
-    const result = await dialog.showSaveDialog(win, { title: '另存 CaptRAW 编辑', message: '含外部蒙版或输入配置文件时会同时保存资产文件夹；移动编辑文件时请保留配套文件夹。', defaultPath: nativeSidecar(current.path), filters: [{ name: 'CaptRAW 编辑文件', extensions: ['captraw'] }] });
-    if (result.canceled || !result.filePath) return '';
-    if (resolve(result.filePath) === current.path || !/\.captraw$/i.test(result.filePath)) throw new Error('请使用 .captraw 保存编辑。');
-    await native().call('validate',{artProfile,adjustments:supplied.adjustments});
-    const snapshotPacket=supplied.recipe?.xmpPacket??current.recipe?.xmpPacket;
-    const target=await saveTargetState(result.filePath);
-    const recipe: EditDocument = { xmpPacket:snapshotPacket,nativePacket:target.nativePacket??supplied.recipe?.nativePacket??current.recipe?.nativePacket, engineVersion: ENGINE_VERSION, source: { path: documentRelativePath(dirname(result.filePath),current.path), size: current.sourceIdentity.size, sha256: current.sourceIdentity.sha256 }, artProfile, adjustments: supplied.adjustments,rating:supplied.rating,label:supplied.label,baselineVersion:4 };
-    await saveRecipeWithMasks(native(),result.filePath,recipe,value=>documents.serialize(value,[snapshotPacket,current.recipe?.xmpPacket]),true,async()=>{
-      await verifySourceIdentity(current.path,current.sourceIdentity);
-      if((await saveTargetState(result.filePath!)).stamp!==target.stamp)throw new Error('编辑文件在保存期间被外部修改，未覆盖原数据。请重试并重新确认目标。');
-    });
-    const saved=await documents.read(result.filePath);current.recipe={...recipe,...saved,source:saved.source??recipe.source,adjustments:mergeAdjustmentPatch(recipe.adjustments,saved.adjustments)};
-    return result.filePath;
-  });
-  ipcMain.handle('image:export', async (_, input:ExportRequest) => {
-    if (exportPending) throw new Error('已有导出任务正在运行。');
-    const {document:current,format,colorSpace,options}=structuredClone(input);
-    validateBatch({documents:[current],format,colorSpace,options});
-    exportPending=true;
-    try{
-    const sourceIdentity=current.sourceIdentity??await captureSourceIdentity(current.path);
-    await verifySourceIdentity(current.path,sourceIdentity);
-    const colorName=format==='avif'?'Rec.2020 / PQ HDR':OUTPUT_COLOR_SPACES[colorSpace];
-    const extension = format === 'jpeg' ? 'jpg' : format==='avif'?'avif':'tiff';
-    const result = await dialog.showSaveDialog(win, { title: '导出照片', defaultPath: join(dirname(current.path), `${basename(current.path, extname(current.path))}_CaptRAW.${extension}`), filters: [{ name: `${format === 'jpeg' ? 'JPEG' : format==='avif'?'AVIF · 12 位':'TIFF · 16 位'} · ${colorName}`, extensions: [extension] }] });
-    if (result.canceled || !result.filePath) return null;
-    if(!(format==='jpeg'?/\.(jpg|jpeg)$/i:format==='avif'?/\.avif$/i:/\.(tif|tiff)$/i).test(result.filePath))throw new Error('请选择与导出格式对应的 JPEG、TIFF 或 AVIF 文件名。');
-    if (resolve(result.filePath) === current.path || /\.(nef|cr3|cr2|arw|raf|dng|xmp|arp)$/i.test(result.filePath)) throw new Error('不能覆盖原始照片或编辑资产。');
-    const outputPath=result.filePath;
-    const assertOutputNotSource=async()=>{
-      const [sourcePath,targetDirectory,source,target]=await Promise.all([
-        realpath(current.path),realpath(dirname(outputPath)),stat(current.path,{bigint:true}),
-        stat(outputPath,{bigint:true}).catch(error=>{if(error.code==='ENOENT')return undefined;throw error;})
-      ]);
-      if(join(targetDirectory,basename(outputPath))===sourcePath||(target&&target.dev===source.dev&&target.ino===source.ino))throw new Error('不能覆盖原始照片或其文件系统别名。');
-    };
-    await assertOutputNotSource();
-    const job = randomUUID(), temp = `${result.filePath}.${job}.tmp`;
-    exportTemp=temp;
-    exportCancelled = false;
-    const worker = new NativeEngine(binary, resources, join(cache, `export-${job}`)); exporter = worker;
-    worker.on('engine-event', m => { if (m.event === 'progress') send({ event: 'job', job: { id: job, state: 'running', progress: m.progress, message: '正在处理并导出照片…' } }); });
-    send({ event: 'job', job: { id: job, state: 'running', progress: 0, message: '正在处理并导出照片…' } });
-    try {
-      const {artProfile}=await worker.call('compose',current);
-      if (exportCancelled) throw new Error('已取消导出');
-      const output=await worker.call('export', { path: current.path, artProfile, output: temp, format, colorSpace, options, rating:current.rating });
-      if(!exportCancelled)await finishOutputMetadata(worker,documents.xmp,current,format,options,output);
-      if (exportCancelled) throw new Error('已取消导出');
-      await verifySourceIdentity(current.path,sourceIdentity);
-      await assertOutputNotSource();
-      if (exportCancelled) throw new Error('已取消导出');
-      await rename(temp, result.filePath);
-      send({ event: 'job', job: { id: job, state: 'done', progress: 1, message: `已导出 ${basename(result.filePath)}` } });
-      return result.filePath;
-    } catch (error) {
-      send({ event: 'job', job: { id: job, state: exportCancelled ? 'cancelled' : 'error', progress: 0, message: exportCancelled ? '已取消导出' : String(error) } });
-      if (!exportCancelled) throw error; return null;
-    } finally {
-      const stopped=worker.child.exitCode!==null||worker.child.signalCode!==null?Promise.resolve():new Promise<void>(done=>worker.child.once('exit',()=>done()));
-      worker.terminate();await stopped;exporter = undefined;exportTemp=undefined; await rm(temp, { force: true }); await rm(join(cache, `export-${job}`), { recursive: true, force: true });
-    }
-    }finally{exportPending=false;}
-  });
-  ipcMain.handle('job:cancel', async () => { if(batchExporter.active)batchExporter.cancel();else if (exporter) { exportCancelled = true; exporter.terminate(); } else await engine?.call('cancel'); });
+  const runtime:MainRuntime={
+    get win(){return win;},set win(value){win=value;},
+    binary,resources,cache,send,
+    get session(){return session;},set session(value){session=value;},
+    get engine(){return engine;},set engine(value){engine=value;},
+    get openingEngine(){return openingEngine;},set openingEngine(value){openingEngine=value;},
+    get comparisonEngine(){return comparisonEngine;},set comparisonEngine(value){comparisonEngine=value;},
+    get comparisonSequence(){return comparisonSequence;},set comparisonSequence(value){comparisonSequence=value;},
+    comparisonFrames,
+    autoPerspective,
+    get curveSampling(){return curveSampling;},set curveSampling(value){curveSampling=value;},
+    get exporter(){return exporter;},set exporter(value){exporter=value;},
+    get exportCancelled(){return exportCancelled;},set exportCancelled(value){exportCancelled=value;},
+    get exportTemp(){return exportTemp;},set exportTemp(value){exportTemp=value;},
+    get exportPending(){return exportPending;},set exportPending(value){exportPending=value;},
+    get savePending(){return savePending;},set savePending(value){savePending=value;},
+    get openingImage(){return openingImage;},set openingImage(value){openingImage=value;},
+    get quitting(){return quitting;},set quitting(value){quitting=value;},
+    get dirtyCount(){return dirtyCount;},set dirtyCount(value){dirtyCount=value;},
+    dirtyPaths,
+    frames,
+    openingDocuments,
+    documents,batchSaver,sessionSaver,inputProfiles,presets,presetPreview,synchronizer,objects,brushes,batchExporter,xmp,
+    get brushSnapshot(){return brushSnapshot;},set brushSnapshot(value){brushSnapshot=value;},
+    native,requireSession,openImage,stopComparison,
+  };
+  registerIpc(ipcMain,dialog,app,runtime);
 }
 app.whenReady().then(async () => {
   const root = app.isPackaged ? join(process.resourcesPath, 'native') : resolve(__dirname, '../../../../build/native');
@@ -458,7 +237,7 @@ app.whenReady().then(async () => {
   autoPerspective=new AutoPerspective(binary,resources,cache);
   brushes=new BrushPreparation(binary,resources,cache,()=>native());
   synchronizer=new Synchronizer(binary,resources,cache,message=>send({event:'synchronize-progress',message}));
-  const xmp=new XMP(app.isPackaged?join(root,executableName('captraw-xmp')):resolve(__dirname,'../../../../build/xmp',executableName('captraw-xmp')));
+  xmp=new XMP(app.isPackaged?join(root,executableName('captraw-xmp')):resolve(__dirname,'../../../../build/xmp',executableName('captraw-xmp')));
   documents=new Documents(xmp);
   batchSaver=new BatchDocumentSaver(binary,resources,cache,documents,message=>send({event:'save-progress',message}));
   sessionSaver=new SessionDocumentSaver(binary,resources,cache,documents,async targets=>{
@@ -498,7 +277,25 @@ app.whenReady().then(async () => {
     command(action);
   };
   const edit=(action:'copy-all'|'copy-selected'|'paste')=>{void editCommand(action).catch(error=>send({event:'error',message:String(error)}));};
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'CaptRAW', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'quit' }] },{label:'文件',submenu:[{label:'打开…',accelerator:'CommandOrControl+O',click:()=>command('open')},{label:'导出设置…',accelerator:'CommandOrControl+S',click:()=>command('export')},{label:'保存 CaptRAW 编辑…',accelerator:'CommandOrControl+Shift+S',click:()=>command('save')},{label:'关闭文件',accelerator:'CommandOrControl+W',click:()=>command('close')}]}, { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, {label:'复制',accelerator:'CommandOrControl+C',click:()=>edit('copy-all')},{label:'复制所选设置…',accelerator:'CommandOrControl+Alt+C',click:()=>edit('copy-selected')},{label:'粘贴',accelerator:'CommandOrControl+V',click:()=>edit('paste')}, { role: 'selectAll' }] }, { label: '窗口', submenu: [{ role: 'minimize' }, { role: 'zoom' }] }]));
+  app.setAboutPanelOptions({applicationName:'CaptRAW',applicationVersion:app.getVersion(),version:app.getVersion(),copyright:'Copyright (C) 2026 CaptRAW Contributors',website:'https://github.com/He0xD4C0/CaptRAW'});
+  const projectRoot=resolve(__dirname,'../../../..');
+  const notices=()=>app.isPackaged?[
+    join(process.resourcesPath,'native','licenses','CaptRAW-LICENSE.txt'),
+    join(process.resourcesPath,'native','licenses','CaptRAW-COPYRIGHT.txt'),
+    join(process.resourcesPath,'native','licenses','README.md'),
+  ]:[
+    join(projectRoot,'LICENSE'),
+    join(projectRoot,'COPYRIGHT'),
+    join(projectRoot,'THIRD_PARTY.md'),
+  ];
+  const showLicenses=async()=>{
+    const paths=notices();
+    const {response}=await dialog.showMessageBox(win,{type:'info',message:'CaptRAW 许可证与版权',detail:'Copyright (C) 2026 CaptRAW Contributors\nGPL-3.0-or-later，无担保。\n\nCaptRAW 包含 ART、RawTherapee 及其他第三方组件；完整许可证与来源随应用分发。',buttons:['GPL 许可证','版权声明','第三方声明','关闭'],defaultId:0,cancelId:3,noLink:true});
+    if(response===3)return;
+    const error=await shell.openPath(paths[response]);
+    if(error)await dialog.showMessageBox(win,{type:'error',message:'无法打开许可证文件',detail:error,buttons:['关闭'],noLink:true});
+  };
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'CaptRAW', submenu: [{ role: 'about' },{label:'许可证与版权…',click:()=>void showLicenses().catch(error=>send({event:'error',message:String(error)}))}, { type: 'separator' }, { role: 'quit' }] },{label:'文件',submenu:[{label:'打开…',accelerator:'CommandOrControl+O',click:()=>command('open')},{label:'导出设置…',accelerator:'CommandOrControl+S',click:()=>command('export')},{label:'保存 CaptRAW 编辑…',accelerator:'CommandOrControl+Shift+S',click:()=>command('save')},{label:'关闭文件',accelerator:'CommandOrControl+W',click:()=>command('close')}]}, { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, {label:'复制',accelerator:'CommandOrControl+C',click:()=>edit('copy-all')},{label:'复制所选设置…',accelerator:'CommandOrControl+Alt+C',click:()=>edit('copy-selected')},{label:'粘贴',accelerator:'CommandOrControl+V',click:()=>edit('paste')}, { role: 'selectAll' }] }, { label: '窗口', submenu: [{ role: 'minimize' }, { role: 'zoom' }] }]));
   if (process.env.CAPTRAW_DEV_URL) await win.loadURL(process.env.CAPTRAW_DEV_URL); else await win.loadURL('captraw://app/index.html');
 });
 app.on('window-all-closed', () => app.quit());

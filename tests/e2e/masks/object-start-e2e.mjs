@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {expect as playwrightExpect} from '@playwright/test';
 import {electron,closeElectron,electronDiagnostics} from '../../support/electron-background.mjs';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 import {mkdirSync,mkdtempSync,readFileSync,writeFileSync,copyFileSync,statSync,existsSync,readdirSync} from 'node:fs';
 import {resolve,join,dirname} from 'node:path';
 import {homedir} from 'node:os';

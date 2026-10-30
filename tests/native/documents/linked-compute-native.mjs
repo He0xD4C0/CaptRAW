@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve,join} from 'node:path';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
+import {Synchronizer} from '@captraw/desktop-core/presets';
 import {EngineClient} from '../../support/engine-client.mjs';
 const scratch=await mkdtemp(join(tmpdir(),'captraw-linked-compute-'));
 const binary=resolve(process.env.CAPTRAW_ENGINE||'build/native/captraw-engine'),resources=resolve(process.env.CAPTRAW_RESOURCES||'build/native/resources');

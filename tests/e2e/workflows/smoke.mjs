@@ -1,17 +1,20 @@
 import {expect as playwrightExpect} from '@playwright/test';
 import {electron,electronDiagnostics,closeElectron} from '../../support/electron-background.mjs';
 import {resolve,join,dirname} from 'node:path';
-import {mkdirSync,existsSync,writeFileSync,rmSync} from 'node:fs';
+import {mkdirSync,existsSync,writeFileSync,rmSync,copyFileSync,mkdtempSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 const expect=playwrightExpect.configure({timeout:60000});
 const root=process.cwd(),out=resolve(process.env.CAPTRAW_E2E_OUT||'artifacts/monorepo/e2e');mkdirSync(out,{recursive:true});
-const recipe=join(out,'人工 验收.xmp'),output=join(out,'gui-export.tiff');
+const fixtureDirectory=mkdtempSync(join(tmpdir(),'captraw-smoke-'));
+const source=join(fixtureDirectory,'nikon-d850.NEF'),recipe=source+'.captraw',output=join(fixtureDirectory,'gui-export.tiff');
+copyFileSync(resolve('build/samples/nikon-d850.NEF'),source);
 const executablePath=process.env.CAPTRAW_APP;
 const errors=[],consoleErrors=[],diagnosticErrors=[],startedAt=new Date().toISOString();
 const performanceBudgetMs=process.env.CAPTRAW_E2E_PERF_BUDGET_MS==='5000'?5000:null;
 let app,page,firstVisibleMs,failure,diagnostics,events=[],stage='launch',backgroundWindow=false;
 const describeError=error=>({name:error.name||'Error',message:error.message||String(error),stack:error.stack});
 try{
-  for(const file of [recipe,output])rmSync(file,{force:true});
+  for(const file of ['e2e-failure.png','ui.txt','stdout.log','stderr.log','e2e-report.json'])rmSync(join(out,file),{force:true});
   app=await electron.launch({executablePath,args:executablePath?[]:[root],timeout:60000,env:{...process.env,ELECTRON_DISABLE_SECURITY_WARNINGS:'true'}});
   backgroundWindow=true;page=await app.firstWindow({timeout:60000});
   page.setDefaultTimeout(60000);page.setDefaultNavigationTimeout(60000);
@@ -22,7 +25,7 @@ try{
   await page.screenshot({path:join(out,'welcome.png')});
   await page.evaluate(()=>{window.__events=[];window.captraw.onEvent(e=>window.__events.push(e));});
   stage='open-raw';
-  await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},resolve('build/samples/nikon-d850.NEF'));
+  await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},source);
   const firstStart=performance.now();
   await page.getByRole('button',{name:'打开',exact:true}).click();
   await expect(page.locator('.camera-name')).toContainText('D850');
@@ -59,8 +62,8 @@ try{
   await page.locator('.rendering').waitFor({state:'hidden'});
   await page.waitForFunction(()=>document.querySelector('canvas').dataset.frame===window.__events.filter(e=>e.event==='preview'&&e.frame.kind==='fit').at(-1)?.frame.url);
   await page.screenshot({path:join(out,'mask-edit.png')});
-  stage='save-xmp';
-  await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},recipe);
+  stage='save-captraw';
+  await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});dialog.showMessageBox=async()=>({response:1});},recipe);
   await page.getByRole('button',{name:'保存',exact:true}).click();
   await expect.poll(()=>existsSync(recipe)).toBe(true);
   stage='export-tiff';
@@ -74,7 +77,7 @@ try{
   await page.waitForFunction(()=>window.__events.some(e=>e.event==='preview'&&e.frame.kind==='detail'));
   await page.waitForFunction(()=>document.querySelector('canvas').dataset.detail===window.__events.filter(e=>e.event==='preview'&&e.frame.kind==='detail').at(-1)?.frame.url);
   await page.screenshot({path:join(out,'detail-1to1.png')});
-  stage='restore-xmp';
+  stage='restore-captraw';
   await app.evaluate(({dialog},file)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[file]});},recipe);
   await page.getByRole('button',{name:'打开',exact:true}).click();
   await page.getByRole('button',{name:'编辑',exact:true}).click();
@@ -115,5 +118,6 @@ try{
   writeFileSync(join(out,'stdout.log'),diagnostics?.stdout||'');
   writeFileSync(join(out,'stderr.log'),diagnostics?.stderr||'');
   writeFileSync(join(out,'e2e-report.json'),JSON.stringify({status:failure?'failed':'passed',stage,startedAt,finishedAt:new Date().toISOString(),backgroundWindow,packaged:!!executablePath,firstVisibleMs,performanceBudgetMs,errors,consoleErrors,events,error:failure?describeError(failure):null,diagnostics,diagnosticErrors},null,2)+'\n');
+  if(!failure)rmSync(fixtureDirectory,{recursive:true,force:true});
 }
 if(failure)throw failure;

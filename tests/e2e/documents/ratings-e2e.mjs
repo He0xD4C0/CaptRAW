@@ -1,6 +1,6 @@
 import {expect} from '@playwright/test';
 import {electron,closeElectron} from '../../support/electron-background.mjs';
-import {XMP,XMP_BASIC,lookup} from '@captraw/desktop-core/xmp';
+import {XMP,XMP_BASIC,lookup} from '@captraw/desktop-core/documents';
 import {readDocument} from '../../support/xmp-test.mjs';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {createHash} from 'node:crypto';

@@ -7,3 +7,5 @@ release/
 *.log
 test-results/
 artifacts/
+docs/ACCEPTANCE.md
+.agents/MEMORY.md

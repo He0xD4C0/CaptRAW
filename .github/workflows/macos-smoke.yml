@@ -55,14 +55,20 @@ jobs:
       - name: Install native build dependencies
         run: |
           brew install cmake ninja pkgconf autoconf automake libtool gtkmm3 exiv2 lensfun libomp nlohmann-json librsvg jpeg-turbo fftw little-cms2 aom 2>&1 | tee artifacts/monorepo/e2e/brew.log
-      - name: Build native engine, XMP and UI
-        run: pnpm build 2>&1 | tee artifacts/monorepo/e2e/build.log
+      - name: Build unified candidate
+        run: |
+          pnpm candidate:build 2>&1 | tee artifacts/monorepo/e2e/build.log
+          candidate="$(sed -n 's/^Candidate ready: //p' artifacts/monorepo/e2e/build.log | tail -1)"
+          test -n "$candidate"
+          echo "CAPTRAW_CANDIDATE=$candidate" >> "$GITHUB_ENV"
+      - name: Prepare Electron
+        run: pnpm prepare:electron 2>&1 | tee artifacts/monorepo/e2e/electron.log
       - name: Fetch D850 fixture
         run: node scripts/fetch-samples.mjs --only nikon-d850.NEF 2>&1 | tee artifacts/monorepo/e2e/fixtures.log
-      - name: Run background Electron smoke
+      - name: Run macOS acceptance gate
         env:
           CAPTRAW_E2E_BACKGROUND: '1'
-        run: pnpm test:e2e 2>&1 | tee artifacts/monorepo/e2e/smoke.log
+        run: pnpm test:gate macos-smoke 2>&1 | tee artifacts/monorepo/e2e/smoke.log
       - name: Upload smoke diagnostics
         if: always()
         uses: actions/upload-artifact@v4

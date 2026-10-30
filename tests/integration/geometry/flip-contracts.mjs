@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {encodeAdjustments,decodeAdjustments,lookup,property,text,TIFF,CRS} from '@captraw/desktop-core/xmp';
+import {encodeAdjustments,decodeAdjustments,lookup,property,text,TIFF,CRS} from '@captraw/desktop-core/documents';
 import {synchronizedAdjustments} from '@captraw/contracts/synchronize';
 import {capturePreset,presetValidationBase} from '@captraw/contracts/presets';
 

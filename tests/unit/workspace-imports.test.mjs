@@ -9,15 +9,16 @@ import {DEFAULT_EXPORT_OPTIONS,validateExportOptions,outputDimensions} from '@ca
 import {capturePreset,validatePreset,presetValidationBase,presetAmount} from '@captraw/contracts/presets';
 import {SYNC_GROUPS,adjustmentCommand,applyEditCommand,cameraExposureValue,matchExposureByCameraSettings,synchronizedAdjustments} from '@captraw/contracts/synchronize';
 import {NativeEngine} from '@captraw/desktop-core/engine';
-import {executableName,isContainedFile} from '@captraw/desktop-core/runtime';
-import {BatchExporter,validateBatch} from '@captraw/desktop-core/batch-export';
+import {executableName,isContainedFile} from '@captraw/desktop-core/engine';
+import {BatchExporter,validateBatch} from '@captraw/desktop-core/export';
 import {Documents,validateBatchSave} from '@captraw/desktop-core/documents';
-import {saveRecipeWithMasks,restoreRecipeMasks} from '@captraw/desktop-core/mask-assets';
-import {ObjectSelection} from '@captraw/desktop-core/object-selection';
+import {decodeNativeEdit} from '@captraw/desktop-core/documents';
+import {saveRecipeWithMasks,restoreRecipeMasks} from '@captraw/desktop-core/documents';
+import {ObjectSelection} from '@captraw/desktop-core/editing';
 import {Presets} from '@captraw/desktop-core/presets';
-import {Segmenter} from '@captraw/desktop-core/segmentation';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {XMP,CRS,CT,TIFF,property,text,encode,decode,encodeAdjustments,decodeAdjustments,readExtension} from '@captraw/desktop-core/xmp';
+import {Segmenter} from '@captraw/desktop-core/editing';
+import {Synchronizer} from '@captraw/desktop-core/presets';
+import {XMP,CRS,CT,TIFF,property,text,encode,decode,encodeAdjustments,decodeAdjustments,readExtension} from '@captraw/desktop-core/documents';
 
 test('all public entries load compiled JavaScript in plain Node',async()=>{
  const entries=[];
@@ -168,19 +169,20 @@ test('batch export validates snapshots before starting a native worker',async()=
  assert.equal(exporter.active,false);exporter.shutdown();
 });
 
-test('XMP typed state and Documents serialize through their public interfaces',async()=>{
+test('native Documents serialization keeps XML provenance separate from typed edits',async()=>{
  const adjustments={...structuredClone(presetValidationBase),exposure:1.25};
  assert.deepEqual(decodeAdjustments(encodeAdjustments(adjustments)).adjustments,adjustments);
  const state={enabled:true,value:1,items:['中文',null]};assert.deepEqual(decode(encode(state)),state);
  assert.throws(()=>encode({value:Infinity}));
  assert.throws(()=>decode({fields:[{ns:CT,name:'__proto__',node:{value:'x'}}]}));
- let changes;
- const adapter={call:async(method,packet,properties)=>{assert.equal(method,'write');assert.equal(packet,'');changes=properties;return {packet:'<xmp/>',properties};}};
+ const calls=[],provenance='<xmp/>';
+ const adapter={call:async(method,packet)=>{calls.push({method,packet});assert.equal(method,'read');assert.equal(packet,provenance);return {packet,properties:[]};}};
  const documents=new Documents(adapter);
  const source={path:'/source.nef',size:42,sha256:'a'.repeat(64)};
- assert.equal(await documents.serialize({source,artProfile:'[ART]',adjustments}),'<xmp/>');
- assert.equal(readExtension(changes,'EngineVersion'),ENGINE_VERSION);
- assert.deepEqual(readExtension(changes,'Source'),source);
+ const packet=await documents.serialize({source,artProfile:'[ART]',adjustments,xmpPacket:provenance});
+ const restored=decodeNativeEdit(packet);
+ assert.equal(restored.engineVersion,ENGINE_VERSION);assert.deepEqual(restored.source,source);assert.deepEqual(restored.adjustments,adjustments);assert.equal(restored.xmpPacket,provenance);assert.deepEqual(calls,[{method:'read',packet:provenance}]);
+ assert.equal(JSON.parse(packet).payload.xmpPacket,undefined);
  const xmp=new XMP('unused');assert.equal(typeof xmp.read,'function');
 });
 
@@ -210,7 +212,7 @@ test('mask asset save and restore keep an ordinary recipe independent',async t=>
  const directory=await mkdtemp(join(tmpdir(),'captraw-import-masks-'));t.after(()=>rm(directory,{recursive:true,force:true}));
  const recipe={artProfile:'[ART]',adjustments:structuredClone(presetValidationBase)};
  const core={call:async method=>{if(method==='inputProfileAsset')return {path:''};assert.equal(method,'maskAssets');return {paths:[]};}};
- const path=join(directory,'recipe.xmp');
+ const path=join(directory,'recipe.captraw');
  await saveRecipeWithMasks(core,path,recipe,async copy=>{assert.notEqual(copy,recipe);return '<xmp/>';});
  assert.equal(await readFile(path,'utf8'),'<xmp/>');
  const restored=await restoreRecipeMasks(core,path,recipe,directory);assert.deepEqual(restored,recipe);assert.notEqual(restored,recipe);

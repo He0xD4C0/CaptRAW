@@ -6,7 +6,7 @@ import {existsSync} from 'node:fs';
 import {basename,join,resolve} from 'node:path';import {tmpdir} from 'node:os';import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP,CRS,CT,lookup,readExtension,property,encode} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,lookup,readExtension,property,encode} from '@captraw/desktop-core/documents';
 import {EngineClient} from '../../support/engine-client.mjs';
 const root=await mkdtemp(join(tmpdir(),'captraw-signed-gui-')),file=join(root,'新版 几何.tif'),oldFile=join(root,'旧版 几何.tif');
 const mixedSource=join(root,'混合 来源.tif'),mixedTarget=join(root,'混合 ART目标.tif');

@@ -5,9 +5,37 @@
   "tasks": {
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
     "typecheck": { "dependsOn": ["^build"], "outputs": [] },
+    "//#build:native": {
+      "cache": false,
+      "dependsOn": ["@captraw/contracts#build"],
+      "inputs": [
+        "native/**",
+        "packages/contracts/index.ts",
+        "packages/contracts/package.json",
+        "scripts/build-native.mjs",
+        "scripts/build-libraw.mjs",
+        "scripts/build-avif.mjs"
+      ],
+      "outputs": ["build/native/captraw-engine", "build/native/captraw-art-reference", "build/native/resources/**"]
+    },
+    "//#build:xmp": {
+      "cache": false,
+      "inputs": [
+        "native/src/xmp*.cc",
+        "native/include/xmp*.h",
+        "native/cmake/xmp-files.cmake",
+        "scripts/build-xmp.mjs"
+      ],
+      "outputs": ["build/xmp/captraw-xmp", "build/xmp/xmp-probe", "build/xmp/build.json"]
+    },
+    "//#build:app": {
+      "cache": false,
+      "dependsOn": ["//#build:native", "//#build:xmp", "@captraw/desktop#build"],
+      "outputs": ["build/app-build.json"]
+    },
     "//#test:unit": {
       "dependsOn": ["@captraw/contracts#build", "@captraw/desktop-core#build"],
-      "inputs": ["tests/unit/**", "tests/support/**", "tests/fixtures/**", "native/patches/**", "apps/desktop/src/lib/*.ts"],
+      "inputs": ["tests/unit/**", "tests/support/**", "tests/fixtures/**", "tests/suites.json", "scripts/test-suite.mjs", "native/patches/**", "apps/desktop/src/lib/*.ts"],
       "outputs": []
     }
   }

@@ -1,4 +1,4 @@
-import {XMP,CRS} from '@captraw/desktop-core/xmp';
+import {XMP,CRS} from '@captraw/desktop-core/documents';
 import {Documents} from '@captraw/desktop-core/documents';
 import {resolve} from 'node:path';
 const documents=new Documents(new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp')));

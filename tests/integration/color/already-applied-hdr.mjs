@@ -9,7 +9,7 @@ import {stripTypeScriptTypes} from 'node:module';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {NativeEngine} from '@captraw/desktop-core/engine';
-import {XMP,CRS,CT,XMP_BASIC,property,text,lookup,encode} from '@captraw/desktop-core/xmp';
+import {XMP,CRS,CT,XMP_BASIC,property,text,lookup,encode} from '@captraw/desktop-core/documents';
 const root=await mkdtemp(join(tmpdir(),'captraw-already-applied-hdr-'));
 const binary=resolve(process.env.CAPTRAW_ENGINE||'build/native/captraw-engine'),resources=resolve(process.env.CAPTRAW_RESOURCES||'build/native/resources');
 const xmp=new XMP(resolve('build/xmp/captraw-xmp')),U='https://example.invalid/hdr-baked/',SECRET='private-baked-原始蒙版',PATH_SECRET='private-original-source-path';
@@ -30,7 +30,7 @@ try{
  if(process.env.CAPTRAW_ALREADY_APPLIED_SOURCE==='1'){
   const path=join(root,'baked-crs.mjs');await writeFile(path,stripTypeScriptTypes(await readFile(resolve('packages/desktop-core/src/documents/baked-crs.ts'),'utf8'),{mode:'transform'}));
   ({prepareImageXMP}=await import(pathToFileURL(path).href));
- }else({prepareImageXMP}=await import('@captraw/desktop-core/baked-crs'));
+ }else({prepareImageXMP}=await import('@captraw/desktop-core/documents'));
  const original=await xmp.call('write','',[
   property(CRS,'AlreadyApplied',text('True')),property(CRS,'Exposure2012',text(1)),
   property(CRS,'FutureMask',{options:0x600,items:[{fields:[property(U,'Secret',{value:SECRET,qualifiers:[property(U,'Proof',text('arbitrary archive qualifier'))]})]}]}),

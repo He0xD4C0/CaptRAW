@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {hasRelativeWhiteBalance,validateWhiteBalanceTarget,mergeAdjustmentPatch} from '@captraw/contracts';
 import {adjustmentCommand,applyEditCommand,synchronizedAdjustments} from '@captraw/contracts/synchronize';
 import {capturePreset,presetAmount,presetValidationBase,isoAnchors,canCreateISO} from '@captraw/contracts/presets';
-import {CRS,property,text,lookup,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/xmp';
+import {CRS,property,text,lookup,encodeAdjustments,decodeAdjustments} from '@captraw/desktop-core/documents';
 
 const relative=(temperature=0,tint=0)=>({incrementalTemperature:temperature,incrementalTint:tint,relativeWBModel:'art-ctl-v1'});
 const baseline=()=>({...structuredClone(presetValidationBase),wbMode:'custom',wbMultipliers:null,wbApproximate:false});

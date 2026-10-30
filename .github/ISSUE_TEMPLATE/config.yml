@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 私密报告安全漏洞
+    url: https://github.com/He0xD4C0/CaptRAW/security/advisories/new
+    about: 不要在公开 issue 中披露未修复漏洞。
+  - name: 阅读贡献指南
+    url: https://github.com/He0xD4C0/CaptRAW/blob/main/CONTRIBUTING.md
+    about: 了解 DCO、测试要求和第三方内容规则。

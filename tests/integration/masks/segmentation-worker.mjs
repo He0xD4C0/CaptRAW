@@ -90,7 +90,7 @@ if(process.argv.includes('--native-only')){
  console.log('PASS',checks.length,'direct native worker groups');process.exit(0);
 }
 let action=()=>{},stages=[];const cache=join(out,'host-cache');
-const {Segmenter}=await import('@captraw/desktop-core/segmentation');
+const {Segmenter}=await import('@captraw/desktop-core/editing');
 const service=new Segmenter(wrapper,join(work,'models/tiny'),cache,event=>{stages.push(event);action(event);});
 try{
  for(const outputRotation of invalidRotations)await assert.rejects(service.request(request(cases[0],{outputRotation})),/旋转角度无效/);

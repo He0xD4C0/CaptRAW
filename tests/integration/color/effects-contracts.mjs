@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {patchEffects} from '../../../native/patches/patch-effects.mjs';
-import {encodeAdjustments,decodeAdjustments,XMP,CRS,CT,property,text} from '@captraw/desktop-core/xmp';
+import {encodeAdjustments,decodeAdjustments,XMP,CRS,CT,property,text} from '@captraw/desktop-core/documents';
 import {capturePreset,presetValidationBase} from '@captraw/contracts/presets';
 import {synchronizedAdjustments} from '@captraw/contracts/synchronize';
 const work=mkdtempSync(join(tmpdir(),'captraw-effects-'));let success=false;

@@ -2,7 +2,7 @@ import {expect} from '@playwright/test';
 import {electron,closeElectron} from '../../support/electron-background.mjs';
 import {EngineClient} from '../../support/engine-client.mjs';
 import {readDocument} from '../../support/xmp-test.mjs';
-import {XMP,CRS} from '@captraw/desktop-core/xmp';
+import {XMP,CRS} from '@captraw/desktop-core/documents';
 import {readFileSync,writeFileSync,mkdirSync,rmSync,existsSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import {createHash} from 'node:crypto';

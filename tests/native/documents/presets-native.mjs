@@ -3,14 +3,16 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,cp,readFile,writeFile,access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {existsSync} from 'node:fs';
-import {PresetPacks,builtinPresetPack} from '../../../packages/desktop-core/dist/presets/preset-pack.js';
+import {PresetPacks,builtinPresetPack} from '@captraw/desktop-core/presets';
 import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {presetValidationBase,presetAtISO,presetAmount,isoAnchors} from '@captraw/contracts/presets';
+import {ENGINE_VERSION} from '@captraw/contracts';
 import {Presets,PresetPreview} from '@captraw/desktop-core/presets';
+import {encodeNativePreset,decodeNativePreset,decodeNativeFavorites} from '@captraw/desktop-core/documents';
 import {NativeEngine} from '@captraw/desktop-core/engine';
-import {Synchronizer} from '@captraw/desktop-core/synchronize';
-import {XMP,CRS,CT,lookup,property,text,encode} from '@captraw/desktop-core/xmp';
+import {Synchronizer} from '@captraw/desktop-core/presets';
+import {XMP,CRS,CT,lookup,property,text} from '@captraw/desktop-core/documents';
 const binary=resolve(process.env.CAPTRAW_ENGINE||'build/native/captraw-engine'),resources=resolve(process.env.CAPTRAW_RESOURCES||'build/native/resources');
 const xmp=new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp'));
 async function scenario(run){const root=await mkdtemp(join(tmpdir(),'captraw-presets-'));let success=false;const core=new NativeEngine(binary,resources,join(root,'engine')),sync=new Synchronizer(binary,resources,join(root,'sync'),()=>{});core.on('error',()=>{});
@@ -18,8 +20,10 @@ async function scenario(run){const root=await mkdtemp(join(tmpdir(),'captraw-pre
   const image=await core.call('open',{path,sessionId:'test'});const profile=(await core.call('save',{})).artProfile;
   const first={image:{...image,iso:400},adjustments:structuredClone(image.adjustments),profile},second={...structuredClone(first),image:{...image,path:other,name:'乙',id:'second',iso:1600}};
   await run({root,store,core,sync,first,second});assert.deepEqual(await readFile(path),await readFile(resolve('build/samples/synthetic.dng')));success=true;
- }finally{sync.cancel();core.terminate();if(success)await rm(root,{recursive:true,force:true});else console.error('Retained preset failure:',root);}
+ }finally{sync.cancel();const stopped=core.child.exitCode!==null||core.child.signalCode!==null?Promise.resolve():new Promise(done=>core.child.once('exit',done));core.terminate();await stopped;if(success)await rm(root,{recursive:true,force:true});else console.error('Retained preset failure:',root);}
 }
+const readPreset=async path=>decodeNativePreset(await readFile(path,'utf8'));
+const sourceProperties=async preset=>(await xmp.call('read',preset.xmpPacket)).properties;
 test('ISO interpolation is logarithmic, clamps endpoints, rejects ambiguous or unsupported anchors',()=>{
  const anchors=[{iso:400,adjustments:{luminanceNoise:0}},{iso:1600,adjustments:{luminanceNoise:10}}];assert.equal(presetAtISO(anchors,800).luminanceNoise,5);assert.equal(presetAtISO(anchors,50).luminanceNoise,0);assert.equal(presetAtISO(anchors,6400).luminanceNoise,10);assert.throws(()=>presetAtISO(anchors,0));
  const doc=(iso,exposure=0)=>({image:{path:'sample.nef',name:'RAW',iso,inputKind:'mosaic-raw'},adjustments:{...presetValidationBase,exposure},profile:''});
@@ -37,9 +41,9 @@ test('native preset maintenance preserves independent amount flags, missing flag
   for(const [i,key] of ['SupportsAmount','SupportsAmount2'].entries())if(flags[i]!==undefined)changes.push(value(key,flags[i]?'True':'False'));
   const packet=(await xmp.call('write','',changes)).packet;await writeFile(input,packet);const expected=lookup((await xmp.read(input)).properties,'urn:preset-semantics','Opaque');
   const imported=await store.importFile(input),copy=await store.duplicate(imported.id,'副本','测试');await store.rename(copy.id,'改名','测试');await store.update(copy.id,{name:'更新',group:'测试',groups:['light'],adjustments:first.adjustments});
-  const output=join(root,`flags-${index}-output.xmp`);await store.exportFile(copy.id,output);const restored=(await xmp.read(output)).properties;
-  for(const [i,key] of ['SupportsAmount','SupportsAmount2'].entries())assert.equal(lookup(restored,CRS,key)?.value,flags[i]===undefined?undefined:flags[i]?'True':'False',key);
-  assert.deepEqual(lookup(restored,'urn:preset-semantics','Opaque'),expected);assert.equal(await readFile(input,'utf8'),packet);
+  const output=join(root,`flags-${index}-output.captrawpreset`);await store.exportFile(copy.id,output);const restored=await readPreset(output);
+  for(const [i,key] of ['supportsAmount','supportsAmount2'].entries())assert.equal(restored[key],flags[i],key);
+  assert.equal(restored.xmpPacket,packet);assert.deepEqual(lookup(await sourceProperties(restored),'urn:preset-semantics','Opaque'),expected);assert.equal(await readFile(input,'utf8'),packet);
  }
  for(const [key,value] of [['SupportsAmount','not-a-boolean'],['SupportsAmount2',''],['SupportsAmount2','1']]){
   const input=join(root,'invalid-flag.xmp');await writeFile(input,(await xmp.call('write','',[property(CRS,'Name',{localized:'非法标志'}),property(CRS,'Exposure2012',text(1)),property(CRS,key,text(value))])).packet);
@@ -58,8 +62,9 @@ test('native sparse ISO anchors retain root nested values, discover anchor-only 
   assert.equal(result.parametricCurve.lights,12);assert.equal(result.parametricCurve.shadows,4);assert.deepEqual(result.parametricCurve.splits,target.adjustments.parametricCurve.splits);
   assert.deepEqual(result.colorGrading.shadows,{hue:30,saturation:20,luminance:5});assert.equal(result.temperature,7500);assert.equal(result.tint,20);assert.equal(result.wbMultipliers,null);assert.equal(result.wbMode,'custom');
  }
- const output=join(root,'sparse-export.xmp');await store.rename(imported.id,'已改名 ISO','测试');await store.exportFile(imported.id,output);
- const before=(await xmp.read(input)).properties,after=(await xmp.read(output)).properties;assert.equal(lookup(after,CRS,'SupportsAmount2').value,'False');assert.deepEqual(lookup(after,'urn:preset-semantics','Opaque'),lookup(before,'urn:preset-semantics','Opaque'));
+ const output=join(root,'sparse-export.captrawpreset');await store.rename(imported.id,'已改名 ISO','测试');await store.exportFile(imported.id,output);
+ const native=await readPreset(output),before=(await xmp.read(input)).properties,after=await sourceProperties(native);assert.equal(native.supportsAmount2,false);assert.equal(native.xmpPacket,packet);assert.deepEqual(lookup(after,'urn:preset-semantics','Opaque'),lookup(before,'urn:preset-semantics','Opaque'));
+ assert.equal(native.name,'已改名 ISO');assert.equal(native.adjustments.calibration.shadowTint,9);assert.equal(native.adjustments.temperature,7500);assert.deepEqual(native.isoAnchors.map(a=>({iso:a.iso,exposure:a.adjustments.exposure,tint:a.adjustments.tint})),[{iso:400,exposure:0,tint:10},{iso:1600,exposure:1,tint:30}]);
  for(const [i,item] of lookup(after,CRS,'ISODependent').items.entries()){
   const old=lookup(before,CRS,'ISODependent').items[i];assert.deepEqual(lookup(item.fields,'urn:preset-semantics','Opaque'),lookup(old.fields,'urn:preset-semantics','Opaque'));assert.deepEqual(item.qualifiers,old.qualifiers);
  }
@@ -86,22 +91,22 @@ test('explicit geometry presets replace their selected model and fill instead of
  }
  assert.deepEqual([first,second],original);
 }));
-test('native ISO XMP roundtrip and per-photo commands give ordinary editable parameters',()=>scenario(async({root,store,sync,first,second})=>{
+test('native ISO preset roundtrip and per-photo commands give ordinary editable parameters',()=>scenario(async({root,store,sync,first,second})=>{
  first.adjustments.luminanceNoise=0;second.adjustments.luminanceNoise=10;
  const p=await store.createISO({name:'ISO 降噪',group:'测试',groups:['detail'],documents:[first,second]});assert.equal(p.isoAdaptive,true);assert.equal(p.supportsAmount,true);
- const output=join(root,'ISO.xmp');await store.exportFile(p.id,output);const properties=(await xmp.read(output)).properties;const sequence=lookup(properties,CRS,'ISODependent');assert.equal(sequence.items.length,2);assert.equal(sequence.items[0].fields.find(f=>f.name==='ISO').node.value,'400');
+ const output=join(root,'ISO.captrawpreset');await store.exportFile(p.id,output);const native=await readPreset(output);assert.equal(native.isoAnchors.length,2);assert.equal(native.isoAnchors[0].iso,400);assert.equal(native.isoAnchors[1].iso,1600);assert.equal(native.isoAnchors[0].adjustments.luminanceNoise,0);assert.equal(native.isoAnchors[1].adjustments.luminanceNoise,10);assert.equal(native.xmpPacket,undefined);
  const imported=await store.importFile(output),result=await store.applyMany({id:imported.id,targets:[{...first,image:{...first.image,iso:800}},second],operationId:'iso'},sync);assert.equal(result.results[0].adjustments.luminanceNoise,5);assert.equal(result.results[1]?.adjustments.luminanceNoise??10,10);
  await assert.rejects(store.applyMany({id:p.id,targets:[{...first,image:{...first.image,iso:0}}],operationId:'missing'},sync),/ISO/);assert.equal((await store.applyMany({id:p.id,targets:[first],amount:50,operationId:'amount'},sync)).warnings.some(w=>w.includes('固定')),true);
 }));
-test('added scalar ISO anchors survive standard XMP and native per-photo processing',()=>scenario(async({root,store,sync,first,second})=>{
+test('added scalar ISO anchors survive native preset storage and per-photo processing',()=>scenario(async({root,store,sync,first,second})=>{
  const fixed={curve:[{x:0,y:0},{x:.5,y:.6},{x:1,y:1}],curveRefineModel:'weighted-std-v1',grain:25,grainModel:'procedural-v1',vignette:-20,postCropVignetteStyle:'highlight-priority',glowStyle:'diffusion'};
  const low={curveRefineSaturation:20,grainSize:10,grainRoughness:30,postCropVignetteMidpoint:40,postCropVignetteHighlights:0,glowRange:20,glowSpread:30,glowWarmth:-40};
  const high={curveRefineSaturation:80,grainSize:90,grainRoughness:70,postCropVignetteMidpoint:80,postCropVignetteHighlights:60,glowRange:80,glowSpread:90,glowWarmth:40};
  first.adjustments={...first.adjustments,...fixed,...low};second.adjustments={...second.adjustments,...fixed,...high};const original=structuredClone([first,second]);
  const preset=await store.createISO({name:'ISO 细节标量',group:'测试',groups:['curves','effects'],documents:[first,second]});
- const output=join(root,'scalar-iso.xmp');await store.exportFile(preset.id,output);const anchors=lookup((await xmp.read(output)).properties,CRS,'ISODependent').items;
- const names={curveRefineSaturation:'CurveRefineSaturation',grainSize:'GrainSize',grainRoughness:'GrainFrequency',postCropVignetteMidpoint:'PostCropVignetteMidpoint',postCropVignetteHighlights:'PostCropVignetteHighlightContrast',glowRange:'GlowRange',glowSpread:'GlowSpread',glowWarmth:'GlowWarmth'};
- for(const [i,values] of [low,high].entries())for(const [key,name] of Object.entries(names))assert.equal(Number(lookup(anchors[i].fields,CRS,name).value),values[key],name);
+ const output=join(root,'scalar-iso.captrawpreset');await store.exportFile(preset.id,output);const anchors=(await readPreset(output)).isoAnchors;
+ assert.equal(anchors.length,2);assert.deepEqual(anchors.map(a=>a.iso),[400,1600]);
+ for(const [i,values] of [low,high].entries())for(const [key,value] of Object.entries({...fixed,...values}))assert.deepEqual(anchors[i].adjustments[key],value,key);
  const imported=await store.importFile(output),result=await store.applyMany({id:imported.id,targets:[{...first,image:{...first.image,iso:800}}],operationId:'scalar-iso'},sync);
  const actual=result.results[0],expected={curveRefineSaturation:50,grainSize:50,grainRoughness:50,postCropVignetteMidpoint:60,postCropVignetteHighlights:30,glowRange:50,glowSpread:60,glowWarmth:0};
  for(const [key,value] of Object.entries(expected))assert.equal(actual.adjustments[key],value,key);
@@ -110,41 +115,45 @@ test('added scalar ISO anchors survive standard XMP and native per-photo process
 }));
 test('built-in and user libraries, favorites, duplicate and maintenance identities are independent',()=>scenario(async({root,store,core})=>{
  const pack=(await store.listPacks())[0],builtin=(await store.list()).items.find(p=>p.origin==='builtin');assert(pack.version);assert.equal(pack.presets[0].id,builtin.id);await assert.rejects(store.rename(builtin.id,'a','b'),/只读/);await assert.rejects(store.remove(builtin.id),/只读/);
- const favorite=await store.favorite(builtin.id,true);assert(favorite.favorite);const copy=await store.duplicate(builtin.id,'用户副本','测试');assert.notEqual(copy.id,builtin.id);assert.equal(copy.origin,'user');await store.rename(copy.id,'已改名','测试');const exported=join(root,'copy.xmp');await store.exportFile(copy.id,exported);assert.notEqual(lookup((await xmp.read(exported)).properties,CRS,'UUID').value,builtin.id.replaceAll('-','').toUpperCase());
+ const favorite=await store.favorite(builtin.id,true);assert(favorite.favorite);assert.deepEqual(decodeNativeFavorites(await readFile(join(root,'user','.favorites.captraw'),'utf8')),[builtin.id]);const copy=await store.duplicate(builtin.id,'用户副本','测试');assert.notEqual(copy.id,builtin.id);assert.equal(copy.origin,'user');await store.rename(copy.id,'已改名','测试');const exported=join(root,'copy.captrawpreset');await store.exportFile(copy.id,exported);assert.equal((await readPreset(exported)).name,'已改名');assert.equal((await readPreset(exported)).xmpPacket,undefined);
  const restarted=new Presets(join(root,'user'),core,join(root,'cache2'),xmp);const items=(await restarted.list()).items;assert(items.find(p=>p.id===builtin.id).favorite);assert.equal(items.find(p=>p.id===copy.id).name,'已改名');assert.equal((await restarted.listPacks())[0].version,pack.version);
- const file=join(root,'unknown.xmp');await store.exportFile(copy.id,file);const packet=await readFile(file,'utf8');await writeFile(file,packet.replace('</rdf:Description>','<u:Qualified xmlns:u="urn:test" rdf:parseType="Resource"><rdf:value>preserved</rdf:value><u:meaning>qualifier</u:meaning></u:Qualified></rdf:Description>'));
- const imported=await store.importFile(file);await store.rename(imported.id,'未知保留','测试');await store.exportFile(imported.id,file);assert((await readFile(file,'utf8')).includes('qualifier'));await store.remove(imported.id);assert(!(await store.list()).items.some(p=>p.id===imported.id));
+ const file=join(root,'unknown.captrawpreset');await store.exportFile(copy.id,file);const container=JSON.parse(await readFile(file,'utf8'));
+ const source=(await xmp.call('write','',[property('urn:test','Qualified',{value:'preserved',qualifiers:[property('urn:test','meaning',text('qualifier'))]})])).packet;
+ container.sourceXMP=source;container.opaque={sequence:['未知','字段']};container.payload.vendor={note:'保留'};await writeFile(file,JSON.stringify(container));const inputBytes=await readFile(file);
+ const imported=await store.importFile(file);await store.rename(imported.id,'未知保留','测试');const preserved=join(root,'unknown-export.captrawpreset');await store.exportFile(imported.id,preserved);const result=await readPreset(preserved);assert.equal(result.xmpPacket,source);assert.deepEqual(lookup(await sourceProperties(result),'urn:test','Qualified'),lookup((await xmp.call('read',source)).properties,'urn:test','Qualified'));assert.deepEqual(JSON.parse(result.nativePacket).opaque,container.opaque);assert.deepEqual(result.vendor,container.payload.vendor);assert.deepEqual(await readFile(file),inputBytes);await store.remove(imported.id);assert(!(await store.list()).items.some(p=>p.id===imported.id));
+ await assert.rejects(store.exportFile(copy.id,join(root,'not-native.xmp')),/captrawpreset/);
 }));
 
 const adobePreset=process.env.CAPTRAW_ADOBE_ISO_PRESET||'/Library/Application Support/Adobe/CameraRaw/Settings/Adobe/Presets/Defaults/Adobe Color + Lens + NR.xmp';
-test('installed Adobe ISO preset retains its Look; unsupported required Look rejects and an explicit ISO subset applies', {skip:!existsSync(adobePreset)},()=>scenario(async({root,store,sync,first})=>{
+test('installed Adobe ISO preset skips unsupported Look with a warning and preserves original XML and active ISO/NR', {skip:!existsSync(adobePreset)},()=>scenario(async({root,store,sync,first})=>{
  const original=await readFile(adobePreset),sha=createHash('sha256').update(original).digest('hex');
  const before=(await xmp.call('read',original.toString())).properties;
  assert.equal(lookup(lookup(before,CRS,'Look').fields,CRS,'Stubbed').value.toLowerCase(),'true');
  const roundtrip=(await xmp.call('read',(await xmp.call('write',original.toString(),[])).packet)).properties;
  assert.deepEqual(lookup(roundtrip,CRS,'Look'),lookup(before,CRS,'Look'));assert.deepEqual(lookup(roundtrip,CRS,'ISODependent'),lookup(before,CRS,'ISODependent'));
- await assert.rejects(store.importFile(adobePreset),/不支持的必要 Look 参数：Stubbed/);
- // This derivative tests the ISO portion only. It is not the complete Adobe preset.
- const local=join(root,'adobe-iso-subset.xmp');await writeFile(local,(await xmp.call('write',original.toString(),[property(CRS,'Look',null),property(CRS,'Exposure2012',text('.5'))])).packet);
- const imported=await store.importFile(local);assert(imported.isoAdaptive);assert.equal(imported.supportsAmount,false);
- const result=await store.applyMany({id:imported.id,targets:[{...first,image:{...first.image,iso:800}}],operationId:'adobe-iso'},sync);assert.equal(result.results[0].adjustments.exposure,.5);assert.equal(result.results[0].adjustments.luminanceNoise,15);assert.equal(result.results[0].adjustments.colorNoise,25);
- const output=join(root,'adobe-iso-subset-roundtrip.xmp');await store.exportFile(imported.id,output);const subset=(await xmp.read(output)).properties;
- assert.equal(lookup(subset,CRS,'Look'),undefined);assert.equal(lookup(subset,CRS,'ISODependent').items.length,4);
+ const imported=await store.importFile(adobePreset);assert(imported.isoAdaptive);assert.equal(imported.supportsAmount,false);assert(!imported.groups.includes('profile'));assert(imported.warnings.some(w=>/跳过/.test(w)&&/Stubbed/.test(w)));
+ const target={...first,image:{...first.image,iso:800}},result=await store.applyMany({id:imported.id,targets:[target],operationId:'adobe-iso'},sync);assert.equal(result.results[0].adjustments.exposure,first.adjustments.exposure);assert.equal(result.results[0].adjustments.luminanceNoise,15);assert.equal(result.results[0].adjustments.colorNoise,25);assert.deepEqual(result.results[0].adjustments.colorProfile,first.adjustments.colorProfile);
+ const output=join(root,'adobe-iso-roundtrip.captrawpreset');await store.exportFile(imported.id,output);const native=await readPreset(output),retained=await sourceProperties(native);
+ assert.equal(native.xmpPacket,original.toString());assert.equal(native.adjustments.colorProfile,undefined);assert(native.isoAnchors.every(a=>a.adjustments.colorProfile===undefined));assert.equal(native.isoAnchors.length,4);assert(native.unsupportedSettings.some(w=>/跳过/.test(w)&&/Stubbed/.test(w)));
+ assert.deepEqual(lookup(retained,CRS,'Look'),lookup(before,CRS,'Look'));assert.deepEqual(lookup(retained,CRS,'ISODependent'),lookup(before,CRS,'ISODependent'));
+ const reopened=await store.importFile(output),reapplied=await store.applyMany({id:reopened.id,targets:[target],operationId:'adobe-native-iso'},sync);assert.equal(reapplied.results[0].adjustments.luminanceNoise,15);assert.equal(reapplied.results[0].adjustments.colorNoise,25);
+ // Self-owned legacy recipes promise fidelity and cannot skip the same Look.
+ const selfOwned=join(root,'self-owned-stubbed.xmp');await writeFile(selfOwned,(await xmp.call('write',original.toString(),[property(CT,'EngineVersion',text(ENGINE_VERSION))])).packet);await assert.rejects(store.importFile(selfOwned),/Stubbed/);
  assert.equal(createHash('sha256').update(await readFile(adobePreset)).digest('hex'),sha);
  console.log('Adobe ISO structure evidence:',adobePreset,sha);
 }));
 test('package maintenance validates checksums and paths and publishes a new version without changing user data',()=>scenario(async({root,store})=>{
- const builtin=(await store.list()).items.find(p=>p.origin==='builtin'),packet=await readFile(join(root,'user','.builtin',builtin.packageId,builtin.packageVersion,'exposure.xmp'));
+ const builtin=(await store.list()).items.find(p=>p.origin==='builtin'),packet=await readFile(join(root,'user','.builtin',builtin.packageId,builtin.packageVersion,builtinPresetPack.presets[0].path));assert.equal(decodeNativePreset(packet.toString()).adjustments.exposure,.5);
  const packs=new PresetPacks(join(root,'maintenance'));await packs.initialize();
- const next={...structuredClone(builtinPresetPack),version:'1.0.1'};await packs.install(next,async()=>packet);assert.equal(packs.list()[0].version,'1.0.1');assert.equal(packs.entries()[0].id,builtin.id);
- await assert.rejects(packs.install({...next,version:'1.0.2',presets:[{...next.presets[0],sha256:'0'.repeat(64)}]},async()=>packet),/校验/);
- await assert.rejects(packs.install({...next,version:'1.0.2',presets:[{...next.presets[0],path:'../escape'}]},async()=>packet),/路径/);
- assert.equal(packs.list()[0].version,'1.0.1');assert.equal((await store.list()).items.find(p=>p.id===builtin.id).packageVersion,builtin.packageVersion);
+ const next={...structuredClone(builtinPresetPack),version:'1.1.1'};await packs.install(next,async()=>packet);assert.equal(packs.list()[0].version,'1.1.1');assert.equal(packs.entries()[0].id,builtin.id);
+ await assert.rejects(packs.install({...next,version:'1.1.2',presets:[{...next.presets[0],sha256:'0'.repeat(64)}]},async()=>packet),/校验/);
+ await assert.rejects(packs.install({...next,version:'1.1.2',presets:[{...next.presets[0],path:'../escape'}]},async()=>packet),/路径/);
+ assert.equal(packs.list()[0].version,'1.1.1');assert.equal((await store.list()).items.find(p=>p.id===builtin.id).packageVersion,builtin.packageVersion);
 }));
 test('preset mask without leaf reference binds independently to every target canvas',()=>scenario(async({root,store,core,sync,first,second})=>{
  const mask={id:'preset-mask',name:'径向',type:'radial',enabled:true,inverted:false,feather:30,points:[],start:{x:.25,y:.25},end:{x:.75,y:.75},brightness:.5,contrast:0,saturation:0};
  const p=await store.create({name:'局部',group:'测试',groups:['masks'],adjustments:{...first.adjustments,masks:[mask]}});
- const legacy=join(root,'user',p.id,'preset.xmp');await writeFile(legacy,(await xmp.call('write',await readFile(legacy,'utf8'),[property(CT,'ARTAdjustments',encode({masks:[mask]}))])).packet);
+ const path=join(root,'user',p.id,'preset.captrawpreset'),stored=await readPreset(path);await writeFile(path,encodeNativePreset({...stored,adjustments:{masks:[mask]}}));
  for(const [doc,angle] of [[first,12],[second,-8]]){doc.adjustments={...doc.adjustments,fineRotation:angle,crop:null};doc.profile=(await core.call('compose',{path:doc.image.path,width:doc.image.width,height:doc.image.height,adjustments:doc.adjustments,artProfile:doc.profile})).artProfile;}
  const result=await store.applyMany({id:p.id,targets:[first,second],operationId:'masks'},sync);
  assert.equal(result.results.length,2);for(const [i,r] of result.results.entries()){const doc=[first,second][i],checked=await core.call('validate',{artProfile:doc.profile,adjustments:{...doc.adjustments,masks:[mask]},sourceFrame:doc.image.sourceFrame,sourcePath:doc.image.path,sourceIdentity:doc.image.sourceIdentity,bindSourceFrame:true});assert.deepEqual(r.adjustments.masks,checked.masks);assert.equal(r.adjustments.masks[0].geometryReference.version,3);assert.equal(r.adjustments.masks[0].referenceAngle,i===0?12:-8);}

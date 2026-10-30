@@ -1,9 +1,9 @@
 import {ENGINE_VERSION} from '@captraw/contracts';
 import {Documents} from '@captraw/desktop-core/documents';
-import {XMP} from '@captraw/desktop-core/xmp';
+import {XMP} from '@captraw/desktop-core/documents';
 import {readDocument} from '../../support/xmp-test.mjs';
 import {EngineClient} from '../../support/engine-client.mjs';
-import {saveRecipeWithMasks,restoreRecipeMasks} from '@captraw/desktop-core/mask-assets';
+import {saveRecipeWithMasks,restoreRecipeMasks} from '@captraw/desktop-core/documents';
 import assert from 'node:assert/strict';import {resolve,join} from 'node:path';import {homedir} from 'node:os';
 import {readFileSync,writeFileSync,copyFileSync,mkdirSync,existsSync} from 'node:fs';import {createHash} from 'node:crypto';
 const documents=new Documents(new XMP(resolve(process.env.CAPTRAW_XMP_BINARY||'build/xmp/captraw-xmp')));
