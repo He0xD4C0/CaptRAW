@@ -8,7 +8,7 @@
 - `cases/fuji-xt4-brush-exposure-half.xmp`：真实 18.7 的 `Mask/Paint` 下有 `Flow="1"`、`MaskValue="1"`、`CenterWeight="0.090508"`，Dabs 有 `h` 和 `d` 指令。只有这个样本不能推出低值、擦除、笔压或 Auto Mask 的结构。
 - [Adobe 文档](https://helpx.adobe.com/camera-raw/desktop/edit-and-enhance-images/masking-and-local-adjustments/masking.html)将 Flow 定义为应用速率、Density 定义为笔画透明程度、Auto Mask 定义为约束到相似颜色。文档不提供固定 18.7 的累积公式、容差或序列化结构。
 - 当前 `Point` 仅含坐标、半径、擦除。`useMaskGesture.ts` 会重采样并把多笔追加到同一 `points`；笔画边界和每笔设置未进入文档。
-- `native/recipe.cc` 将所有 ART `DrawnMask::Stroke.opacity` 写为 1。ART `masks.cc` 实际将该值解释为笔尖强度／hardness，并使用标记抑制重复覆盖；不能直接把它接成 Adobe Flow 或 Density。
+- `native/src/recipe.cc` 将所有 ART `DrawnMask::Stroke.opacity` 写为 1。ART `masks.cc` 实际将该值解释为笔尖强度／hardness，并使用标记抑制重复覆盖；不能直接把它接成 Adobe Flow 或 Density。
 - 当前 XMP 读取只消费 `r` / `d`，遇到 `h` 等未知 Dabs 指令拒绝整组并保留原结构。不得为了通过导入而丢弃它们，也不得仅添加同名字段后声称等效。
 
 ## 固定样本与操作
@@ -69,7 +69,7 @@ Adobe 语义与画质验收的门槛：拿到低 Flow、低 Density、联合低�
 
 每条 version 1 笔画保存流量、密度、羽化、操作、完整创作几何和稳定坐标；按路径弧长重采样，不以鼠标事件频率累积。令 S 为笔尖／羽化／流量／颜色门控，D 为密度，候选累积采用绘制 `M += max(0,D-M)*S`、擦除 `M -= max(0,M-(1-D))*S`。这些是显式版本化候选公式，尚无实际 Adobe 低值重复笔画证明。AutoMask 使用 ART 颜色原语生成的冻结灰度16位PNG，覆盖率与颜色分离，随 XMP 资产保存；后续调色不重新选取颜色范围。旧 points 路径不重新解释。
 
-原生7组及隐藏主界面9项通过；旧 brush／radial × 粗旋转0／90°的4份TIFF16与bundle27最大通道差0。`native/brush-large-test.mjs` 在核心 SHA256 `a6c71c3fb28d02322dc3f3613aa720c9128f3c0cb90809d8840d38174b707766` 上独占运行：8256×5504合成PNG，实际AutoMask准备2415ms、回放218ms、处理中取消6ms，worker峰值RSS约4230MiB；覆盖PNG366207字节。100MP vector创作画布原生compose接受，取消后无暂存或迟到资产，已采用资产保留供撤销和独立输出使用，成功夹具清理。这不是特定RAW解码、GPU内存、GUI输入性能或ACR等效证明；完整产品验收仍按冻结清单执行。
+原生7组及隐藏主界面9项通过；旧 brush／radial × 粗旋转0／90°的4份TIFF16与bundle27最大通道差0。`tests/native/masks/brush-large-test.mjs` 在核心 SHA256 `a6c71c3fb28d02322dc3f3613aa720c9128f3c0cb90809d8840d38174b707766` 上独占运行：8256×5504合成PNG，实际AutoMask准备2415ms、回放218ms、处理中取消6ms，worker峰值RSS约4230MiB；覆盖PNG366207字节。100MP vector创作画布原生compose接受，取消后无暂存或迟到资产，已采用资产保留供撤销和独立输出使用，成功夹具清理。这不是特定RAW解码、GPU内存、GUI输入性能或ACR等效证明；完整产品验收仍按冻结清单执行。
 
 
-额外以8条不同的真实AutoMask笔画检查覆盖缓存淘汰后的工作流：同一45MP输入和冻结核心，首回放879ms，10次实际局部亮度更新为799–815ms，P95 815ms；取消5ms、worker峰值约4230MiB，源和已采用资产不变。现有专项提供 `node native/brush-large-test.mjs --strokes=8 --updates=10` 复现入口；这是该合成图的原生局部更新证据，不能外推所有RAW／笔画数量或整套GUI性能。
+额外以8条不同的真实AutoMask笔画检查覆盖缓存淘汰后的工作流：同一45MP输入和冻结核心，首回放879ms，10次实际局部亮度更新为799–815ms，P95 815ms；取消5ms、worker峰值约4230MiB，源和已采用资产不变。现有专项提供 `node tests/native/masks/brush-large-test.mjs --strokes=8 --updates=10` 复现入口；这是该合成图的原生局部更新证据，不能外推所有RAW／笔画数量或整套GUI性能。

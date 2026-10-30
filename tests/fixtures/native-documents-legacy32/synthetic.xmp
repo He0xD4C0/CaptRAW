@@ -1,0 +1,539 @@
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="XMP Core 6.0.0">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:property="https://example.invalid/legacy-native-migration/"
+    xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+    xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
+    xmlns:ct="https://captraw.org/ns/develop/1.0/"
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+   crs:Exposure2012="0.75"
+   crs:Temperature="5454"
+   crs:Tint="-13"
+   crs:Contrast2012="17"
+   crs:Highlights2012="0"
+   crs:Shadows2012="12"
+   crs:Whites2012="0"
+   crs:Blacks2012="0"
+   crs:Vibrance="0"
+   crs:Saturation="9"
+   crs:Dehaze="0"
+   crs:PostCropVignetteAmount="0"
+   crs:GrainAmount="0"
+   crs:Sharpness="0"
+   crs:SharpenRadius="1"
+   crs:LuminanceSmoothing="0"
+   crs:ColorNoiseReduction="0"
+   crs:LensManualDistortionAmount="0"
+   crs:VignetteAmount="0"
+   crs:WhiteBalance="Custom"
+   crs:HueAdjustmentRed="0"
+   crs:HueAdjustmentOrange="0"
+   crs:HueAdjustmentYellow="0"
+   crs:HueAdjustmentGreen="0"
+   crs:HueAdjustmentAqua="0"
+   crs:HueAdjustmentBlue="0"
+   crs:HueAdjustmentPurple="0"
+   crs:HueAdjustmentMagenta="0"
+   crs:SaturationAdjustmentRed="0"
+   crs:SaturationAdjustmentOrange="0"
+   crs:SaturationAdjustmentYellow="0"
+   crs:SaturationAdjustmentGreen="0"
+   crs:SaturationAdjustmentAqua="0"
+   crs:SaturationAdjustmentBlue="0"
+   crs:SaturationAdjustmentPurple="0"
+   crs:SaturationAdjustmentMagenta="0"
+   crs:LuminanceAdjustmentRed="0"
+   crs:LuminanceAdjustmentOrange="0"
+   crs:LuminanceAdjustmentYellow="0"
+   crs:LuminanceAdjustmentGreen="0"
+   crs:LuminanceAdjustmentAqua="0"
+   crs:LuminanceAdjustmentBlue="0"
+   crs:LuminanceAdjustmentPurple="0"
+   crs:LuminanceAdjustmentMagenta="0"
+   crs:SplitToningShadowHue="0"
+   crs:SplitToningShadowSaturation="0"
+   crs:ColorGradeShadowLum="0"
+   crs:ColorGradeMidtoneHue="0"
+   crs:ColorGradeMidtoneSat="0"
+   crs:ColorGradeMidtoneLum="0"
+   crs:SplitToningHighlightHue="0"
+   crs:SplitToningHighlightSaturation="0"
+   crs:ColorGradeHighlightLum="0"
+   crs:ColorGradeGlobalHue="0"
+   crs:ColorGradeGlobalSat="0"
+   crs:ColorGradeGlobalLum="0"
+   crs:ColorGradeBlending="50"
+   crs:SplitToningBalance="0"
+   crs:ConvertToGrayscale="False"
+   crs:GrayMixerRed="0"
+   crs:GrayMixerOrange="0"
+   crs:GrayMixerYellow="0"
+   crs:GrayMixerGreen="0"
+   crs:GrayMixerAqua="0"
+   crs:GrayMixerBlue="0"
+   crs:GrayMixerPurple="0"
+   crs:GrayMixerMagenta="0"
+   crs:PostCropVignetteStyle="1"
+   crs:GrainSize="25"
+   crs:GrainFrequency="50"
+   crs:PostCropVignetteMidpoint="50"
+   crs:PostCropVignetteHighlightContrast="0"
+   crs:PostCropVignetteFeather="50"
+   crs:PostCropVignetteRoundness="0"
+   crs:HasCrop="False"
+   crs:CropTop="0"
+   crs:CropLeft="0"
+   crs:CropBottom="1"
+   crs:CropRight="1"
+   crs:CropAngle="0"
+   crs:ToneCurveName2012="Custom"
+   crs:CurveRefineSaturation="100"
+   crs:PerspectiveScale="100"
+   crs:HasSettings="True"
+   crs:AlreadyApplied="False"
+   crs:ProcessVersion="15.4"
+   tiff:Orientation="1"
+   xmp:Rating="4"
+   xmp:Label="旧自有 中文">
+   <property:Original rdf:parseType="Resource">
+    <rdf:value>原始 XML p:literal &amp; 中文</rdf:value>
+    <property:Proof>do not regenerate</property:Proof>
+   </property:Original>
+   <crs:ToneCurvePV2012>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>89.25, 71.4</rdf:li>
+     <rdf:li>178.5, 193.8</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012>
+   <crs:ToneCurvePV2012Red>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Red>
+   <crs:ToneCurvePV2012Green>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Green>
+   <crs:ToneCurvePV2012Blue>
+    <rdf:Seq>
+     <rdf:li>0, 0</rdf:li>
+     <rdf:li>255, 255</rdf:li>
+    </rdf:Seq>
+   </crs:ToneCurvePV2012Blue>
+   <ct:ARTAdjustments rdf:parseType="Resource">
+    <ct:blackWhite rdf:parseType="Resource">
+     <ct:base rdf:parseType="Resource">
+      <ct:filter rdf:parseType="Resource">
+       <rdf:value>None</rdf:value>
+       <ct:Type>string</ct:Type>
+      </ct:filter>
+      <ct:gamma>
+       <rdf:Seq>
+        <rdf:li rdf:parseType="Resource">
+         <rdf:value>0</rdf:value>
+         <ct:Type>number</ct:Type>
+        </rdf:li>
+        <rdf:li rdf:parseType="Resource">
+         <rdf:value>0</rdf:value>
+         <ct:Type>number</ct:Type>
+        </rdf:li>
+        <rdf:li rdf:parseType="Resource">
+         <rdf:value>0</rdf:value>
+         <ct:Type>number</ct:Type>
+        </rdf:li>
+       </rdf:Seq>
+      </ct:gamma>
+      <ct:preset rdf:parseType="Resource">
+       <rdf:value>RGB-Rel</rdf:value>
+       <ct:Type>string</ct:Type>
+      </ct:preset>
+      <ct:tint rdf:parseType="Resource">
+       <ct:amount rdf:parseType="Resource">
+        <rdf:value>0</rdf:value>
+        <ct:Type>number</ct:Type>
+       </ct:amount>
+       <ct:hue rdf:parseType="Resource">
+        <rdf:value>0</rdf:value>
+        <ct:Type>number</ct:Type>
+       </ct:hue>
+      </ct:tint>
+      <ct:weights>
+       <rdf:Seq>
+        <rdf:li rdf:parseType="Resource">
+         <rdf:value>33</rdf:value>
+         <ct:Type>number</ct:Type>
+        </rdf:li>
+        <rdf:li rdf:parseType="Resource">
+         <rdf:value>33</rdf:value>
+         <ct:Type>number</ct:Type>
+        </rdf:li>
+        <rdf:li rdf:parseType="Resource">
+         <rdf:value>33</rdf:value>
+         <ct:Type>number</ct:Type>
+        </rdf:li>
+       </rdf:Seq>
+      </ct:weights>
+     </ct:base>
+    </ct:blackWhite>
+    <ct:colorProfile rdf:parseType="Resource">
+     <ct:baselineExposure rdf:parseType="Resource">
+      <rdf:value>true</rdf:value>
+      <ct:Type>boolean</ct:Type>
+     </ct:baselineExposure>
+     <ct:hueSatMap rdf:parseType="Resource">
+      <rdf:value>true</rdf:value>
+      <ct:Type>boolean</ct:Type>
+     </ct:hueSatMap>
+     <ct:illuminant rdf:parseType="Resource">
+      <rdf:value>0</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:illuminant>
+     <ct:lookTable rdf:parseType="Resource">
+      <rdf:value>false</rdf:value>
+      <ct:Type>boolean</ct:Type>
+     </ct:lookTable>
+     <ct:mode rdf:parseType="Resource">
+      <rdf:value>auto</rdf:value>
+      <ct:Type>string</ct:Type>
+     </ct:mode>
+     <ct:toneCurve rdf:parseType="Resource">
+      <rdf:value>false</rdf:value>
+      <ct:Type>boolean</ct:Type>
+     </ct:toneCurve>
+    </ct:colorProfile>
+    <ct:curveRefineModel rdf:parseType="Resource">
+     <rdf:value>weighted-std-v1</rdf:value>
+     <ct:Type>string</ct:Type>
+    </ct:curveRefineModel>
+    <ct:fineRotation rdf:parseType="Resource">
+     <rdf:value>0</rdf:value>
+     <ct:Type>number</ct:Type>
+    </ct:fineRotation>
+    <ct:grainModel rdf:parseType="Resource">
+     <rdf:value>procedural-v1</rdf:value>
+     <ct:Type>string</ct:Type>
+    </ct:grainModel>
+    <ct:lensCorrections rdf:parseType="Resource">
+     <rdf:value>false</rdf:value>
+     <ct:Type>boolean</ct:Type>
+    </ct:lensCorrections>
+    <ct:masks>
+     <rdf:Seq>
+      <rdf:li rdf:parseType="Resource">
+       <ct:brightness rdf:parseType="Resource">
+        <rdf:value>0.4</rdf:value>
+        <ct:Type>number</ct:Type>
+       </ct:brightness>
+       <ct:components>
+        <rdf:Seq>
+         <rdf:li rdf:parseType="Resource">
+          <ct:enabled rdf:parseType="Resource">
+           <rdf:value>true</rdf:value>
+           <ct:Type>boolean</ct:Type>
+          </ct:enabled>
+          <ct:end rdf:parseType="Resource">
+           <ct:x rdf:parseType="Resource">
+            <rdf:value>0.8</rdf:value>
+            <ct:Type>number</ct:Type>
+           </ct:x>
+           <ct:y rdf:parseType="Resource">
+            <rdf:value>0.25</rdf:value>
+            <ct:Type>number</ct:Type>
+           </ct:y>
+          </ct:end>
+          <ct:feather rdf:parseType="Resource">
+           <rdf:value>0</rdf:value>
+           <ct:Type>number</ct:Type>
+          </ct:feather>
+          <ct:geometryReference rdf:parseType="Resource">
+           <ct:data rdf:parseType="Resource">
+            <rdf:value>[Version]&#xA;AppVersion=1.26.10&#xA;Version=1045&#xA;&#xA;[Coarse Transformation]&#xA;Rotate=0&#xA;HorizontalFlip=false&#xA;VerticalFlip=false&#xA;&#xA;[Common Properties for Transformations]&#xA;AutoFill=true&#xA;CaptRAWSourceFrameV1={"border":0,"decoded":{"height":768,"left":0,"rotation":0,"top":0,"width":1024},"decoderModel":"sensor-crop-v1","fullHeight":768,"fullWidth":1024,"height":768,"layoutHeight":768,"layoutWidth":1024,"policy":"active-area-v1","renderBinding":{"frame":{"border":0,"decoded":{"height":768,"left":0,"rotation":0,"top":0,"width":1024},"decoderModel":"sensor-crop-v1","fullHeight":768,"fullWidth":1024,"height":768,"layoutHeight":768,"layoutWidth":1024,"policy":"active-area-v1","sensor":"bayer","version":1,"width":1024},"map":[1.0,1.0,0.0,0.0],"source":{"sha256":"8f49a1b1fc77fd57482995b7624341b64193cc5e195cbc4060d8c609bbed8c58","size":1573312},"version":1},"sensor":"bayer","version":1,"width":1024}&#xA;&#xA;[Rotation]&#xA;Enabled=false&#xA;Degree=0&#xA;CaptRAWMaskCoordinates=false&#xA;CaptRAWMaskReferenceDegree=0&#xA;&#xA;[Distortion]&#xA;Enabled=false&#xA;Amount=0&#xA;Auto=false&#xA;&#xA;[LensProfile]&#xA;LcMode=none&#xA;LCPFile=&#xA;UseDistortion=true&#xA;UseVignette=true&#xA;UseCA=true&#xA;LFCameraMake=&#xA;LFCameraModel=&#xA;LFLens=&#xA;&#xA;[Perspective]&#xA;Enabled=false&#xA;Horizontal=0&#xA;Vertical=0&#xA;Angle=0&#xA;Shear=0&#xA;FocalLength=0&#xA;CropFactor=1&#xA;Aspect=1&#xA;ControlLines=&#xA;&#xA;[CACorrection]&#xA;Enabled=false&#xA;Red=0&#xA;Blue=0&#xA;&#xA;</rdf:value>
+            <ct:Type>string</ct:Type>
+           </ct:data>
+           <ct:version rdf:parseType="Resource">
+            <rdf:value>3</rdf:value>
+            <ct:Type>number</ct:Type>
+           </ct:version>
+          </ct:geometryReference>
+          <ct:id rdf:parseType="Resource">
+           <rdf:value>legacy-leaf</rdf:value>
+           <ct:Type>string</ct:Type>
+          </ct:id>
+          <ct:initialized rdf:parseType="Resource">
+           <rdf:value>true</rdf:value>
+           <ct:Type>boolean</ct:Type>
+          </ct:initialized>
+          <ct:inverted rdf:parseType="Resource">
+           <rdf:value>false</rdf:value>
+           <ct:Type>boolean</ct:Type>
+          </ct:inverted>
+          <ct:linearGradientModel rdf:parseType="Resource">
+           <rdf:value>full-zero-v1</rdf:value>
+           <ct:Type>string</ct:Type>
+          </ct:linearGradientModel>
+          <ct:name rdf:parseType="Resource">
+           <rdf:value>完整端点</rdf:value>
+           <ct:Type>string</ct:Type>
+          </ct:name>
+          <ct:operation rdf:parseType="Resource">
+           <rdf:value>add</rdf:value>
+           <ct:Type>string</ct:Type>
+          </ct:operation>
+          <ct:points>
+           <rdf:Seq/>
+          </ct:points>
+          <ct:referenceAngle rdf:parseType="Resource">
+           <rdf:value>0</rdf:value>
+           <ct:Type>number</ct:Type>
+          </ct:referenceAngle>
+          <ct:start rdf:parseType="Resource">
+           <ct:x rdf:parseType="Resource">
+            <rdf:value>0.2</rdf:value>
+            <ct:Type>number</ct:Type>
+           </ct:x>
+           <ct:y rdf:parseType="Resource">
+            <rdf:value>0.75</rdf:value>
+            <ct:Type>number</ct:Type>
+           </ct:y>
+          </ct:start>
+          <ct:type rdf:parseType="Resource">
+           <rdf:value>linear</rdf:value>
+           <ct:Type>string</ct:Type>
+          </ct:type>
+         </rdf:li>
+        </rdf:Seq>
+       </ct:components>
+       <ct:contrast rdf:parseType="Resource">
+        <rdf:value>11</rdf:value>
+        <ct:Type>number</ct:Type>
+       </ct:contrast>
+       <ct:enabled rdf:parseType="Resource">
+        <rdf:value>true</rdf:value>
+        <ct:Type>boolean</ct:Type>
+       </ct:enabled>
+       <ct:end rdf:parseType="Resource">
+        <ct:x rdf:parseType="Resource">
+         <rdf:value>0.8</rdf:value>
+         <ct:Type>number</ct:Type>
+        </ct:x>
+        <ct:y rdf:parseType="Resource">
+         <rdf:value>0.25</rdf:value>
+         <ct:Type>number</ct:Type>
+        </ct:y>
+       </ct:end>
+       <ct:feather rdf:parseType="Resource">
+        <rdf:value>0</rdf:value>
+        <ct:Type>number</ct:Type>
+       </ct:feather>
+       <ct:id rdf:parseType="Resource">
+        <rdf:value>legacy-mask</rdf:value>
+        <ct:Type>string</ct:Type>
+       </ct:id>
+       <ct:inverted rdf:parseType="Resource">
+        <rdf:value>false</rdf:value>
+        <ct:Type>boolean</ct:Type>
+       </ct:inverted>
+       <ct:name rdf:parseType="Resource">
+        <rdf:value>旧局部蒙版</rdf:value>
+        <ct:Type>string</ct:Type>
+       </ct:name>
+       <ct:points>
+        <rdf:Seq/>
+       </ct:points>
+       <ct:saturation rdf:parseType="Resource">
+        <rdf:value>7</rdf:value>
+        <ct:Type>number</ct:Type>
+       </ct:saturation>
+       <ct:start rdf:parseType="Resource">
+        <ct:x rdf:parseType="Resource">
+         <rdf:value>0.2</rdf:value>
+         <ct:Type>number</ct:Type>
+        </ct:x>
+        <ct:y rdf:parseType="Resource">
+         <rdf:value>0.75</rdf:value>
+         <ct:Type>number</ct:Type>
+        </ct:y>
+       </ct:start>
+       <ct:type rdf:parseType="Resource">
+        <rdf:value>linear</rdf:value>
+        <ct:Type>string</ct:Type>
+       </ct:type>
+      </rdf:li>
+     </rdf:Seq>
+    </ct:masks>
+    <ct:perspective rdf:parseType="Resource">
+     <ct:angle rdf:parseType="Resource">
+      <rdf:value>0</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:angle>
+     <ct:aspect rdf:parseType="Resource">
+      <rdf:value>1</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:aspect>
+     <ct:cropFactor rdf:parseType="Resource">
+      <rdf:value>1</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:cropFactor>
+     <ct:enabled rdf:parseType="Resource">
+      <rdf:value>false</rdf:value>
+      <ct:Type>boolean</ct:Type>
+     </ct:enabled>
+     <ct:focalLength rdf:parseType="Resource">
+      <rdf:value>0</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:focalLength>
+     <ct:horizontal rdf:parseType="Resource">
+      <rdf:value>0</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:horizontal>
+     <ct:shear rdf:parseType="Resource">
+      <rdf:value>0</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:shear>
+     <ct:vertical rdf:parseType="Resource">
+      <rdf:value>0</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:vertical>
+    </ct:perspective>
+    <ct:sourceFrame rdf:parseType="Resource">
+     <ct:border rdf:parseType="Resource">
+      <rdf:value>0</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:border>
+     <ct:decoded rdf:parseType="Resource">
+      <ct:height rdf:parseType="Resource">
+       <rdf:value>768</rdf:value>
+       <ct:Type>number</ct:Type>
+      </ct:height>
+      <ct:left rdf:parseType="Resource">
+       <rdf:value>0</rdf:value>
+       <ct:Type>number</ct:Type>
+      </ct:left>
+      <ct:rotation rdf:parseType="Resource">
+       <rdf:value>0</rdf:value>
+       <ct:Type>number</ct:Type>
+      </ct:rotation>
+      <ct:top rdf:parseType="Resource">
+       <rdf:value>0</rdf:value>
+       <ct:Type>number</ct:Type>
+      </ct:top>
+      <ct:width rdf:parseType="Resource">
+       <rdf:value>1024</rdf:value>
+       <ct:Type>number</ct:Type>
+      </ct:width>
+     </ct:decoded>
+     <ct:decoderModel rdf:parseType="Resource">
+      <rdf:value>sensor-crop-v1</rdf:value>
+      <ct:Type>string</ct:Type>
+     </ct:decoderModel>
+     <ct:fullHeight rdf:parseType="Resource">
+      <rdf:value>768</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:fullHeight>
+     <ct:fullWidth rdf:parseType="Resource">
+      <rdf:value>1024</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:fullWidth>
+     <ct:height rdf:parseType="Resource">
+      <rdf:value>768</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:height>
+     <ct:layoutHeight rdf:parseType="Resource">
+      <rdf:value>768</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:layoutHeight>
+     <ct:layoutWidth rdf:parseType="Resource">
+      <rdf:value>1024</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:layoutWidth>
+     <ct:policy rdf:parseType="Resource">
+      <rdf:value>active-area-v1</rdf:value>
+      <ct:Type>string</ct:Type>
+     </ct:policy>
+     <ct:sensor rdf:parseType="Resource">
+      <rdf:value>bayer</rdf:value>
+      <ct:Type>string</ct:Type>
+     </ct:sensor>
+     <ct:version rdf:parseType="Resource">
+      <rdf:value>1</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:version>
+     <ct:width rdf:parseType="Resource">
+      <rdf:value>1024</rdf:value>
+      <ct:Type>number</ct:Type>
+     </ct:width>
+    </ct:sourceFrame>
+    <ct:spots>
+     <rdf:Seq/>
+    </ct:spots>
+    <ct:wbApproximate rdf:parseType="Resource">
+     <rdf:value>false</rdf:value>
+     <ct:Type>boolean</ct:Type>
+    </ct:wbApproximate>
+    <ct:wbMode rdf:parseType="Resource">
+     <rdf:value>camera</rdf:value>
+     <ct:Type>string</ct:Type>
+    </ct:wbMode>
+    <ct:wbMultipliers>
+     <rdf:Seq>
+      <rdf:li rdf:parseType="Resource">
+       <rdf:value>1.0000000000000004</rdf:value>
+       <ct:Type>number</ct:Type>
+      </rdf:li>
+      <rdf:li rdf:parseType="Resource">
+       <rdf:value>1</rdf:value>
+       <ct:Type>number</ct:Type>
+      </rdf:li>
+      <rdf:li rdf:parseType="Resource">
+       <rdf:value>1.0000000000000002</rdf:value>
+       <ct:Type>number</ct:Type>
+      </rdf:li>
+     </rdf:Seq>
+    </ct:wbMultipliers>
+   </ct:ARTAdjustments>
+   <ct:ARTWhiteBalanceCoordinates>
+    <rdf:Seq>
+     <rdf:li rdf:parseType="Resource">
+      <rdf:value>5454</rdf:value>
+      <ct:Type>number</ct:Type>
+     </rdf:li>
+     <rdf:li rdf:parseType="Resource">
+      <rdf:value>-13</rdf:value>
+      <ct:Type>number</ct:Type>
+     </rdf:li>
+    </rdf:Seq>
+   </ct:ARTWhiteBalanceCoordinates>
+   <ct:EngineVersion rdf:parseType="Resource">
+    <rdf:value>CaptRAW-32_ART-1.26.10_LibRaw-3b20539</rdf:value>
+    <ct:Type>string</ct:Type>
+   </ct:EngineVersion>
+   <ct:Source rdf:parseType="Resource">
+    <ct:path rdf:parseType="Resource">
+     <rdf:value>synthetic.dng</rdf:value>
+     <ct:Type>string</ct:Type>
+    </ct:path>
+    <ct:size rdf:parseType="Resource">
+     <rdf:value>1573312</rdf:value>
+     <ct:Type>number</ct:Type>
+    </ct:size>
+    <ct:sha256 rdf:parseType="Resource">
+     <rdf:value>8f49a1b1fc77fd57482995b7624341b64193cc5e195cbc4060d8c609bbed8c58</rdf:value>
+     <ct:Type>string</ct:Type>
+    </ct:sha256>
+   </ct:Source>
+   <ct:ARTProfile rdf:parseType="Resource">
+    <rdf:value>[Version]&#xA;AppVersion=1.26.10&#xA;Version=1045&#xA;&#xA;[General]&#xA;ColorLabel=0&#xA;InTrash=false&#xA;&#xA;[CaptRAW Effects]&#xA;Version=1&#xA;Values=1;0;25;50;1;0;50;0;50;0;&#xA;&#xA;[Exposure]&#xA;Enabled=true&#xA;Compensation=0.75&#xA;Black=0&#xA;HLRecovery=Balanced&#xA;HLRecoveryBlur=0&#xA;&#xA;[Saturation]&#xA;Enabled=true&#xA;Saturation=9&#xA;Vibrance=0&#xA;&#xA;[ToneCurve]&#xA;Enabled=true&#xA;Contrast=17&#xA;HistogramMatching=false&#xA;CurveFromHistogramMatching=false&#xA;CurveMode=Standard&#xA;CurveMode2=Neutral&#xA;Curve=1;0;0;0.34999999999999998;0.28000000000000003;0.69999999999999996;0.76000000000000001;1;1;&#xA;Curve2=0;&#xA;CaptRAWCurveRefineModel=weighted-std-v1&#xA;CaptRAWCurveRefineAmount=100&#xA;Saturation=0;&#xA;Saturation2=0;&#xA;WhitePoint=1&#xA;BaseCurve=Linear&#xA;&#xA;[Local Contrast]&#xA;Enabled=false&#xA;Contrast=0&#xA;Curve=1;0;0.5;0;0;1;0.5;0;0;&#xA;CaptRAWComponentCount=0&#xA;MaskEnabled=true&#xA;MaskInverted=false&#xA;MaskName=&#xA;MaskCurve=0;&#xA;MaskPosterization=0&#xA;MaskSmoothing=0&#xA;MaskOpacity=100&#xA;ParametricMaskEnabled=false&#xA;HueMask=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;&#xA;ChromaticityMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;LightnessMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;LightnessMaskDetail=0&#xA;ContrastThresholdMask=0&#xA;ParametricMaskBlur=0&#xA;AreaMaskEnabled=false&#xA;AreaMaskFeather=0&#xA;AreaMaskBlur=0&#xA;AreaMaskContrast=0;&#xA;DeltaEMaskEnabled=false&#xA;DeltaEMaskL=0&#xA;DeltaEMaskC=0&#xA;DeltaEMaskH=0&#xA;DeltaEMaskRange=1&#xA;DeltaEMaskDecay=1&#xA;DeltaEMaskStrength=100&#xA;DeltaEMaskWeightL=50&#xA;DeltaEMaskWeightC=75&#xA;DeltaEMaskWeightH=100&#xA;DrawnMaskEnabled=false&#xA;DrawnMaskFeather=0&#xA;DrawnMaskOpacity=1&#xA;DrawnMaskSmoothness=0&#xA;DrawnMaskContrast=0;&#xA;DrawnMaskMode=0&#xA;CaptRAWDrawnMaskStrokes=&#xA;DrawnMaskStrokes=&#xA;LinkedMaskEnabled=false&#xA;LinkedMaskInverted=false&#xA;LinkedMask=&#xA;ExternalMaskEnabled=false&#xA;ExternalMaskInverted=false&#xA;ExternalMaskFilename=&#xA;ExternalMaskFeather=0&#xA;ShowMask=-1&#xA;SelectedRegion=0&#xA;&#xA;[Channel Mixer]&#xA;Enabled=false&#xA;Mode=0&#xA;Red=1000;0;0;&#xA;Green=0;1000;0;&#xA;Blue=0;0;1000;&#xA;HueTweak=0;0;0;&#xA;SatTweak=0;0;0;&#xA;&#xA;[Black &amp; White]&#xA;Enabled=false&#xA;Setting=RGB-Rel&#xA;Filter=None&#xA;MixerRed=33&#xA;MixerGreen=33&#xA;MixerBlue=33&#xA;GammaRed=0&#xA;GammaGreen=0&#xA;GammaBlue=0&#xA;ColorCast=0;0;&#xA;&#xA;[HSL Equalizer]&#xA;Enabled=true&#xA;HCurve=1;0;0.5;0;0;0.083333333333333329;0.5;0;0;0.16666666666666666;0.5;0;0;0.33333333333333331;0.5;0;0;0.5;0.5;0;0;0.66666666666666663;0.5;0;0;0.75;0.5;0;0;0.83333333333333337;0.5;0;0;&#xA;SCurve=1;0;0.5;0;0;0.083333333333333329;0.5;0;0;0.16666666666666666;0.5;0;0;0.33333333333333331;0.5;0;0;0.5;0.5;0;0;0.66666666666666663;0.5;0;0;0.75;0.5;0;0;0.83333333333333337;0.5;0;0;&#xA;LCurve=1;0;0.5;0;0;0.083333333333333329;0.5;0;0;0.16666666666666666;0.5;0;0;0.33333333333333331;0.5;0;0;0.5;0.5;0;0;0.66666666666666663;0.5;0;0;0.75;0.5;0;0;0.83333333333333337;0.5;0;0;&#xA;Smoothing=0&#xA;&#xA;[Luminance Curve]&#xA;Enabled=false&#xA;Brightness=0&#xA;Contrast=0&#xA;Chromaticity=0&#xA;LCurve=0;&#xA;aCurve=0;&#xA;bCurve=0;&#xA;&#xA;[Sharpening]&#xA;Enabled=false&#xA;Contrast=20&#xA;Method=usm&#xA;Radius=1&#xA;Amount=0&#xA;Threshold=20;80;2000;1200;&#xA;OnlyEdges=false&#xA;EdgedetectionRadius=1.8999999999999999&#xA;EdgeTolerance=1800&#xA;HalocontrolEnabled=false&#xA;HalocontrolAmount=85&#xA;DeconvRadius=0.75&#xA;DeconvAmount=100&#xA;DeconvAutoRadius=true&#xA;DeconvCornerBoost=0&#xA;DeconvCornerLatitude=25&#xA;PSFKernel=&#xA;PSFIterations=10&#xA;&#xA;[White Balance]&#xA;Enabled=true&#xA;Setting=CustomMult&#xA;Temperature=6500&#xA;Green=1&#xA;Multipliers=1.0000000000000004;1;1.0000000000000002;&#xA;&#xA;[Impulse Denoising]&#xA;Enabled=false&#xA;Threshold=50&#xA;&#xA;[Defringing]&#xA;Enabled=false&#xA;Radius=2&#xA;Threshold=13&#xA;HueCurve=1;0.16666666699999999;0;0.34999999999999998;0.34999999999999998;0.34699999999999998;0;0.34999999999999998;0.34999999999999998;0.51366742600000004;0;0.34999999999999998;0.34999999999999998;0.66894457100000004;0;0.34999999999999998;0.34999999999999998;0.82877752459999998;0.97835991;0.34999999999999998;0.34999999999999998;0.99088838270000001;0;0.34999999999999998;0.34999999999999998;&#xA;&#xA;[Dehaze]&#xA;Enabled=false&#xA;Strength=1;0;0.5;0;0;1;0.5;0;0;&#xA;Blackpoint=0&#xA;Luminance=false&#xA;&#xA;[Denoise]&#xA;Enabled=false&#xA;ColorSpace=RGB&#xA;Aggressive=false&#xA;Gamma=1.7&#xA;Luminance=0&#xA;LuminanceDetail=0&#xA;LuminanceDetailThreshold=0&#xA;ChrominanceMethod=0&#xA;ChrominanceAutoFactor=1&#xA;Chrominance=0&#xA;ChrominanceRedGreen=0&#xA;ChrominanceBlueYellow=0&#xA;SmoothingEnabled=false&#xA;GuidedChromaRadius=3&#xA;NLDetail=80&#xA;NLStrength=0&#xA;&#xA;[TextureBoost]&#xA;Enabled=false&#xA;Strength=0&#xA;DetailThreshold=0.20000000000000001&#xA;Iterations=1&#xA;CaptRAWComponentCount=0&#xA;MaskEnabled=true&#xA;MaskInverted=false&#xA;MaskName=&#xA;MaskCurve=0;&#xA;MaskPosterization=0&#xA;MaskSmoothing=0&#xA;MaskOpacity=100&#xA;ParametricMaskEnabled=false&#xA;HueMask=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;&#xA;ChromaticityMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;LightnessMask=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;LightnessMaskDetail=0&#xA;ContrastThresholdMask=0&#xA;ParametricMaskBlur=0&#xA;AreaMaskEnabled=false&#xA;AreaMaskFeather=0&#xA;AreaMaskBlur=0&#xA;AreaMaskContrast=0;&#xA;DeltaEMaskEnabled=false&#xA;DeltaEMaskL=0&#xA;DeltaEMaskC=0&#xA;DeltaEMaskH=0&#xA;DeltaEMaskRange=1&#xA;DeltaEMaskDecay=1&#xA;DeltaEMaskStrength=100&#xA;DeltaEMaskWeightL=50&#xA;DeltaEMaskWeightC=75&#xA;DeltaEMaskWeightH=100&#xA;DrawnMaskEnabled=false&#xA;DrawnMaskFeather=0&#xA;DrawnMaskOpacity=1&#xA;DrawnMaskSmoothness=0&#xA;DrawnMaskContrast=0;&#xA;DrawnMaskMode=0&#xA;CaptRAWDrawnMaskStrokes=&#xA;DrawnMaskStrokes=&#xA;LinkedMaskEnabled=false&#xA;LinkedMaskInverted=false&#xA;LinkedMask=&#xA;ExternalMaskEnabled=false&#xA;ExternalMaskInverted=false&#xA;ExternalMaskFilename=&#xA;ExternalMaskFeather=0&#xA;ShowMask=-1&#xA;SelectedRegion=0&#xA;&#xA;[FattalToneMapping]&#xA;Enabled=false&#xA;Threshold=30&#xA;Amount=20&#xA;SaturationControl=false&#xA;&#xA;[LogEncoding]&#xA;Enabled=false&#xA;Auto=false&#xA;AutoGain=false&#xA;Gain=0&#xA;TargetGray=18&#xA;BlackEv=-13.5&#xA;WhiteEv=2.5&#xA;Regularization=60&#xA;SaturationControl=true&#xA;HighlightCompression=0&#xA;&#xA;[ToneEqualizer]&#xA;Enabled=true&#xA;Band0=0&#xA;Band1=12&#xA;Band2=0&#xA;Band3=0&#xA;Band4=0&#xA;Regularization=4&#xA;Pivot=0&#xA;&#xA;[Crop]&#xA;Enabled=false&#xA;X=-1&#xA;Y=-1&#xA;W=-1&#xA;H=-1&#xA;FixedRatio=true&#xA;Ratio=As Image&#xA;Orientation=As Image&#xA;Guide=Frame&#xA;&#xA;[Coarse Transformation]&#xA;Rotate=0&#xA;HorizontalFlip=false&#xA;VerticalFlip=false&#xA;&#xA;[Common Properties for Transformations]&#xA;AutoFill=true&#xA;CaptRAWSourceFrameV1={"border":0,"decoded":{"height":768,"left":0,"rotation":0,"top":0,"width":1024},"decoderModel":"sensor-crop-v1","fullHeight":768,"fullWidth":1024,"height":768,"layoutHeight":768,"layoutWidth":1024,"policy":"active-area-v1","sensor":"bayer","version":1,"width":1024}&#xA;&#xA;[Rotation]&#xA;Enabled=false&#xA;Degree=0&#xA;CaptRAWMaskCoordinates=false&#xA;CaptRAWMaskReferenceDegree=0&#xA;&#xA;[Distortion]&#xA;Enabled=false&#xA;Amount=0&#xA;Auto=false&#xA;&#xA;[LensProfile]&#xA;LcMode=none&#xA;LCPFile=&#xA;UseDistortion=true&#xA;UseVignette=true&#xA;UseCA=true&#xA;LFCameraMake=&#xA;LFCameraModel=&#xA;LFLens=&#xA;&#xA;[Perspective]&#xA;Enabled=false&#xA;Horizontal=0&#xA;Vertical=0&#xA;Angle=0&#xA;Shear=0&#xA;FocalLength=0&#xA;CropFactor=1&#xA;Aspect=1&#xA;ControlLines=&#xA;&#xA;[Gradient]&#xA;Enabled=false&#xA;Degree=0&#xA;Feather=25&#xA;Strength=0.59999999999999998&#xA;CenterX=0&#xA;CenterY=0&#xA;&#xA;[PCVignette]&#xA;Enabled=false&#xA;Strength=-0&#xA;Feather=50&#xA;Roundness=50&#xA;CenterX=0&#xA;CenterY=0&#xA;&#xA;[CACorrection]&#xA;Enabled=false&#xA;Red=0&#xA;Blue=0&#xA;&#xA;[Vignetting Correction]&#xA;Enabled=false&#xA;Amount=0&#xA;Radius=50&#xA;Strength=1&#xA;CenterX=0&#xA;CenterY=0&#xA;&#xA;[Resize]&#xA;Enabled=false&#xA;Scale=1&#xA;AppliesTo=Cropped area&#xA;DataSpecified=3&#xA;Width=900&#xA;Height=900&#xA;AllowUpscaling=false&#xA;PPI=300&#xA;CopyPPIToExif=false&#xA;Unit=px&#xA;&#xA;[OutputSharpening]&#xA;Enabled=false&#xA;Contrast=25&#xA;Method=usm&#xA;Radius=0.5&#xA;Amount=200&#xA;Threshold=20;80;2000;1200;&#xA;OnlyEdges=false&#xA;EdgedetectionRadius=1.8999999999999999&#xA;EdgeTolerance=1800&#xA;HalocontrolEnabled=false&#xA;HalocontrolAmount=85&#xA;DeconvRadius=0.75&#xA;DeconvAmount=100&#xA;&#xA;[Color Management]&#xA;CaptRAWEnhancedProfile=&#xA;InputProfile=(cameraICC)&#xA;ToneCurve=false&#xA;ApplyLookTable=false&#xA;ApplyBaselineExposureOffset=true&#xA;ApplyHueSatMap=true&#xA;DCPIlluminant=0&#xA;DCPLookEarly=false&#xA;WorkingProfile=Rec2020&#xA;OutputProfile=RTv4_sRGB&#xA;OutputProfileIntent=Relative&#xA;OutputBPC=true&#xA;InputProfileCAT=false&#xA;&#xA;[SoftLight]&#xA;Enabled=false&#xA;Strength=30&#xA;&#xA;[Film Simulation]&#xA;Enabled=false&#xA;ClutFilename=&#xA;Strength=100&#xA;ClutParams=&#xA;&#xA;[RGB Curves]&#xA;Enabled=true&#xA;rCurve=1;0;0;1;1;&#xA;gCurve=1;0;0;1;1;&#xA;bCurve=1;0;0;1;1;&#xA;&#xA;[Grain]&#xA;Enabled=false&#xA;ISO=400&#xA;Strength=0&#xA;Color=false&#xA;&#xA;[Smoothing]&#xA;Enabled=false&#xA;Mode_1=0&#xA;Channel_1=2&#xA;Radius_1=0&#xA;Sigma_1=0&#xA;Epsilon_1=0&#xA;Iterations_1=1&#xA;Falloff_1=1&#xA;NLStrength_1=0&#xA;NLDetail_1=50&#xA;NumBlades_1=9&#xA;Angle_1=0&#xA;Curvature_1=0&#xA;Offset_1=0&#xA;NoiseStrength_1=10&#xA;NoiseCoarseness_1=30&#xA;HalationSize_1=1&#xA;HalationColor_1=0&#xA;WavStrength_1=0&#xA;WavLevels_1=5&#xA;WavGamma_1=2.2000000000000002&#xA;CaptRAWComponentCount_1=0&#xA;MaskEnabled_1=true&#xA;MaskInverted_1=false&#xA;MaskName_1=&#xA;MaskCurve_1=0;&#xA;MaskPosterization_1=0&#xA;MaskSmoothing_1=0&#xA;MaskOpacity_1=100&#xA;ParametricMaskEnabled_1=false&#xA;HueMask_1=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;&#xA;ChromaticityMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;LightnessMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;LightnessMaskDetail_1=0&#xA;ContrastThresholdMask_1=0&#xA;ParametricMaskBlur_1=0&#xA;AreaMaskEnabled_1=false&#xA;AreaMaskFeather_1=0&#xA;AreaMaskBlur_1=0&#xA;AreaMaskContrast_1=0;&#xA;DeltaEMaskEnabled_1=false&#xA;DeltaEMaskL_1=0&#xA;DeltaEMaskC_1=0&#xA;DeltaEMaskH_1=0&#xA;DeltaEMaskRange_1=1&#xA;DeltaEMaskDecay_1=1&#xA;DeltaEMaskStrength_1=100&#xA;DeltaEMaskWeightL_1=50&#xA;DeltaEMaskWeightC_1=75&#xA;DeltaEMaskWeightH_1=100&#xA;DrawnMaskEnabled_1=false&#xA;DrawnMaskFeather_1=0&#xA;DrawnMaskOpacity_1=1&#xA;DrawnMaskSmoothness_1=0&#xA;DrawnMaskContrast_1=0;&#xA;DrawnMaskMode_1=0&#xA;CaptRAWDrawnMaskStrokes_1=&#xA;DrawnMaskStrokes_1=&#xA;LinkedMaskEnabled_1=false&#xA;LinkedMaskInverted_1=false&#xA;LinkedMask_1=&#xA;ExternalMaskEnabled_1=false&#xA;ExternalMaskInverted_1=false&#xA;ExternalMaskFilename_1=&#xA;ExternalMaskFeather_1=0&#xA;ShowMask=-1&#xA;SelectedRegion=0&#xA;&#xA;[ColorCorrection]&#xA;Enabled=true&#xA;Mode_1=RGB&#xA;SlopeH_1=0&#xA;SlopeS_1=0&#xA;SlopeL_1=0&#xA;OffsetH_1=0&#xA;OffsetS_1=0&#xA;OffsetL_1=0&#xA;PowerH_1=0&#xA;PowerS_1=0&#xA;PowerL_1=0&#xA;SlopeR_1=1.3195079107728942&#xA;OffsetR_1=0&#xA;PowerR_1=0.9265880618903708&#xA;PivotR_1=0.17999999999999999&#xA;CompressionR_1=0&#xA;SlopeG_1=1.3195079107728942&#xA;OffsetG_1=0&#xA;PowerG_1=0.9265880618903708&#xA;PivotG_1=0.17999999999999999&#xA;CompressionG_1=0&#xA;SlopeB_1=1.3195079107728942&#xA;OffsetB_1=0&#xA;PowerB_1=0.9265880618903708&#xA;PivotB_1=0.17999999999999999&#xA;CompressionB_1=0&#xA;A_1=0&#xA;B_1=0&#xA;ABScale_1=1&#xA;InSaturation_1=0&#xA;OutSaturation_1=7&#xA;Slope_1=1.3195079107728942&#xA;Offset_1=0&#xA;Power_1=0.9265880618903708&#xA;Pivot_1=0.17999999999999999&#xA;Compression_1=0&#xA;RGBLuminance_1=false&#xA;HueShift_1=0&#xA;LUTFilename_1=&#xA;LUTParams_1=&#xA;HSLGamma_1=2.3999999999999999&#xA;CaptRAWComponentCount_1=1&#xA;CaptRAWComponent0_CaptRAWGeometryReferenceV1_1=[Version]\nAppVersion=1.26.10\nVersion=1045\n\n[Coarse Transformation]\nRotate=0\nHorizontalFlip=false\nVerticalFlip=false\n\n[Common Properties for Transformations]\nAutoFill=true\nCaptRAWSourceFrameV1={"border":0,"decoded":{"height":768,"left":0,"rotation":0,"top":0,"width":1024},"decoderModel":"sensor-crop-v1","fullHeight":768,"fullWidth":1024,"height":768,"layoutHeight":768,"layoutWidth":1024,"policy":"active-area-v1","renderBinding":{"frame":{"border":0,"decoded":{"height":768,"left":0,"rotation":0,"top":0,"width":1024},"decoderModel":"sensor-crop-v1","fullHeight":768,"fullWidth":1024,"height":768,"layoutHeight":768,"layoutWidth":1024,"policy":"active-area-v1","sensor":"bayer","version":1,"width":1024},"map":[1.0,1.0,0.0,0.0],"source":{"sha256":"8f49a1b1fc77fd57482995b7624341b64193cc5e195cbc4060d8c609bbed8c58","size":1573312},"version":1},"sensor":"bayer","version":1,"width":1024}\n\n[Rotation]\nEnabled=false\nDegree=0\nCaptRAWMaskCoordinates=false\nCaptRAWMaskReferenceDegree=0\n\n[Distortion]\nEnabled=false\nAmount=0\nAuto=false\n\n[LensProfile]\nLcMode=none\nLCPFile=\nUseDistortion=true\nUseVignette=true\nUseCA=true\nLFCameraMake=\nLFCameraModel=\nLFLens=\n\n[Perspective]\nEnabled=false\nHorizontal=0\nVertical=0\nAngle=0\nShear=0\nFocalLength=0\nCropFactor=1\nAspect=1\nControlLines=\n\n[CACorrection]\nEnabled=false\nRed=0\nBlue=0\n\n&#xA;CaptRAWComponent0_CaptRAWReferenceAngle_1=0&#xA;CaptRAWComponent0_CaptRAWComponentCount_1=0&#xA;CaptRAWComponent0_MaskEnabled_1=true&#xA;CaptRAWComponent0_MaskInverted_1=false&#xA;CaptRAWComponent0_MaskName_1=完整端点&#xA;CaptRAWComponent0_MaskCurve_1=0;&#xA;CaptRAWComponent0_MaskPosterization_1=0&#xA;CaptRAWComponent0_MaskSmoothing_1=0&#xA;CaptRAWComponent0_MaskOpacity_1=100&#xA;CaptRAWComponent0_ParametricMaskEnabled_1=false&#xA;CaptRAWComponent0_HueMask_1=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;&#xA;CaptRAWComponent0_ChromaticityMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;CaptRAWComponent0_LightnessMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;CaptRAWComponent0_LightnessMaskDetail_1=0&#xA;CaptRAWComponent0_ContrastThresholdMask_1=0&#xA;CaptRAWComponent0_ParametricMaskBlur_1=0&#xA;CaptRAWComponent0_AreaMaskEnabled_1=true&#xA;CaptRAWComponent0_AreaMaskFeather_1=0&#xA;CaptRAWComponent0_AreaMaskBlur_1=0&#xA;CaptRAWComponent0_AreaMaskContrast_1=0;&#xA;CaptRAWComponent0_AreaMaskType_1=gradient&#xA;CaptRAWComponent0_AreaMaskCaptRAWFullZeroV1_1=0.20000000000000001;0.75;0.80000000000000004;0.25;&#xA;CaptRAWComponent0_AreaMaskX_1=0&#xA;CaptRAWComponent0_AreaMaskY_1=0&#xA;CaptRAWComponent0_AreaMaskStrengthStart_1=100&#xA;CaptRAWComponent0_AreaMaskStrengthEnd_1=0&#xA;CaptRAWComponent0_AreaMaskAngle_1=122.0053832080835&#xA;CaptRAWComponent0_AreaMaskMode_1=add&#xA;CaptRAWComponent0_AreaMaskShapeFeather_1=56.60388679233963&#xA;CaptRAWComponent0_AreaMaskShapeBlur_1=0&#xA;CaptRAWComponent0_DeltaEMaskEnabled_1=false&#xA;CaptRAWComponent0_DeltaEMaskL_1=0&#xA;CaptRAWComponent0_DeltaEMaskC_1=0&#xA;CaptRAWComponent0_DeltaEMaskH_1=0&#xA;CaptRAWComponent0_DeltaEMaskRange_1=1&#xA;CaptRAWComponent0_DeltaEMaskDecay_1=1&#xA;CaptRAWComponent0_DeltaEMaskStrength_1=100&#xA;CaptRAWComponent0_DeltaEMaskWeightL_1=50&#xA;CaptRAWComponent0_DeltaEMaskWeightC_1=75&#xA;CaptRAWComponent0_DeltaEMaskWeightH_1=100&#xA;CaptRAWComponent0_DrawnMaskEnabled_1=false&#xA;CaptRAWComponent0_DrawnMaskFeather_1=0&#xA;CaptRAWComponent0_DrawnMaskOpacity_1=1&#xA;CaptRAWComponent0_DrawnMaskSmoothness_1=0&#xA;CaptRAWComponent0_DrawnMaskContrast_1=0;&#xA;CaptRAWComponent0_DrawnMaskMode_1=0&#xA;CaptRAWComponent0_CaptRAWDrawnMaskStrokes_1=&#xA;CaptRAWComponent0_DrawnMaskStrokes_1=&#xA;CaptRAWComponent0_LinkedMaskEnabled_1=false&#xA;CaptRAWComponent0_LinkedMaskInverted_1=false&#xA;CaptRAWComponent0_LinkedMask_1=&#xA;CaptRAWComponent0_ExternalMaskEnabled_1=false&#xA;CaptRAWComponent0_ExternalMaskInverted_1=false&#xA;CaptRAWComponent0_ExternalMaskFilename_1=&#xA;CaptRAWComponent0_ExternalMaskFeather_1=0&#xA;CaptRAWComponent0_Operation_1=0&#xA;MaskEnabled_1=true&#xA;MaskInverted_1=false&#xA;MaskName_1=旧局部蒙版&#xA;MaskCurve_1=0;&#xA;MaskPosterization_1=0&#xA;MaskSmoothing_1=0&#xA;MaskOpacity_1=100&#xA;ParametricMaskEnabled_1=false&#xA;HueMask_1=1;0.16666666699999999;1;0.34999999999999998;0.34999999999999998;0.82877752459999998;1;0.34999999999999998;0.34999999999999998;&#xA;ChromaticityMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;LightnessMask_1=1;0;1;0.34999999999999998;0.34999999999999998;1;1;0.34999999999999998;0.34999999999999998;&#xA;LightnessMaskDetail_1=0&#xA;ContrastThresholdMask_1=0&#xA;ParametricMaskBlur_1=0&#xA;AreaMaskEnabled_1=false&#xA;AreaMaskFeather_1=0&#xA;AreaMaskBlur_1=0&#xA;AreaMaskContrast_1=0;&#xA;DeltaEMaskEnabled_1=false&#xA;DeltaEMaskL_1=0&#xA;DeltaEMaskC_1=0&#xA;DeltaEMaskH_1=0&#xA;DeltaEMaskRange_1=1&#xA;DeltaEMaskDecay_1=1&#xA;DeltaEMaskStrength_1=100&#xA;DeltaEMaskWeightL_1=50&#xA;DeltaEMaskWeightC_1=75&#xA;DeltaEMaskWeightH_1=100&#xA;DrawnMaskEnabled_1=false&#xA;DrawnMaskFeather_1=0&#xA;DrawnMaskOpacity_1=1&#xA;DrawnMaskSmoothness_1=0&#xA;DrawnMaskContrast_1=0;&#xA;DrawnMaskMode_1=0&#xA;CaptRAWDrawnMaskStrokes_1=&#xA;DrawnMaskStrokes_1=&#xA;LinkedMaskEnabled_1=false&#xA;LinkedMaskInverted_1=false&#xA;LinkedMask_1=&#xA;ExternalMaskEnabled_1=false&#xA;ExternalMaskInverted_1=false&#xA;ExternalMaskFilename_1=&#xA;ExternalMaskFeather_1=0&#xA;ShowMask=-1&#xA;SelectedRegion=0&#xA;&#xA;[RAW]&#xA;DarkFrameEnabled=false&#xA;DarkFrame=&#xA;DarkFrameAuto=false&#xA;FlatFieldEnabled=false&#xA;FlatFieldFile=&#xA;FlatFieldAutoSelect=false&#xA;FlatFieldBlurRadius=32&#xA;FlatFieldBlurType=Area Flatfield&#xA;FlatFieldAutoClipControl=false&#xA;FlatFieldClipControl=0&#xA;FlatFieldUseEmbedded=false&#xA;CAEnabled=false&#xA;CA=false&#xA;CAAvoidColourshift=true&#xA;CAAutoIterations=2&#xA;CARed=0&#xA;CABlue=0&#xA;HotDeadPixelEnabled=false&#xA;HotPixelFilter=false&#xA;DeadPixelFilter=false&#xA;HotDeadPixelThresh=100&#xA;PreExposureEnabled=false&#xA;PreExposure=1&#xA;&#xA;[RAW Bayer]&#xA;Method=rcd&#xA;Border=0&#xA;ImageNum=1&#xA;CcSteps=0&#xA;PreBlackEnabled=false&#xA;PreBlack0=0&#xA;PreBlack1=0&#xA;PreBlack2=0&#xA;PreBlack3=0&#xA;PreTwoGreen=true&#xA;PreprocessingEnabled=false&#xA;LineDenoise=0&#xA;LineDenoiseDirection=3&#xA;GreenEqThreshold=0&#xA;LMMSEIterations=2&#xA;DualDemosaicAutoContrast=true&#xA;DualDemosaicContrast=20&#xA;PixelShiftMotionCorrectionMethod=1&#xA;PixelShiftEperIso=0&#xA;PixelShiftSigma=1&#xA;PixelShiftShowMotion=false&#xA;PixelShiftShowMotionMaskOnly=false&#xA;pixelShiftHoleFill=true&#xA;pixelShiftMedian=false&#xA;pixelShiftGreen=true&#xA;pixelShiftBlur=true&#xA;pixelShiftSmoothFactor=0.69999999999999996&#xA;pixelShiftEqualBright=false&#xA;pixelShiftEqualBrightChannel=false&#xA;pixelShiftNonGreenCross=true&#xA;pixelShiftDemosaicMethod=amaze&#xA;PDAFLinesFilter=false&#xA;DynamicRowNoiseFilter=false&#xA;&#xA;[RAW X-Trans]&#xA;Method=3-pass (best)&#xA;DualDemosaicAutoContrast=true&#xA;DualDemosaicContrast=20&#xA;Border=0&#xA;CcSteps=0&#xA;PreBlackEnabled=false&#xA;PreBlackRed=0&#xA;PreBlackGreen=0&#xA;PreBlackBlue=0&#xA;&#xA;[Film Negative]&#xA;Enabled=false&#xA;RedRatio=1.3600000000000001&#xA;GreenExponent=1.5&#xA;BlueRatio=0.85999999999999999&#xA;ColorSpace=1&#xA;RefInput=0;0;0;&#xA;RefOutput=0;0;0;&#xA;&#xA;[MetaData]&#xA;Mode=1&#xA;ExifKeys=Exif.Image.Copyright;Exif.Image.Artist;Exif.Image.ImageDescription;Exif.Photo.UserComment;Exif.Image.Make;Exif.Image.Model;Exif.Photo.LensModel;Exif.Photo.FNumber;Exif.Photo.ExposureTime;Exif.Photo.FocalLength;Exif.Photo.ISOSpeedRatings;Exif.Photo.ExposureBiasValue;Exif.Photo.Flash;Exif.Photo.DateTimeOriginal;Exif.Image.XResolution;Exif.Image.YResolution;&#xA;Notes=&#xA;&#xA;[Spot Removal]&#xA;Enabled=false&#xA;</rdf:value>
+    <ct:Type>string</ct:Type>
+   </ct:ARTProfile>
+   <ct:BaselineVersion rdf:parseType="Resource">
+    <rdf:value>4</rdf:value>
+    <ct:Type>number</ct:Type>
+   </ct:BaselineVersion>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>

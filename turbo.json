@@ -7,7 +7,7 @@
     "typecheck": { "dependsOn": ["^build"], "outputs": [] },
     "//#test:unit": {
       "dependsOn": ["@captraw/contracts#build", "@captraw/desktop-core#build"],
-      "inputs": ["tests/*.test.mjs", "apps/desktop/src/geometry.ts"],
+      "inputs": ["tests/unit/**", "tests/support/**", "tests/fixtures/**", "native/patches/**", "apps/desktop/src/lib/*.ts"],
       "outputs": []
     }
   }

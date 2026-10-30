@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "referenceCohort": "cda4985d708663da",
+  "recordedReferenceMainSHA256": "3fc796658eeea168ff6acc967dee604d92af23eccc7072af6b79f565bf2aefe8",
+  "captureUsesMain": false,
+  "engineSHA256": "5a85ded0dd0a0f8a0f23756e6e6d423df544f882593776a3d11741148b064b48",
+  "documentsDistSHA256": "665d6255d15cab89dd670201b85d3005daba48f05d226ed86eeefcec189950df",
+  "xmpDistSHA256": "8e89222c73d9a0fcb3cc6f39f673e545e201e61ce145d3c133a8ae48340684f3",
+  "contractsDistSHA256": "4e63ef88c896f575b5c1591dab8d5c289946c6a6273b2b748ebc3d5cfe46656e",
+  "sourceFile": "synthetic.dng",
+  "sourceSHA256": "8f49a1b1fc77fd57482995b7624341b64193cc5e195cbc4060d8c609bbed8c58",
+  "sourceBytes": 1573312,
+  "xmpFile": "synthetic.xmp",
+  "xmpSHA256": "8647ac9106b62a7d1d29859b8fbf66f33309c2ceea18fa09182cc3bd063ac28c",
+  "artProfileFile": "legacy.arp",
+  "artProfileSHA256": "9c68314c5096c3faa3a8d4b30587750a7cfec2af3b3456aaab41850b197dcbd0",
+  "recomposedArtProfileSHA256": "9c68314c5096c3faa3a8d4b30587750a7cfec2af3b3456aaab41850b197dcbd0",
+  "width": 1024,
+  "height": 768,
+  "adjustments": {
+    "blackWhite": {
+      "enabled": false,
+      "mixer": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "base": {
+        "filter": "None",
+        "gamma": [
+          0,
+          0,
+          0
+        ],
+        "preset": "RGB-Rel",
+        "tint": {
+          "amount": 0,
+          "hue": 0
+        },
+        "weights": [
+          33,
+          33,
+          33
+        ]
+      }
+    },
+    "colorProfile": {
+      "baselineExposure": true,
+      "hueSatMap": true,
+      "illuminant": 0,
+      "lookTable": false,
+      "mode": "auto",
+      "toneCurve": false
+    },
+    "curveRefineModel": "weighted-std-v1",
+    "fineRotation": 0,
+    "grainModel": "procedural-v1",
+    "lensCorrections": false,
+    "masks": [
+      {
+        "brightness": 0.4,
+        "components": [
+          {
+            "enabled": true,
+            "end": {
+              "x": 0.8,
+              "y": 0.25
+            },
+            "feather": 0,
+            "geometryReference": {
+              "data": "[Version]\nAppVersion=1.26.10\nVersion=1045\n\n[Coarse Transformation]\nRotate=0\nHorizontalFlip=false\nVerticalFlip=false\n\n[Common Properties for Transformations]\nAutoFill=true\nCaptRAWSourceFrameV1={\"border\":0,\"decoded\":{\"height\":768,\"left\":0,\"rotation\":0,\"top\":0,\"width\":1024},\"decoderModel\":\"sensor-crop-v1\",\"fullHeight\":768,\"fullWidth\":1024,\"height\":768,\"layoutHeight\":768,\"layoutWidth\":1024,\"policy\":\"active-area-v1\",\"renderBinding\":{\"frame\":{\"border\":0,\"decoded\":{\"height\":768,\"left\":0,\"rotation\":0,\"top\":0,\"width\":1024},\"decoderModel\":\"sensor-crop-v1\",\"fullHeight\":768,\"fullWidth\":1024,\"height\":768,\"layoutHeight\":768,\"layoutWidth\":1024,\"policy\":\"active-area-v1\",\"sensor\":\"bayer\",\"version\":1,\"width\":1024},\"map\":[1.0,1.0,0.0,0.0],\"source\":{\"sha256\":\"8f49a1b1fc77fd57482995b7624341b64193cc5e195cbc4060d8c609bbed8c58\",\"size\":1573312},\"version\":1},\"sensor\":\"bayer\",\"version\":1,\"width\":1024}\n\n[Rotation]\nEnabled=false\nDegree=0\nCaptRAWMaskCoordinates=false\nCaptRAWMaskReferenceDegree=0\n\n[Distortion]\nEnabled=false\nAmount=0\nAuto=false\n\n[LensProfile]\nLcMode=none\nLCPFile=\nUseDistortion=true\nUseVignette=true\nUseCA=true\nLFCameraMake=\nLFCameraModel=\nLFLens=\n\n[Perspective]\nEnabled=false\nHorizontal=0\nVertical=0\nAngle=0\nShear=0\nFocalLength=0\nCropFactor=1\nAspect=1\nControlLines=\n\n[CACorrection]\nEnabled=false\nRed=0\nBlue=0\n\n",
+              "version": 3
+            },
+            "id": "legacy-leaf",
+            "initialized": true,
+            "inverted": false,
+            "linearGradientModel": "full-zero-v1",
+            "name": "完整端点",
+            "operation": "add",
+            "points": [],
+            "referenceAngle": 0,
+            "start": {
+              "x": 0.2,
+              "y": 0.75
+            },
+            "type": "linear"
+          }
+        ],
+        "contrast": 11,
+        "enabled": true,
+        "end": {
+          "x": 0.8,
+          "y": 0.25
+        },
+        "feather": 0,
+        "id": "legacy-mask",
+        "inverted": false,
+        "name": "旧局部蒙版",
+        "points": [],
+        "saturation": 7,
+        "start": {
+          "x": 0.2,
+          "y": 0.75
+        },
+        "type": "linear"
+      }
+    ],
+    "perspective": {
+      "angle": 0,
+      "aspect": 1,
+      "cropFactor": 1,
+      "enabled": false,
+      "focalLength": 0,
+      "horizontal": 0,
+      "shear": 0,
+      "vertical": 0
+    },
+    "sourceFrame": {
+      "border": 0,
+      "decoded": {
+        "height": 768,
+        "left": 0,
+        "rotation": 0,
+        "top": 0,
+        "width": 1024
+      },
+      "decoderModel": "sensor-crop-v1",
+      "fullHeight": 768,
+      "fullWidth": 1024,
+      "height": 768,
+      "layoutHeight": 768,
+      "layoutWidth": 1024,
+      "policy": "active-area-v1",
+      "sensor": "bayer",
+      "version": 1,
+      "width": 1024
+    },
+    "spots": [],
+    "wbApproximate": false,
+    "wbMode": "camera",
+    "wbMultipliers": [
+      1.0000000000000004,
+      1,
+      1.0000000000000002
+    ],
+    "curveRefineSaturation": 100,
+    "exposure": 0.75,
+    "temperature": 5454,
+    "tint": -13,
+    "contrast": 17,
+    "highlights": 0,
+    "shadows": 12,
+    "whites": 0,
+    "blacks": 0,
+    "vibrance": 0,
+    "saturation": 9,
+    "dehaze": 0,
+    "vignette": 0,
+    "grain": 0,
+    "sharpening": 0,
+    "sharpenRadius": 1,
+    "luminanceNoise": 0,
+    "colorNoise": 0,
+    "lensManualDistortion": 0,
+    "lensVignette": 0,
+    "rotation": 0,
+    "hsl": {
+      "hue": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "saturation": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "luminance": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "colorGrading": {
+      "shadows": {
+        "hue": 0,
+        "saturation": 0,
+        "luminance": 0
+      },
+      "midtones": {
+        "hue": 0,
+        "saturation": 0,
+        "luminance": 0
+      },
+      "highlights": {
+        "hue": 0,
+        "saturation": 0,
+        "luminance": 0
+      },
+      "global": {
+        "hue": 0,
+        "saturation": 0,
+        "luminance": 0
+      },
+      "blending": 50,
+      "balance": 0
+    },
+    "postCropVignetteStyle": "highlight-priority",
+    "grainSize": 25,
+    "grainRoughness": 50,
+    "postCropVignetteMidpoint": 50,
+    "postCropVignetteHighlights": 0,
+    "postCropVignetteFeather": 50,
+    "postCropVignetteRoundness": 0,
+    "crop": null,
+    "curve": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 0.35,
+        "y": 0.28
+      },
+      {
+        "x": 0.7,
+        "y": 0.76
+      },
+      {
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "redCurve": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "greenCurve": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1,
+        "y": 1
+      }
+    ],
+    "blueCurve": [
+      {
+        "x": 0,
+        "y": 0
+      },
+      {
+        "x": 1,
+        "y": 1
+      }
+    ]
+  },
+  "rating": 4,
+  "label": "旧自有 中文",
+  "expectedRGB16": {
+    "shape": [
+      768,
+      1024,
+      3
+    ],
+    "dtype": "uint16",
+    "pixelSHA256": "09d5f253612d3dec6c27f766105ed22acfafeb420d4bacaf853381db9a107c65",
+    "iccSHA256": "b1c472d16ef60a1e0f930686716362efe79b6c1117286d1285a92a8df890c569"
+  },
+  "reopenedRGB16": {
+    "shape": [
+      768,
+      1024,
+      3
+    ],
+    "dtype": "uint16",
+    "pixelSHA256": "09d5f253612d3dec6c27f766105ed22acfafeb420d4bacaf853381db9a107c65",
+    "iccSHA256": "b1c472d16ef60a1e0f930686716362efe79b6c1117286d1285a92a8df890c569"
+  }
+}

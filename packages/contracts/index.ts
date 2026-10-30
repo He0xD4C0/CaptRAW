@@ -162,11 +162,16 @@ export function validatePerspective(value:PerspectiveSettings|undefined){
   if(value===undefined)return;
   if(!value||typeof value!=='object'||Array.isArray(value)||typeof value.enabled!=='boolean')throw new Error('透视设置无效。');
   const signed=value.manualModel==='signed-framing-v1';
-  const ranges={horizontal:[-200,200],vertical:[-200,200],angle:[-20,20],shear:[-50,50],focalLength:[0,1200],cropFactor:[.1,10],aspect:signed?[-100,100]:[.5,2],scale:signed?[.5,1.5]:[.1,4],offsetX:signed?[-100,100]:[-.5,.5],offsetY:signed?[-100,100]:[-.5,.5]} as const;
+  const ranges={horizontal:[-200,200],vertical:[-200,200],angle:[-20,20],shear:[-50,50],focalLength:[0,1200],cropFactor:[.1,10],aspect:signed?[-100,100]:[.5,2],scale:signed?[.5,1.5]:[.1,4],offsetX:signed?[-100,100]:[-.72,.72],offsetY:signed?[-100,100]:[-.72,.72]} as const;
   for(const key of Object.keys(ranges) as (keyof typeof ranges)[]){const v=value[key],[min,max]=ranges[key];if(v!==undefined&&(typeof v!=='number'||!Number.isFinite(v)||v<min||v>max))throw new Error('透视参数超出支持范围：'+key);}
   if(value.manualModel!==undefined&&value.manualModel!=='art-perspective-v1'&&value.manualModel!=='signed-framing-v1')throw new Error('不支持的手动透视处理版本。');
   if(value.manualModel===undefined&&['scale','offsetX','offsetY','constrainCrop'].some(key=>Object.hasOwn(value,key)))throw new Error('手动透视参数缺少处理版本。');
   if(value.constrainCrop!==undefined&&typeof value.constrainCrop!=='boolean')throw new Error('约束裁切必须为布尔值。');
+  if(value.enabled&&value.manualModel&&value.constrainCrop){
+    const zoom=(value.scale??1)*(signed?Math.sqrt(1+Math.abs(value.aspect??0)/500):1),x=(value.offsetX??0)*(signed?.0072:1),y=(value.offsetY??0)*(signed?-.0072:1);
+    const overlap=(offset:number)=>Math.min(1,.5*(1+zoom)+offset)-Math.max(0,.5*(1-zoom)+offset);
+    if(!(overlap(x)>0&&overlap(y)>0))throw new Error('自动填满没有可见交集；本次调整未应用。');
+  }
 }
 export interface Adjustments {
   readonly sourceFrame?:SourceFrame; // Immutable source geometry, outside adjustment groups.
@@ -262,7 +267,8 @@ export function mergeAdjustmentPatch(base:Adjustments,patch:AdjustmentPatch):Adj
 export interface EditDocument {
   rating?:number;
   label?:string;
-  xmpPacket?:string; warnings?:string[]; engineVersion: string; source: { path: string; size: number; sha256: string };
+  xmpPacket?:string; // XML source metadata only; never the native JSON container.
+  nativePacket?:string;warnings?:string[];unsupportedSettings?:string[];engineVersion: string; source: { path: string; size: number; sha256: string };
   artProfile: string; adjustments: Adjustments;baselineVersion?:4;
   maskAssets?:{schemaVersion:1;files:{id:string;path:string;bytes:number}[]};
   inputProfileAsset?:{id:string;path:string;bytes:number};
@@ -270,6 +276,8 @@ export interface EditDocument {
 export type InputKind='mosaic-raw'|'linear-raw'|'rendered';
 export interface EffectiveGeometry {
   readonly rotation:number;readonly angle:number;
+  readonly effectiveFill?:boolean; // Native full-profile projection, never an editable recipe field.
+  readonly perspective?:Readonly<PerspectiveSettings>;
   readonly flipHorizontal:boolean;readonly flipVertical:boolean;
   readonly sourceFlipHorizontal:boolean;readonly sourceFlipVertical:boolean;
 }
@@ -287,6 +295,9 @@ export interface ImageSession {
   camera: string; lens: string; iso: number; adjustments: Adjustments; recipe?: EditDocument;
   xmpWarnings?:string[];
   initialAdjustments?: Adjustments;
+  initialArtProfile?:string;
+  importedFromAdobe?:boolean;
+  needsNativeSave?:boolean;
   baselineVersion?:4;whiteBalancePresets?:{id:string;name:string}[];
   inputProfiles?:InputProfileOption[];
   cameraCrop?:Adjustments['crop'];
@@ -323,9 +334,9 @@ export interface PreviewFrame {
 }
 export interface ExportResult {source:string;output?:string;error?:string}
 export interface BatchSaveRequest {documents:ExportDocumentSnapshot[]}
-export interface BatchSaveItemResult extends ExportResult {xmpPacket?:string}
+export interface BatchSaveItemResult extends ExportResult {xmpPacket?:string;nativePacket?:string}
 export interface BatchSaveResult {results:BatchSaveItemResult[];cancelled:boolean}
-export interface ExportDocumentSnapshot {path:string;width:number;height:number;artProfile:string;adjustments:Adjustments;xmpPacket?:string;rating?:number;label?:string;sourceIdentity?:SourceIdentity}
+export interface ExportDocumentSnapshot {path:string;width:number;height:number;artProfile:string;adjustments:Adjustments;xmpPacket?:string;nativePacket?:string;rating?:number;label?:string;sourceIdentity?:SourceIdentity}
 export interface SessionSaveRequest {sessionId:string;documents:ExportDocumentSnapshot[]}
 export interface ExportRequest {document:ExportDocumentSnapshot;format:ExportFormat;colorSpace:OutputColorSpace;options?:ExportOptions}
 export interface BatchExportRequest {documents:ExportDocumentSnapshot[];format:ExportFormat;colorSpace:OutputColorSpace;options?:ExportOptions}

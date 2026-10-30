@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 const root = new URL('../', import.meta.url).pathname;
-const samples = JSON.parse(readFileSync(`${root}tests/fixtures.json`, 'utf8'));
+const samples = JSON.parse(readFileSync(`${root}tests/fixtures/fixtures.json`, 'utf8'));
 const { values: { only } } = parseArgs({ options: { only: { type: 'string' } } });
 if (only !== undefined && !samples.some(sample => sample.name === only)) {
   throw new Error(`Unknown fixture: ${only}. Available: ${samples.map(sample => sample.name).join(', ')}`);

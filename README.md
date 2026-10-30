@@ -5,7 +5,7 @@
 <p align="center">新世代开源 RAW 显像方案</p>
 
 
-当前从 **0.64 基线**推进 [ACR 18.7（2743）既有工具完整对齐](docs/ACR-PARITY.md#当前执行范围2026-10-29)，工作流优先；新批准范围替换旧阶段 0–8 扩展计划，旧矩阵和原始参考留作历史与后续追踪，不再以阶段 0 全部入口取证阻止工作流施工。允许新增连续 Heal / Clone、画笔 flow / density、ISO 自适应及常规预设 strength / hover / favorites / multitarget，补齐整组 Done / Cancel 与源旁同名 XMP 保存（首次展示替换确认，确认后记住）。RAW 不回写，未知 XMP 字段保留；默认预设内容 / Raw Defaults 暂不完善，保留内置包更新接口。上述为待实施范围，不是已完成声明。
+当前执行 **色彩链路可信与 macOS 工作流收尾**，唯一施工与验收入口为[收尾账本](docs/CLOSEOUT.md)。允许算法风格不同，不再追求ACR同参数、同函数或同像素；优先保证软件色彩转换、监看声明、输出及现有摄影工作流。Adobe XMP改为导入来源，原生编辑／预设将采用 `.captraw`／`.captrawpreset`；无可靠色彩声明时弹窗选择，默认sRGB。以上新格式与色彩链路尚未交付，当前仍保留0.64安装基线。旧对齐调查和下方版本记录仅供追溯，不是当前排期或新包验收结论。
 
 本轮不启动全景、独立观察工具、红眼 / 宠物眼、图库或新的独立输出格式；HDR / AI 仅在受影响时回归。产品验收限 macOS，Windows / Linux 仅作接口与构建风险铺路，见[下一轮适配清单](docs/PLATFORMS.md)。0.64 既有 DMG 身份继续有效；追加报告及尚未封存的计数 / 归档边界见 [验收记录](docs/ACCEPTANCE.md#追加报告待主线程封存)。
 
@@ -96,64 +96,64 @@ HDR AVIF 构建当前固定 AOM **3.15.0**，`scripts/build-avif.mjs` 校验版�
 pnpm ci:check
 node scripts/fetch-samples.mjs
 uv venv build/qa-venv
-uv pip install --python build/qa-venv/bin/python -r tests/requirements.txt
-build/qa-venv/bin/python tests/synthetic.py
-node tests/xmp-sdk.mjs
-node tests/xmp-documents.mjs
-node tests/batch-save.mjs
-node tests/batch-save-e2e.mjs
-node tests/cropped-tone.mjs
-node tests/cropped-tone-e2e.mjs
-node tests/fine-rotation.mjs
-node tests/fine-rotation-e2e.mjs
-node tests/straighten.mjs
-node tests/straighten-e2e.mjs
-node tests/range-transaction-e2e.mjs
-node tests/range-geometry.mjs
-node tests/color-pin-e2e.mjs
-node tests/comparison-e2e.mjs
-node tests/comparison-state-e2e.mjs
-node tests/wide-detail.mjs
-node tests/wide-detail-e2e.mjs
-node tests/segmentation-worker.mjs
-node tests/object-selection.mjs
-node tests/object-geometry.mjs
-node tests/object-geometry-e2e.mjs
-node tests/person-parts.mjs
-node tests/person-parts-e2e.mjs
-node tests/semantic-masks.mjs
-node tests/semantic-masks-e2e.mjs
-node tests/sky-mask.mjs
-node tests/sky-mask-e2e.mjs
-CAPTRAW_OBJECT_START_FIXTURE=/绝对路径/对象几何测试输出/4-edited.xmp node tests/object-start-e2e.mjs
+uv pip install --python build/qa-venv/bin/python -r tests/support/requirements.txt
+build/qa-venv/bin/python tests/fixtures/generators/synthetic.py
+node tests/integration/documents/xmp-sdk.mjs
+node tests/integration/documents/xmp-documents.mjs
+node tests/integration/documents/batch-save.mjs
+node tests/e2e/documents/batch-save-e2e.mjs
+node tests/integration/geometry/cropped-tone.mjs
+node tests/e2e/geometry/cropped-tone-e2e.mjs
+node tests/integration/geometry/fine-rotation.mjs
+node tests/e2e/geometry/fine-rotation-e2e.mjs
+node tests/integration/geometry/straighten.mjs
+node tests/e2e/geometry/straighten-e2e.mjs
+node tests/e2e/workflows/range-transaction-e2e.mjs
+node tests/integration/geometry/range-geometry.mjs
+node tests/e2e/color/color-pin-e2e.mjs
+node tests/e2e/workflows/comparison-e2e.mjs
+node tests/e2e/workflows/comparison-state-e2e.mjs
+node tests/integration/color/wide-detail.mjs
+node tests/e2e/color/wide-detail-e2e.mjs
+node tests/integration/masks/segmentation-worker.mjs
+node tests/integration/masks/object-selection.mjs
+node tests/integration/masks/object-geometry.mjs
+node tests/e2e/masks/object-geometry-e2e.mjs
+node tests/integration/masks/person-parts.mjs
+node tests/e2e/masks/person-parts-e2e.mjs
+node tests/integration/masks/semantic-masks.mjs
+node tests/e2e/masks/semantic-masks-e2e.mjs
+node tests/integration/masks/sky-mask.mjs
+node tests/e2e/masks/sky-mask-e2e.mjs
+CAPTRAW_OBJECT_START_FIXTURE=/绝对路径/对象几何测试输出/4-edited.xmp node tests/e2e/masks/object-start-e2e.mjs
 pnpm test:e2e
-node tests/xmp-e2e.mjs
-node tests/revision-e2e.mjs
-node tests/point-curve-e2e.mjs
-node tests/workbench-e2e.mjs
-node tests/restart-e2e.mjs
-node tests/white-balance.mjs
-build/qa-venv/bin/python tests/inspect-white-balance.py
-node tests/white-balance-e2e.mjs
-node tests/white-balance-optics.mjs
+node tests/e2e/documents/xmp-e2e.mjs
+node tests/e2e/workflows/revision-e2e.mjs
+node tests/e2e/color/point-curve-e2e.mjs
+node tests/e2e/workflows/workbench-e2e.mjs
+node tests/e2e/workflows/restart-e2e.mjs
+node tests/integration/color/white-balance.mjs
+build/qa-venv/bin/python tests/support/inspect/inspect-white-balance.py
+node tests/e2e/color/white-balance-e2e.mjs
+node tests/integration/geometry/white-balance-optics.mjs
 cmake --build build/native --target captraw-geometry-probe captraw-mask-geometry-probe -j 4
-node tests/geometry-mapping.mjs
+node tests/integration/geometry/geometry-mapping.mjs
 for angle in -23 23; do
   for fill in false true; do
     build/native/captraw-mask-geometry-probe "$PWD/build/native/resources" "$PWD/artifacts/geometry-mapping/probe-cache" "$PWD/artifacts/geometry-mapping/geometry-target.png" "$angle" "$fill" > "artifacts/geometry-mapping/masks-$angle-$fill.json" || exit 1
   done
 done
-node tests/mask-geometry-pipeline.mjs
-node tests/coordinates.mjs
-node tests/mask-reference.mjs
-node tests/mask-reference-e2e.mjs
-node tests/mask-interaction-e2e.mjs
-node tests/viewport-lifecycle-e2e.mjs
-node tests/match-exposure-e2e.mjs
-node tests/grid-view-e2e.mjs
-node tests/histogram-clipping-e2e.mjs
-node tests/white-balance-optics-e2e.mjs
-node tests/desktop-consistency.mjs artifacts/white-balance-gui/switched.xmp artifacts/white-balance-gui/independent.tiff
+node tests/integration/masks/mask-geometry-pipeline.mjs
+node tests/integration/geometry/coordinates.mjs
+node tests/integration/masks/mask-reference.mjs
+node tests/e2e/masks/mask-reference-e2e.mjs
+node tests/e2e/masks/mask-interaction-e2e.mjs
+node tests/e2e/workflows/viewport-lifecycle-e2e.mjs
+node tests/e2e/workflows/match-exposure-e2e.mjs
+node tests/e2e/workflows/grid-view-e2e.mjs
+node tests/e2e/workflows/histogram-clipping-e2e.mjs
+node tests/e2e/geometry/white-balance-optics-e2e.mjs
+node tests/integration/platform/desktop-consistency.mjs artifacts/white-balance-gui/switched.xmp artifacts/white-balance-gui/independent.tiff
 ```
 
 `mask-interaction-e2e` 使用 `mask-reference` 或 `coordinates` 的受控图，所有输出写入独立运行目录。可设 `CAPTRAW_MASK_INTERACTION_ROTATION=90` 和 `CAPTRAW_MASK_INTERACTION_CROP=1` 验证粗旋转与对称裁切。
@@ -164,7 +164,7 @@ node tests/desktop-consistency.mjs artifacts/white-balance-gui/switched.xmp arti
 
 原生和桌面测试需先执行 `pnpm build`；`xmp-e2e` 使用 `xmp-documents` 生成的 Adobe 样本。设定 `CAPTRAW_APP=/绝对路径/CaptRAW.app/Contents/MacOS/CaptRAW` 可测试安装包；`CAPTRAW_ENGINE`、`CAPTRAW_RESOURCES` 和 `CAPTRAW_XMP_BINARY` 指向同一候选包内对应程序与资源。默认入口测试本地构建，不代表已安装应用通过验收。
 
-Nikon 相机构图还需 ExifTool 和 `tests/nikon-he.mjs` 固定样本。`tests/camera-crop.mjs` 使用固定 ART CLI 作为同配方 TIFF 像素对照。历史 GUI 与文档专项已迁移至 XMP、当前处理版本和基线 4，移除旧 JSON 迁移验收；各专项仍需先生成对应夹具；预设 GUI 测试依赖 `tests/object-selection-e2e.mjs` 生成的 `committed.xmp`，两者需使用相同 `CAPTRAW_OBJECT_E2E_OUT`。旧 JSON 夹具不能替代。语法迁移通过不表示这些专项已全部在新安装包重跑；旧版验收保留于 [验收记录](docs/ACCEPTANCE.md)。
+Nikon 相机构图还需 ExifTool 和 `tests/integration/platform/nikon-he.mjs` 固定样本。`tests/integration/geometry/camera-crop.mjs` 使用固定 ART CLI 作为同配方 TIFF 像素对照。历史 GUI 与文档专项已迁移至 XMP、当前处理版本和基线 4，移除旧 JSON 迁移验收；各专项仍需先生成对应夹具；预设 GUI 测试依赖 `tests/e2e/masks/object-selection-e2e.mjs` 生成的 `committed.xmp`，两者需使用相同 `CAPTRAW_OBJECT_E2E_OUT`。旧 JSON 夹具不能替代。语法迁移通过不表示这些专项已全部在新安装包重跑；旧版验收保留于 [验收记录](docs/ACCEPTANCE.md)。
 
 白平衡独立数值与双光源 DNG 验证（Colour Science 仅作为 QA 参考，不进入产品）：
 
@@ -172,11 +172,11 @@ Nikon 相机构图还需 ExifTool 和 `tests/nikon-he.mjs` 固定样本。`tests
 cmake --build build/native --target captraw-wb-probe -j 4
 uv venv build/wb-reference-venv
 uv pip install --python build/wb-reference-venv/bin/python colour-science==0.4.6 tifffile==2026.10.15
-build/wb-reference-venv/bin/python tests/white-balance-reference.py
-node tests/white-balance-reference.mjs
+build/wb-reference-venv/bin/python tests/integration/color/white-balance-reference.py
+node tests/integration/color/white-balance-reference.mjs
 ```
 
-固定样本的授权、机型 / 压缩模式和 SHA-256 位于 [tests/fixtures.json](tests/fixtures.json)。追加 Nikon HE 验收使用 `tests/nikon-he.mjs`；只测试已有且哈希正确的样本可设置 `CAPTRAW_NIKON_CACHED_ONLY=1`。`tests/nikon-adobe-reference.mjs` 使用 Adobe DNG Converter 生成独立参考，转换器不参与产品运行或分发。测试图及参考不进入应用或源码归档。
+固定样本的授权、机型 / 压缩模式和 SHA-256 位于 [tests/fixtures/fixtures.json](tests/fixtures/fixtures.json)。追加 Nikon HE 验收使用 `tests/integration/platform/nikon-he.mjs`；只测试已有且哈希正确的样本可设置 `CAPTRAW_NIKON_CACHED_ONLY=1`。`tests/integration/platform/nikon-adobe-reference.mjs` 使用 Adobe DNG Converter 生成独立参考，转换器不参与产品运行或分发。测试图及参考不进入应用或源码归档。
 
 测试证据输出至 `artifacts/`。历史性能记录不等于冷磁盘、其他设备或完整画质盲评。安装包完成后运行 `node scripts/source-release.mjs`，源码、依赖清单和二进制应一并保留。
 
@@ -185,12 +185,12 @@ node tests/white-balance-reference.mjs
 ## Monorepo 结构
 
 - 根包：产品版本的唯一来源，协调原生 / XMP 构建、验收、打包和源码归档。
-- `native/`：无窗口 C++ 核心库、JSON Lines 进程及 ART 参数适配。
-- `apps/desktop/`（`@captraw/desktop`）：React 工作台、Electron main / preload 及 Vite 配置。
+- `native/`：无窗口 C++ 核心、固定上游补丁、原生测试、CMake 和配置；生产源码与头文件分别位于 `src/`、`include/`。
+- `apps/desktop/`（`@captraw/desktop`）：React 工作台、Electron main / preload 及 Vite 配置；渲染器内部按 `app/components/hooks/lib/styles` 分层。
 - `packages/contracts/`（`@captraw/contracts`）：与 ART / GTK 类型隔离的契约、参数校验、导出选项、预设和同步契约。
-- `packages/desktop-core/`（`@captraw/desktop-core`）：Node-only 的引擎协议、XMP、文档、蒙版资产、预设、同步、批量导出及对象分割服务。
+- `packages/desktop-core/`（`@captraw/desktop-core`）：Node-only 服务，内部按 `engine/documents/editing/presets/profiles/export` 分域；公共 package 子路径保持不变。
 - `scripts/`：源码固定、构建、打包、依赖和样本收集。
-- `tests/`：真实文件、像素和窗口工作流检查。
+- `tests/`：按运行层级和功能域组织；详细规则见 [测试目录](tests/README.md)。
 
 三个工作区均为私有包，内部依赖使用 `workspace:*`；跨包通过公开包入口引用。共享包输出 ESM JavaScript 与 TypeScript 声明，桌面 bundle 包含内部包代码。Turborepo 按 contracts → desktop-core → desktop 的依赖顺序编排任务；本地 `.turbo/` 只缓存 JavaScript 构建、类型检查和纯 Node 单元测试，原生构建、模型准备、打包与 E2E 每次实际执行。
 
@@ -200,7 +200,7 @@ node tests/white-balance-reference.mjs
 
 PR 和 `main` 推送执行 Ubuntu 快检，使用 Node 22.23.1、pnpm 11.25.0 冻结安装后运行 `pnpm ci:check`（`turbo run build typecheck test:unit`）；此流程不准备 Electron 二进制。只需 JavaScript 验证时，本机也可执行相同命令，无需 Homebrew 原生依赖。
 
-`v*` 标签或手动触发 macOS smoke，使用 `macos-26` ARM64，安装上述 Homebrew 依赖，执行 `pnpm build`，下载并校验 D850 固定 RAW，再执行 `pnpm test:e2e`。E2E 入口准备 Electron 与 UI，并运行后台 `tests/e2e.mjs`，覆盖开图、曝光 / 蒙版编辑、保存 XMP、导出 TIFF 和恢复配方。功能等待期限为 60 秒，首帧耗时写入报告；本机性能门槛单独验收。
+`v*` 标签或手动触发 macOS smoke，使用 `macos-26` ARM64，安装上述 Homebrew 依赖，执行 `pnpm build`，下载并校验 D850 固定 RAW，再执行 `pnpm test:e2e`。E2E 入口准备 Electron 与 UI，并运行后台 `tests/e2e/workflows/smoke.mjs`，覆盖开图、曝光 / 蒙版编辑、保存 XMP、导出 TIFF 和恢复配方。功能等待期限为 60 秒，首帧耗时写入报告；本机性能门槛单独验收。
 
 原生构建默认并行度为 8，可通过 `CAPTRAW_BUILD_JOBS` 设置；macOS CI 使用 2，限制托管 runner 的编译内存占用。
 
@@ -208,4 +208,4 @@ PR 和 `main` 推送执行 Ubuntu 快检，使用 Node 22.23.1、pnpm 11.25.0 �
 
 核心接口与持久化约定见 [docs/ENGINE.md](docs/ENGINE.md)。开源说明见 [THIRD_PARTY.md](THIRD_PARTY.md)，项目采用 GPL-3.0-or-later，保留 ART 与 RawTherapee 作者声明。
 
-所有 `tests/*e2e.mjs` 默认使用隐藏且不可聚焦的 Electron 窗口，通过 `CAPTRAW_E2E_BACKGROUND=1` 保持后台渲染，不弹窗或抢占焦点。共享启动器在运行前拒绝不支持该模式的旧安装包，并验证窗口实际隐藏。后台控件、截图和像素检查不代表用户已完成可见窗口人工验收；正常启动应用仍显示工作台。
+所有 `tests/e2e/**/*-e2e.mjs` 默认使用隐藏且不可聚焦的 Electron 窗口，通过 `CAPTRAW_E2E_BACKGROUND=1` 保持后台渲染，不弹窗或抢占焦点。共享启动器在运行前拒绝不支持该模式的旧安装包，并验证窗口实际隐藏。后台控件、截图和像素检查不代表用户已完成可见窗口人工验收；正常启动应用仍显示工作台。

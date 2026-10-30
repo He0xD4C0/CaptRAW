@@ -2,7 +2,7 @@
 from pathlib import Path
 import json,hashlib,urllib.request,tarfile,shutil
 ROOT=Path(__file__).resolve().parents[1];dest=ROOT/'build/segmentation/upstream';dest.mkdir(parents=True,exist_ok=True)
-manifest=json.loads((ROOT/'tests/segmentation-sources.json').read_text())
+manifest=json.loads((ROOT/'tests/fixtures/segmentation-sources.json').read_text())
 for item in manifest['sources']:
     path=dest/item['name']
     if not path.exists():

@@ -11,7 +11,7 @@
 - ONNX SHA-256：`35ec1ecd9ee7f85073c99c00020b7f6751b69506eeacf683bc8665f6117f85b0`，16,454,560 字节。
 - ONNX 转换来源：[senty-au/selfie_multiclass_256x256-ONNX](https://huggingface.co/senty-au/selfie_multiclass_256x256-ONNX)。
 - 原始模型：[MediaPipe Multiclass Segmentation model card](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Multiclass%20Segmentation.pdf)。
-- 构建会在 `tests/segmentation-sources.json` 中核对模型、Apache-2.0 许可和模型卡的大小 / SHA-256；安装包随附许可文本、模型卡和归属说明。
+- 构建会在 `tests/fixtures/segmentation-sources.json` 中核对模型、Apache-2.0 许可和模型卡的大小 / SHA-256；安装包随附许可文本、模型卡和归属说明。
 
 原生 worker 将已验证 PNG 双线性缩放到 256×256，运行同一 ONNX Runtime 进程内的额外模型，对每像素执行 argmax 后生成五张预览坐标灰度 PNG。输出沿用 SAM 对象选择的粗旋转约定；提交仍复制到内容寻址文档资产，保存与重开不依赖模型。所有推理均为本地 CPU，没有下载、上传或 Python 运行依赖。
 
@@ -50,7 +50,7 @@ U²-Net 输出的是显著物体概率，不是 ACR 的完整场景理解，也�
 | ONNX Runtime C++ | [v1.30.0](https://github.com/microsoft/onnxruntime/releases/tag/v1.30.0) | MIT；官方 macOS ARM64 发布包实测，归档 SHA-256 与 GitHub release digest 一致。禁用遥测，在禁网 / Homebrew 禁读环境运行。其他平台只有上游支持信息，没有 CaptRAW 实机验收 |
 | SAM 3 | [官方 LICENSE](https://github.com/facebookresearch/sam3/blob/main/LICENSE) | 自定义 SAM License 1.b.iv 限制逆向工程等行为；与本项目完全开源要求不符，本轮不采用，也未下载权重 |
 
-原始归档、checkpoint 和导出代码的 URL / SHA-256 固定在 `tests/segmentation-sources.json`；转换后的 ONNX 文件哈希在 `artifacts/segmentation/{tiny,small}-report.json`。转换不改变权重原许可，后续分发须同时附上 Apache / MIT 等适用文本和归属说明。当前生产包没有这些模型或运行库。
+原始归档、checkpoint 和导出代码的 URL / SHA-256 固定在 `tests/fixtures/segmentation-sources.json`；转换后的 ONNX 文件哈希在 `artifacts/segmentation/{tiny,small}-report.json`。转换不改变权重原许可，后续分发须同时附上 Apache / MIT 等适用文本和归属说明。当前生产包没有这些模型或运行库。
 
 训练代码公开，[SA-V](https://github.com/facebookresearch/sam2/tree/2b90b9f5ceec907a1c18123530e92e794ad901a4/sav_dataset) 声明 CC BY 4.0 并提供下载。本轮没有取得、核对整个训练数据组合或复现 checkpoint 训练；不能将权重可修改再分发扩大为完整训练可复现结论。
 
@@ -74,7 +74,7 @@ U²-Net 输出的是显著物体概率，不是 ACR 的完整场景理解，也�
 
 ## 原生 PNG 输入验证（安装版 0.26 之后的源码工作）
 
-新增 `native/segmentation-input.{h,cc}`：libpng 读取已由显影核心完成方向和色彩转换的、不透明 sRGB RGB8 PNG，再由 ONNX Runtime 生成 1×3×1024×1024 FP32 输入。输入预览上限为 64 MP、每边 65000；这是分割预览接口的内存边界，不改变显影核心的 RAW 支持范围。没有重复应用 ICC、EXIF、裁切或旋转，也不把任意用户 PNG 当作色彩已正确处理的照片。模块尚未链接到安装版应用。
+新增 `native/include/segmentation-input.h` 与 `native/src/segmentation-input.cc`：libpng 读取已由显影核心完成方向和色彩转换的、不透明 sRGB RGB8 PNG，再由 ONNX Runtime 生成 1×3×1024×1024 FP32 输入。输入预览上限为 64 MP、每边 65000；这是分割预览接口的内存边界，不改变显影核心的 RAW 支持范围。没有重复应用 ICC、EXIF、裁切或旋转，也不把任意用户 PNG 当作色彩已正确处理的照片。模块尚未链接到安装版应用。
 
 `scripts/export-segmentation-preprocess.py` 生成 577 字节、无权重的确定性 ONNX 图：RGB8 转浮点、NCHW、除以 255、1024 方形抗锯齿双线性缩放、官方 mean / std 归一化。使用 [ONNX Resize opset 18](https://onnx.ai/onnx/operators/onnx__Resize.html#resize-18) 的 half_pixel / antialias / exclude_outside；没有另写插值算法。图 SHA-256 为 `f8e256ddac47dc43ffca34ee3bca58bdbaae7f32ab10369cab119ab4618770b3`。Python / Torch 只用于构建与参考测试，原生执行不依赖它们。
 
@@ -93,24 +93,24 @@ U²-Net 输出的是显著物体概率，不是 ACR 的完整场景理解，也�
 ```sh
 build/segmentation/venv/bin/python scripts/export-segmentation-preprocess.py
 node scripts/build-segmentation-probe.mjs
-CAPTRAW_SANDBOX_PROFILE=tests/offline-native.sb node tests/segmentation-input.mjs
-build/segmentation/venv/bin/python tests/segmentation-input.py
+CAPTRAW_SANDBOX_PROFILE=tests/support/offline-native.sb node tests/integration/masks/segmentation-input.mjs
+build/segmentation/venv/bin/python tests/integration/masks/segmentation-input.py
 ```
 
 ## 常驻分割进程与主进程调度（未进入安装版）
 
-新增 `native/segmentation.{h,cc}` 与 `segmentation-worker.cc`，构建 `captraw-segment MODEL_DIRECTORY PRIVATE_CACHE_DIRECTORY`。JSON Lines 提供 `predict`、`info`、`close`；诊断写 stderr。该进程不链接 ART、Electron 或显示服务，当前构建限 macOS ARM64。使用固定 SAM2.1 Tiny / Small 的 FP32 ONNX 产物；未决定最终产品的模型档位。
+新增 `native/include/segmentation.h`、`native/src/segmentation.cc` 与 `native/src/segmentation-worker.cc`，构建 `captraw-segment MODEL_DIRECTORY PRIVATE_CACHE_DIRECTORY`。JSON Lines 提供 `predict`、`info`、`close`；诊断写 stderr。该进程不链接 ART、Electron 或显示服务，当前构建限 macOS ARM64。使用固定 SAM2.1 Tiny / Small 的 FP32 ONNX 产物；未决定最终产品的模型档位。
 
 - 模型只初始化一次，内存中只保留一张输入图像的编码特征。`close` 清空特征，保留模型 Session；释放整个推理内存须退出进程。返回三张二值候选 PNG、各自预测评分及建议候选，评分不是经过标注验证的准确率。
-- 构建时按 `tests/segmentation-sources.json` 的转换产物哈希生成清单。启动时校验预处理图、编码器与解码器的长度 / SHA-256；校验和加载使用同一份内存数据。此检查证明与清单一致，不代替发布者签名。
+- 构建时按 `tests/fixtures/segmentation-sources.json` 的转换产物哈希生成清单。启动时校验预处理图、编码器与解码器的长度 / SHA-256；校验和加载使用同一份内存数据。此检查证明与清单一致，不代替发布者签名。
 - 每个请求包含会话、递增版本、预览路径 / SHA-256、尺寸、点与标签。点使用该输入预览的像素坐标；框角必须成对且有正面积。即使命中缓存，也读取并检查输入文件内容；缺失或变化不能继续使用旧特征。PNG 解码与哈希使用同一份字节。
 - `apps/desktop/electron/segmentation.ts` 提供尚未接入主程序的调度器：提交时冻结参数；串行运行，只保留最新待处理请求；过时结果丢弃并清理。明确取消终止独立进程、等待退出、移除私有目录；重试会重新加载模型。旧进程清理不会取消期间新提交的请求。
 - 缓存只保留最近一次成功结果的三张候选。文件借用期到下一次成功请求或取消为止；未来接受选区时必须先复制到文档资产，不能直接保存这些临时路径。异常请求不删除上次成功结果；进程异常后重建时清理遗留目录。
 - 复用的 `NativeEngine` 增加启动失败时关闭日志流，避免找不到程序时遗留文件描述符；未改变正常显影协议。
 
-离线测试 `tests/segmentation-worker.mjs` 已通过 **14 组**检查：两种模型各八个输入 / 提示案例及重复缓存；非法请求保留状态；不可变参数快照；连续请求合并；编码 / 解码阶段取消；取消期间新请求；异常进程退出重试；缓存输入被修改 / 删除后拒绝、恢复后重试；重复版本；尚未启动的排队取消；模型损坏与程序缺失后的错误和退出。原生进程均禁止网络及 Homebrew 读取，没有启动 Electron 或窗口。
+离线测试 `tests/integration/masks/segmentation-worker.mjs` 已通过 **14 组**检查：两种模型各八个输入 / 提示案例及重复缓存；非法请求保留状态；不可变参数快照；连续请求合并；编码 / 解码阶段取消；取消期间新请求；异常进程退出重试；缓存输入被修改 / 删除后拒绝、恢复后重试；重复版本；尚未启动的排队取消；模型损坏与程序缺失后的错误和退出。原生进程均禁止网络及 Homebrew 读取，没有启动 Electron 或窗口。
 
-`tests/inspect-segmentation-worker.py` 对全部 **48 张候选**执行独立 Python ONNX 推理比较，变化像素为 0，候选选择一致；这是接入一致性证据，不是语义分割质量或 ACR 画质证据。共享 PNG 模块新增内存输入后，原有 24 组预处理、16 次分割、2 次张量输入回归及 20 个非法输入测试重新通过。所有 E2E 继续使用隐藏窗口启动器；本批原生测试无需窗口。
+`tests/support/inspect/inspect-segmentation-worker.py` 对全部 **48 张候选**执行独立 Python ONNX 推理比较，变化像素为 0，候选选择一致；这是接入一致性证据，不是语义分割质量或 ACR 画质证据。共享 PNG 模块新增内存输入后，原有 24 组预处理、16 次分割、2 次张量输入回归及 20 个非法输入测试重新通过。所有 E2E 继续使用隐藏窗口启动器；本批原生测试无需窗口。
 
 本机 M4 Pro / 48 GB，固定 1536×1024 输入、Tiny 模型，30 次缓存点选的主进程请求至三张 PNG 返回 P95 为 **17.1 ms**；六次 RSS 采样为 **1.886–1.888 GB**。这不是冷启动时间、完整 GUI 延迟或其他照片 / 机器的性能承诺。常驻内存仍需纳入产品预算，未因仅缓存一张图就宣称低内存。
 
@@ -120,16 +120,16 @@ build/segmentation/venv/bin/python tests/segmentation-input.py
 
 ```sh
 node scripts/build-segmentation-worker.mjs
-node tests/segmentation-worker.mjs
-build/segmentation/venv/bin/python tests/inspect-segmentation-worker.py
-build/segmentation/venv/bin/python tests/segmentation-input.py
+node tests/integration/masks/segmentation-worker.mjs
+build/segmentation/venv/bin/python tests/support/inspect/inspect-segmentation-worker.py
+build/segmentation/venv/bin/python tests/integration/masks/segmentation-input.py
 npm run typecheck
 npm test
 ```
 
 ## 已证实的接入风险
 
-ART `ExternalMaskManager::apply_mask` 在文件加载失败时返回 false；调用处跳过该选区相乘。0.25 探针刻意使用不存在的文件，实测输出与全图调整完全一致。0.26 在更新、详细预览、compose、保存和导出前解码核验启用资产；同时补齐所有蒙版模块的输出 / 详细区域错误传递，阻止渲染中失败的结果发布。缓存使用文件内容 SHA-256，避免同大小、同时间戳的损坏替换被旧缓存掩盖；恢复后强制重新处理。实现与安装包验证见 [核心边界](ENGINE.md#外部蒙版失败保护026) 和 [验收记录](ACCEPTANCE.md)。此处的旧探针继续固定 0.25 以保留缺陷证据；新测试是 `tests/external-masks.mjs`。
+ART `ExternalMaskManager::apply_mask` 在文件加载失败时返回 false；调用处跳过该选区相乘。0.25 探针刻意使用不存在的文件，实测输出与全图调整完全一致。0.26 在更新、详细预览、compose、保存和导出前解码核验启用资产；同时补齐所有蒙版模块的输出 / 详细区域错误传递，阻止渲染中失败的结果发布。缓存使用文件内容 SHA-256，避免同大小、同时间戳的损坏替换被旧缓存掩盖；恢复后强制重新处理。实现与安装包验证见 [核心边界](ENGINE.md#外部蒙版失败保护026) 和 [验收记录](ACCEPTANCE.md)。此处的旧探针继续固定 0.25 以保留缺陷证据；新测试是 `tests/integration/masks/external-masks.mjs`。
 
 0.28 已将栅格覆盖率接入 CaptRAW 的正式蒙版组件与资产保存；分割推理仍未进入安装版或创建工作流。产品还需共同解决：
 
@@ -148,12 +148,12 @@ python3 scripts/prepare-segmentation.py
 uv venv --python 3.12 build/segmentation/venv
 uv pip install --python build/segmentation/venv/bin/python torch==2.7.1 torchvision==0.22.1 onnxruntime==1.30.0 onnx==1.19.1 hydra-core==1.3.2 numpy==2.2.6 pillow==11.3.0 tqdm==4.67.1 iopath==0.1.10 setuptools==84.2.1
 SAM2_BUILD_CUDA=0 uv pip install --python build/segmentation/venv/bin/python --no-deps --no-build-isolation -e build/segmentation/upstream/sam2-2b90b9f5ceec907a1c18123530e92e794ad901a4
-CAPTRAW_SANDBOX_PROFILE=tests/offline-native.sb node tests/segmentation-art.mjs --prepare-inputs
-build/segmentation/venv/bin/python tests/segmentation-probe.py --model tiny
-build/segmentation/venv/bin/python tests/segmentation-probe.py --model small
+CAPTRAW_SANDBOX_PROFILE=tests/support/offline-native.sb node tests/integration/masks/segmentation-art.mjs --prepare-inputs
+build/segmentation/venv/bin/python tests/probes/masks/segmentation-probe.py --model tiny
+build/segmentation/venv/bin/python tests/probes/masks/segmentation-probe.py --model small
 node scripts/build-segmentation-probe.mjs
-CAPTRAW_SANDBOX_PROFILE=tests/offline-native.sb node tests/segmentation-art.mjs
-build/qa-venv/bin/python tests/inspect-segmentation.py
+CAPTRAW_SANDBOX_PROFILE=tests/support/offline-native.sb node tests/integration/masks/segmentation-art.mjs
+build/qa-venv/bin/python tests/support/inspect/inspect-segmentation.py
 ```
 
 依赖环境完整列表在 `artifacts/segmentation/python-environment.txt`。关键证据为 `downloads.json`、`tiny-report.json`、`small-report.json`、`onnx-checker.json`、`verification.json`、`art/report.json` 和各覆盖图 / C++ 日志。当前源码、生产二进制及发布归档的边界另见 `artifacts/segmentation/receipt.json`。
@@ -176,7 +176,7 @@ build/qa-venv/bin/python tests/inspect-segmentation.py
 先按上文安装固定转换环境并运行 `python3 scripts/prepare-segmentation.py`；然后：
 
 ```sh
-build/segmentation/venv/bin/python tests/segmentation-probe.py --model small --export-only
+build/segmentation/venv/bin/python tests/probes/masks/segmentation-probe.py --model small --export-only
 build/segmentation/venv/bin/python scripts/export-segmentation-preprocess.py
 npm run package
 ```
@@ -194,4 +194,4 @@ npm run package
 
 当前实现不再取消粗旋转：保留当前旋转、镜头和透视，仅取消裁切。提示先转换到当前模型画布，候选二值覆盖无损逆向整转为原有 canonical 资产。新蒙版保存实际细旋转参考角；完整 ART 配置变化使未提交候选失效。模型和权重不变，不能假设模型对旋转等变。接口及后续几何变化的限制见 [处理接口](ENGINE.md#对象选择的当前几何快照046)。
 
-复验命令：`node tests/segmentation-worker.mjs`、`node tests/object-selection.mjs`、`node tests/object-geometry.mjs`、`node tests/object-geometry-e2e.mjs`。后者使用隐藏 Electron 窗口，操作真实点选、候选、蒙版面板与 XMP 保存恢复；profile-only 失效由宿主测试验证，不能将工具切换取消测试当作该分支的 GUI 证明。
+复验命令：`node tests/integration/masks/segmentation-worker.mjs`、`node tests/integration/masks/object-selection.mjs`、`node tests/integration/masks/object-geometry.mjs`、`node tests/e2e/masks/object-geometry-e2e.mjs`。后者使用隐藏 Electron 窗口，操作真实点选、候选、蒙版面板与 XMP 保存恢复；profile-only 失效由宿主测试验证，不能将工具切换取消测试当作该分支的 GUI 证明。

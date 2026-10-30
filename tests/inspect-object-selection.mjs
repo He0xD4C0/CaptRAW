@@ -1,5 +1,0 @@
-import {readDocument} from './xmp-test.mjs';
-import {EngineClient} from './engine-client.mjs';import {resolve,join} from 'node:path';import {homedir} from 'node:os';
-const out=resolve((process.env.CAPTRAW_OBJECT_KIND==='box'?process.env.CAPTRAW_BOX_E2E_OUT:process.env.CAPTRAW_OBJECT_E2E_OUT)||(process.env.CAPTRAW_OBJECT_KIND==='box'?'artifacts/object-box-gui':'artifacts/object-selection-gui')),r=(await readDocument(join(out,process.env.CAPTRAW_OBJECT_KIND==='box'?'box-edited.xmp':'edited.xmp'))),native=join(homedir(),'Applications/CaptRAW-0.28.app/Contents/Resources/native');
-const core=new EngineClient({executable:join(native,'captraw-engine'),resources:join(native,'resources'),cache:join(out,'reference')});core.on('error',()=>{});
-try{const replacements=Object.fromEntries(r.maskAssets.files.map(f=>['captraw-mask:'+f.id,join(out,f.path)]));const bound=await core.call('maskAssets',{artProfile:r.artProfile,adjustments:r.adjustments,replacements,validate:true});await core.call('export',{path:r.source.path,artProfile:bound.artProfile,output:join(out,'reference.tiff'),format:'tiff'});}finally{await core.stop();}

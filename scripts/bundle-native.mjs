@@ -121,5 +121,9 @@ for(const destination of visited.values()){
   if(links.some(d=>!system(d)&&!d.startsWith('@loader_path/')))throw new Error(`Unbundled load command: ${destination}`);
   audit.push({file:destination.slice(output.length+1),sha256:createHash('sha256').update(readFileSync(destination)).digest('hex'),dependencies:links});
 }
+// System libraries remain provided by macOS. Record the direct XML dependency
+// without inventing an upstream version from Mach-O compatibility versions.
+const systemExpat=[...new Set(audit.flatMap(item=>item.dependencies).filter(path=>/^\/usr\/lib\/libexpat(?:\.\d+)*\.dylib$/.test(path)))];
+if(systemExpat.length)manifest.push({name:'Expat (macOS system)',license:'MIT',system:true,libraries:systemExpat,source:'https://github.com/libexpat/libexpat',usage:'ART/XMP XML parsing and HDR XMP QName namespace bindings'});
 writeFileSync(join(output,'dependency-manifest.json'),JSON.stringify({platform:'darwin-arm64',minimumMacOS:'26.0',engine:'ART 1.26.10',commit:'1e0e12c62e4f329d30bb5624d62a23a663ffbe6b',dependencies:manifest,loadCommands:audit},null,2)+'\n');
 console.log(`Bundled ${visited.size-1} native libraries and ${formulas.size} dependency notices.`);

@@ -11,8 +11,8 @@ const hash=p=>createHash('sha256').update(readFileSync(p)).digest('hex');
 mkdirSync(work,{recursive:true});
 const libraries=[['libonnxruntime.1.dylib',join(ort,'lib/libonnxruntime.1.30.0.dylib')],['libpng16.16.dylib',join(installed,'lib/libpng16.16.dylib')]];
 for(const [name,path]of libraries)copyFileSync(path,join(work,name));
-execFileSync('clang++',['-std=c++17','-O2','tests/segmentation-runtime.cc','native/segmentation-input.cc',
- '-I'+join(ort,'include'),'-I/opt/homebrew/include',join(work,'libonnxruntime.1.dylib'),join(work,'libpng16.16.dylib'),
+execFileSync('clang++',['-std=c++17','-O2','tests/native/masks/segmentation-runtime.cc','native/src/segmentation-input.cc',
+ '-Inative/include','-I'+join(ort,'include'),'-I/opt/homebrew/include',join(work,'libonnxruntime.1.dylib'),join(work,'libpng16.16.dylib'),
  '-Wl,-rpath,@loader_path','-o',join(work,'runtime-probe')],{cwd:root,stdio:'inherit'});
 const files=['runtime-probe',...libraries.map(v=>v[0])];
 for(const name of files){
@@ -20,5 +20,5 @@ for(const name of files){
  const links=execFileSync('otool',['-L',path],{encoding:'utf8'}).split('\n').slice(1).filter(Boolean).map(line=>line.trim().split(' (')[0]);
  if(links.some(p=>!p.startsWith('@loader_path/')&&!p.startsWith('@rpath/')&&!p.startsWith('/usr/lib/')&&!p.startsWith('/System/Library/')))throw new Error('Unbundled dependency: '+name);
 }
-writeFileSync(join(work,'runtime-build.json'),JSON.stringify({platform:'darwin-arm64',files:Object.fromEntries(files.map(name=>[name,hash(join(work,name))])),sources:Object.fromEntries(['tests/segmentation-runtime.cc','native/segmentation-input.h','native/segmentation-input.cc'].map(p=>[p,hash(join(root,p))]))},null,2)+'\n');
+writeFileSync(join(work,'runtime-build.json'),JSON.stringify({platform:'darwin-arm64',files:Object.fromEntries(files.map(name=>[name,hash(join(work,name))])),sources:Object.fromEntries(['tests/native/masks/segmentation-runtime.cc','native/include/segmentation-input.h','native/src/segmentation-input.cc'].map(p=>[p,hash(join(root,p))]))},null,2)+'\n');
 console.log('Built standalone headless probe:',join(work,'runtime-probe'));

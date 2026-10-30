@@ -27,7 +27,7 @@
 | darktable color balance rgb | 5.6.2，`20891f6c6fa7be995e5bf9dff9d1ee5062051773` | 官方 ARM64 CLI 八组 TIFF16；记录实际处理模块和线性 Rec.2020 工作空间 | 否决直接控件映射；中间调 / 高光 / 全局染色在零明度时改变纯白端点。未独立移植模块进 ART |
 | darktable split-toning | 同一 5.6.2 固定源码与官方 CLI | 九组灰阶 + 彩色 TIFF16，包含两端零饱和度、染色、压缩和平衡 | 保留端点，但两端饱和度归零仍改变彩色像素；只有两个区域，无 ACR 中间调 / 全局 / 明度。否决直接接入 |
 | OpenColorIO GradingTone | 2.4.2，`6918fad3f5d22ac3ef2397c754bf4268c2b58dd0` | 官方 ARM64 Python wheel 内的原生 CPU 处理器，39 组 × 9,019 个浮点 RGB 输入 | VIDEO 模式通过已测端点与单调性门槛，保留为组件候选；没有原生 ACR 混合 / 平衡和全局色轮，未确定最终路线 |
-| CaptRAW 分区染色实验 | `tests/color-grading-adapter.py` 生成并编译独立 C++，复用固定 darktable HSL 转换与 ART 色域矩阵 | 21 组行为测试、四种工作空间、4,109 个独立传递函数参考采样、八组 ICC 输出组件测试与一张已显影 TIFF16 | 已有可运行的四色轮处理实验；宽色域画质及 ART 接入未验收，不接入安装版 |
+| CaptRAW 分区染色实验 | `tests/integration/color/color-grading-adapter.py` 生成并编译独立 C++，复用固定 darktable HSL 转换与 ART 色域矩阵 | 21 组行为测试、四种工作空间、4,109 个独立传递函数参考采样、八组 ICC 输出组件测试与一张已显影 TIFF16 | 已有可运行的四色轮处理实验；宽色域画质及 ART 接入未验收，不接入安装版 |
 
 ART [HSL factors 文档](https://artraweditor.github.io/Reference.html) 与[固定处理源码](https://github.com/artraweditor/ART/blob/1e0e12c62e4f329d30bb5624d62a23a663ffbe6b/src/engine/ipcolorcorrection.cc)支持三个色轮，但实际处理对每通道执行增益、偏移和幂。直接把它们更名为高光、阴影、中间调，会把相似外观误当作相同调节语义。
 
@@ -95,7 +95,7 @@ RapidRAW 使用[固定 shader](https://github.com/CyberTimon/RapidRAW/blob/a4f2c
 
 ## 分区染色原生实验
 
-`tests/color-grading-adapter.py` 将已验证的接入行为推进为独立可执行的 C++ 实验。它从固定 darktable `colorspaces.h` 原文提取 `hue2rgb` / `hsl2rgb`，保留版权和 GPL 许可；使用 ART 固定 `iccmatrices.h` 的 D50 工作矩阵。**区域权重、饱和度作为混合强度、明度处理和组合次序是本项目新写的实验适配，不是 darktable 原模块，也不是已复现的 Adobe 算法。**
+`tests/integration/color/color-grading-adapter.py` 将已验证的接入行为推进为独立可执行的 C++ 实验。它从固定 darktable `colorspaces.h` 原文提取 `hue2rgb` / `hsl2rgb`，保留版权和 GPL 许可；使用 ART 固定 `iccmatrices.h` 的 D50 工作矩阵。**区域权重、饱和度作为混合强度、明度处理和组合次序是本项目新写的实验适配，不是 darktable 原模块，也不是已复现的 Adobe 算法。**
 
 实验参数为阴影 / 中间调 / 高光 / 全局四组 H/S/L，加混合与平衡。三个分区共用输入像素的 HSL lightness 计算范围；平衡移动分区，混合扩大重叠。三个分区同时组合后再应用全局调节。零饱和度的色轮不参与染色，全部中性直接复制原像素。明度先于染色，允许抬黑 / 压白后显色。零明度染色保留的是 **HSL lightness，不是光度学 Y**。
 
@@ -124,7 +124,7 @@ RapidRAW 使用[固定 shader](https://github.com/CyberTimon/RapidRAW/blob/a4f2c
 
 固定 ART 的 `improcfun.cc` 中，局部 `colorCorrection` 在 Stage 2；Stage 3 顺序包括 filmSimulation（可在 toneCurve 前或后）、rgbCurves、labAdjustments、localContrast，最后是 blackAndWhite 及预览锐化。`simpleprocess.cc`、`improccoordinator.cc` 都调用共享的 Stage 3。现有 filmSimulation 并不是最终颜色处理入口。
 
-`tests/color-grading-order.mjs` 使用已安装的 0.16 核心验证此顺序：输入灰阶，生成明确的诊断 Hald LUT（R/G 乘 0.8，B 不变），设置 `AfterToneCurve=true`，导出四组 TIFF16。诊断 LUT 只用于判断处理顺序，绝非分级算法候选。
+`tests/integration/color/color-grading-order.mjs` 使用已安装的 0.16 核心验证此顺序：输入灰阶，生成明确的诊断 Hald LUT（R/G 乘 0.8，B 不变），设置 `AfterToneCurve=true`，导出四组 TIFF16。诊断 LUT 只用于判断处理顺序，绝非分级算法候选。
 
 | 原生导出 | 最大 RGB 通道差（RGB16） |
 |---|---:|
@@ -148,7 +148,7 @@ OCIO 路径还存在独立的色域边界：`clutstore.cc::OCIO_init` 使用 `in
 
 ### 开发核心的后置分级接入
 
-`native/grading.cc` 在共享 Stage 3 的黑白转换后、预览锐化与输出 ICC 前运行，适屏、1:1 和独立导出使用同一实现。复用 ART 自带 `Color::hsl2rgb` 及 `ICCStore` 工作矩阵，没有引入 darktable / OCIO 运行库。范围权重与染色适配保持前述实验语义；更换 HSL 原语不代表 Adobe 算法。全中性参数在任何颜色空间转换前旁路。
+`native/src/grading.cc` 在共享 Stage 3 的黑白转换后、预览锐化与输出 ICC 前运行，适屏、1:1 和独立导出使用同一实现。复用 ART 自带 `Color::hsl2rgb` 及 `ICCStore` 工作矩阵，没有引入 darktable / OCIO 运行库。范围权重与染色适配保持前述实验语义；更换 HSL 原语不代表 Adobe 算法。全中性参数在任何颜色空间转换前旁路。
 
 `adjustments.colorGrading` 是四组 hue / saturation / luminance 与 blending / balance 的控件投影；实际参数保存在完整 ART 配置的 `[CaptRAW Color Grading]`，独立 Version=1，14 个数值。省略字段时沿用载入的完整配置，显式默认值清除分级；只有色相 / 混合 / 平衡非默认、但无染色或明度时仍保持原像素。完整与部分配置均校验版本、长度、范围、有限值。旧配方默认旁路；引擎 14 的宿主继续接受引擎 13 及更早配方和原基线。
 
@@ -166,8 +166,8 @@ OCIO 路径还存在独立的色域边界：`clutstore.cc::OCIO_init` 使用 `in
 ```sh
 npm run build:native
 node scripts/bundle-native.mjs
-CAPTRAW_ENGINE="$PWD/build/bundle/native/captraw-engine" CAPTRAW_RESOURCES="$PWD/build/bundle/native/resources" CAPTRAW_SANDBOX_PROFILE=tests/offline-native.sb node tests/color-grading-integration.mjs
-build/qa-venv/bin/python tests/inspect-color-grading-integration.py
+CAPTRAW_ENGINE="$PWD/build/bundle/native/captraw-engine" CAPTRAW_RESOURCES="$PWD/build/bundle/native/resources" CAPTRAW_SANDBOX_PROFILE=tests/support/offline-native.sb node tests/integration/color/color-grading-integration.mjs
+build/qa-venv/bin/python tests/support/inspect/inspect-color-grading-integration.py
 ```
 
 该测试使用已有三种公开 RAW 及前述顺序实验的灰阶输入；生成的 CLI 副本位于 `build/grading-reference/`，只引用候选 bundle 的资源和动态库。原安装版与发布归档不变。
@@ -181,21 +181,21 @@ build/qa-venv/bin/python tests/inspect-color-grading-integration.py
 D850 的桌面完整 TIFF 与独立安装核心输出逐像素相同，实际为 uint16、含 sRGB ICC；1528×998 的真正 1:1 PNG 与对应导出区域量化到 RGB8 后最大差 0。源图和旧配方哈希不变。证据为 `artifacts/color-grading-installed-0.17/` 下的 `report.json`、`pixel-report.json`、配方、输出与截图。安装核心 SHA-256 与前述三 RAW 原生测试候选一致；此处没有重新声称独立 ACR 画质验收。
 
 ```sh
-CAPTRAW_APP="$HOME/Applications/CaptRAW-0.17.app/Contents/MacOS/CaptRAW" CAPTRAW_ENGINE="$HOME/Applications/CaptRAW-0.17.app/Contents/Resources/native/captraw-engine" CAPTRAW_RESOURCES="$HOME/Applications/CaptRAW-0.17.app/Contents/Resources/native/resources" CAPTRAW_GRADING_E2E_OUT=artifacts/color-grading-installed-0.17 node tests/color-grading-e2e.mjs
-CAPTRAW_GRADING_E2E_OUT=artifacts/color-grading-installed-0.17 build/qa-venv/bin/python tests/inspect-color-grading-gui.py
+CAPTRAW_APP="$HOME/Applications/CaptRAW-0.17.app/Contents/MacOS/CaptRAW" CAPTRAW_ENGINE="$HOME/Applications/CaptRAW-0.17.app/Contents/Resources/native/captraw-engine" CAPTRAW_RESOURCES="$HOME/Applications/CaptRAW-0.17.app/Contents/Resources/native/resources" CAPTRAW_GRADING_E2E_OUT=artifacts/color-grading-installed-0.17 node tests/e2e/color/color-grading-e2e.mjs
+CAPTRAW_GRADING_E2E_OUT=artifacts/color-grading-installed-0.17 build/qa-venv/bin/python tests/support/inspect/inspect-color-grading-gui.py
 ```
 
 ### 独立算法实验
 
 ```sh
-CAPTRAW_SANDBOX_PROFILE=tests/offline-native.sb node tests/color-grading-art.mjs
-node tests/color-grading-candidates.mjs
-build/qa-venv/bin/python tests/color-grading-darktable.py
-build/qa-venv/bin/python tests/color-grading-darktable.py --module splittoning
-CAPTRAW_SANDBOX_PROFILE=tests/offline-native.sb node tests/color-grading-order.mjs
-sandbox-exec -f tests/offline-native.sb build/grading-research/ocio-venv/bin/python tests/color-grading-ocio.py
-sandbox-exec -f tests/offline-native.sb build/qa-venv/bin/python tests/color-grading-adapter.py
-build/qa-venv/bin/python tests/inspect-color-grading-candidates.py
+CAPTRAW_SANDBOX_PROFILE=tests/support/offline-native.sb node tests/integration/color/color-grading-art.mjs
+node tests/probes/color/color-grading-candidates.mjs
+build/qa-venv/bin/python tests/integration/color/color-grading-darktable.py
+build/qa-venv/bin/python tests/integration/color/color-grading-darktable.py --module splittoning
+CAPTRAW_SANDBOX_PROFILE=tests/support/offline-native.sb node tests/integration/color/color-grading-order.mjs
+sandbox-exec -f tests/support/offline-native.sb build/grading-research/ocio-venv/bin/python tests/integration/color/color-grading-ocio.py
+sandbox-exec -f tests/support/offline-native.sb build/qa-venv/bin/python tests/integration/color/color-grading-adapter.py
+build/qa-venv/bin/python tests/support/inspect/inspect-color-grading-candidates.py
 ```
 
 需要本项目既有 QA Python 环境（Pillow、NumPy、tifffile）、0.16 安装版，或通过 `CAPTRAW_ENGINE` / `CAPTRAW_RESOURCES` / `CAPTRAW_APP` 指定相应本机构建。RapidRAW 试验首次拉取固定源码和 LICENSE，后续读取校验过的缓存；这不是应用运行依赖。原生试验禁网并禁止 Homebrew 读取。GPU 试验使用共享隐藏窗口启动器，断言不可见、不可聚焦；没有显示应用窗口。

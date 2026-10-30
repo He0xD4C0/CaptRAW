@@ -1,0 +1,15 @@
+{
+  "release": "5.13",
+  "commit": "1924179107995b01b73cdc7f4fe91e44fc8227a7",
+  "sourceBase": "https://raw.githubusercontent.com/RawTherapee/RawTherapee/1924179107995b01b73cdc7f4fe91e44fc8227a7/",
+  "license": "GPL-3.0-or-later per source notices",
+  "sha256": {
+    "rtengine/improcfun.cc": "e06e6463b8184ff31007abfa014679eef622d476926e360554218e00e54a1f78",
+    "rtengine/color.h": "782d1191a696a225c07eeee3c1ef32b182b6565c2b8acfd96ec0a8d1906c1fa4",
+    "rtengine/rt_math.h": "88c382a75bcb5dcafb62f6a527c713b2368f0d61b86e811ce3b97504a704706e",
+    "LICENSE": "8c75a9231db8906865e29706ed63aad18fd918c92c15dbefbb13c25fe42850b4"
+  },
+  "operator": "improcfun.cc:2734-2794; rgbProc HSV Equalizer",
+  "status": "Direct Value-to-Adobe-Luminance mapping rejected; scalar compile preparation retired without compilation.",
+  "counterexample": "hsl-red-luminance-187; original legal Value ordinate and normalized working-RGB gain bound cannot reproduce the measured unclipped G/B response. No fitted gain."
+}

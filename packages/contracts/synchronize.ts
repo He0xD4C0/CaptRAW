@@ -1,4 +1,4 @@
-import {mergeAdjustmentPatch,validateWhiteBalanceTarget,validateCurveRefine,validatePerspective,type AdjustmentPatch,type Adjustments,type ImageSession,type WhiteBalanceRequest,type AutoPerspectiveDirection,type PerspectiveSettings,type LensProfileSettings,type ColorProfileSettings,type DefringeSettings,type BlackWhiteSettings,type PreviewFrame} from './index.js';
+import {mergeAdjustmentPatch,validateWhiteBalanceTarget,validateCurveRefine,validatePerspective,type AdjustmentPatch,type Adjustments,type ImageSession,type EffectiveGeometry,type WhiteBalanceRequest,type AutoPerspectiveDirection,type PerspectiveSettings,type LensProfileSettings,type ColorProfileSettings,type DefringeSettings,type BlackWhiteSettings,type PreviewFrame} from './index.js';
 export const SYNC_GROUPS = [
  {id:'profile',label:'输入配置文件与 Look',fields:['colorProfile']},
  {id:'light',label:'光线',fields:['exposure','contrast','highlights','shadows','whites','blacks']},
@@ -33,8 +33,19 @@ const editDefaults={
 } as const;
 export type RecomputedEdit={type:'whiteBalance';request:WhiteBalanceRequest;presetName?:string}|{type:'autoTone'}|{type:'autoPerspective';direction:AutoPerspectiveDirection};
 export interface SyncRequest {source:SyncDocument;targets:SyncDocument[];groups:SyncGroup[];command?:EditCommand;commands?:(EditCommand&{path:string})[];recompute?:RecomputedEdit}
+// The gesture's source already owns the user's draft. Submit its changed
+// fields verbatim; cross-model conversion belongs only to the other targets.
+export function sourceAdjustmentCommand(before:Adjustments,after:Adjustments,operationId:string):EditCommand{
+ const set:Record<string,unknown>={},unset:(keyof Adjustments)[]=[];
+ for(const key of new Set([...Object.keys(before),...Object.keys(after)]) as Set<keyof Adjustments>){
+  if(JSON.stringify(before[key])===JSON.stringify(after[key]))continue;
+  if(after[key]===undefined)unset.push(key);else set[key]=structuredClone(after[key]);
+ }
+ return {operationId,set:set as AdjustmentPatch,unset};
+}
 // A gesture copies only its changed controls, including individual HSL bands.
-export function adjustmentCommand(before:Adjustments,after:Adjustments,operationId:string):EditCommand{
+export function adjustmentCommand(before:Adjustments,after:Adjustments,operationId:string,geometry?:Pick<EffectiveGeometry,'perspective'>):EditCommand{
+ if(!before.perspective&&after.perspective&&geometry?.perspective)before={...before,perspective:geometry.perspective};
  const set:Record<string,unknown>={},merge:NonNullable<EditCommand['merge']>={},unset:(keyof Adjustments)[]=[],same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
  const sparse=(a:any,b:any):any=>{
   const result:Record<string,unknown>={};
@@ -60,6 +71,9 @@ export function adjustmentCommand(before:Adjustments,after:Adjustments,operation
     // not the user's Aspect/Scale/other offsets on selected targets.
     for(const [field,neutral] of [['aspect',0],['scale',1],['offsetX',0],['offsetY',0],['constrainCrop',false]] as const)if(after.perspective[field]===neutral)delete patch[field];
    }
+   // First framing use materializes the source's inherited gate. It is context,
+   // not a changed checkbox: each unmarked target must retain its own ARP gate.
+   if(group==='perspective'&&after.perspective?.manualModel&&!before.perspective?.manualModel&&['aspect','scale','offsetX','offsetY'].some(key=>Object.hasOwn(patch,key)))delete patch.constrainCrop;
    // A control inside an active tool must also activate a disabled target.
    if(group==='perspective'||group==='blackWhite')patch.enabled=(after[key] as PerspectiveSettings|BlackWhiteSettings).enabled;
    if(group==='perspective'&&after.perspective?.manualModel&&['aspect','scale','offsetX','offsetY','constrainCrop'].some(key=>Object.hasOwn(patch,key)))patch.manualModel=after.perspective.manualModel;
@@ -75,19 +89,24 @@ export function adjustmentCommand(before:Adjustments,after:Adjustments,operation
  }
  return {operationId,set:set as AdjustmentPatch,unset,...(Object.keys(merge).length?{merge}:{}),...(merge.perspective?.manualModel&&after.perspective?{perspectiveModelSnapshot:structuredClone(after.perspective)}:{})};
 }
-function convertPerspectiveEdit(current:PerspectiveSettings,patch:Sparse<PerspectiveSettings>,source:PerspectiveSettings):PerspectiveSettings{
- const fromSigned=source.manualModel==='signed-framing-v1',toSigned=current.manualModel==='signed-framing-v1';
+function convertPerspectiveEdit(current:PerspectiveSettings,patch:Sparse<PerspectiveSettings>,source:PerspectiveSettings,effectiveFill:boolean|undefined,boundsOnly:boolean):PerspectiveSettings{
+ const fromSigned=source.manualModel==='signed-framing-v1';
  const has=(key:keyof PerspectiveSettings)=>Object.hasOwn(patch,key);
  const ratio=(a:number)=>a>=0?1/(1+a/500):1-a/500;
  const compensation=(r:number)=>Math.sqrt(Math.max(r,1/r));
- if(!current.manualModel&&current.aspect===1){
-  const neutral={...current,manualModel:source.manualModel,aspect:fromSigned?0:1,scale:1,offsetX:0,offsetY:0,constrainCrop:false};
-  const promoted={...neutral,...patch} as PerspectiveSettings;validatePerspective(promoted);return promoted;
+ // Neutral ART framing is identity for the whole transform pipeline when its
+ // actual inherited gate is retained. Non-neutral unmarked Aspect may have
+ // been bypassed by ART, so merely retaining its number cannot prove equivalence.
+ if(!current.manualModel){
+  if(current.aspect!==1||(!boundsOnly&&typeof effectiveFill!=='boolean'))throw new Error('无法无损保持旧透视填满配置（自动填充）；本次联动未应用，请先明确升级或单张调整。');
+  // The gate does not affect numerical bounds. Static validation discards this
+  // temporary result; only the native full-profile projection can produce edits.
+  current={...current,manualModel:'art-perspective-v1',scale:1,offsetX:0,offsetY:0,constrainCrop:boundsOnly?false:effectiveFill};
  }
+ const toSigned=current.manualModel==='signed-framing-v1';
  const result={...current,...patch,manualModel:current.manualModel??'art-perspective-v1'} as PerspectiveSettings;
- if(!current.manualModel&&current.aspect!==1&&!current.horizontal&&!current.vertical&&!current.angle&&!current.shear&&!has('aspect'))throw new Error('无法无损转换旧版旁路长宽比；请先显式升级或同步整组透视设置。');
  if(fromSigned&&!toSigned){
-  const oldRatio=!current.manualModel&&!current.horizontal&&!current.vertical&&!current.angle&&!current.shear?1:current.aspect;
+  const oldRatio=current.aspect;
   const nextRatio=has('aspect')?ratio(patch.aspect!):oldRatio;
   if(has('aspect'))result.aspect=nextRatio;
   // Signed Aspect holds area scale S; native ART stores the fitted zoom Z.
@@ -106,7 +125,18 @@ function convertPerspectiveEdit(current:PerspectiveSettings,patch:Sparse<Perspec
  try{validatePerspective(result);}catch{throw new Error('无法无损转换到目标几何模型的合法范围；本次联动未应用，请显式升级或同步整组透视设置。');}
  return result;
 }
-export function applyEditCommand(base:Adjustments,command:EditCommand):Adjustments{
+export function applyEditCommand(base:Adjustments,command:EditCommand,geometry?:Pick<EffectiveGeometry,'effectiveFill'>):Adjustments{
+ return editCommand(base,command,geometry,false);
+}
+// Range/model failures are knowable without starting a worker. No projected
+// value or tentative adjustment from this pass is returned or published.
+export function validateEditCommand(base:Adjustments,command:EditCommand):void{
+ // An absent group can still inherit arbitrary ARP geometry. Its target bounds
+ // are unknowable until native projection; validate source/syntax here only.
+ const deferred=!base.perspective&&command.merge?.perspective?.manualModel&&command.perspectiveModelSnapshot;
+ editCommand(deferred?{...base,perspective:deferred}:base,command,undefined,true);
+}
+function editCommand(base:Adjustments,command:EditCommand,geometry:Pick<EffectiveGeometry,'effectiveFill'>|undefined,boundsOnly:boolean):Adjustments{
  if(!command||typeof command.operationId!=='string'||!command.operationId||!command.set||typeof command.set!=='object'||Array.isArray(command.set)||!Array.isArray(command.unset))throw new Error('编辑操作无效。');
  const next=mergeAdjustmentPatch(base,command.set);
  const merged=(base:any,patch:any):any=>{
@@ -127,13 +157,14 @@ export function applyEditCommand(base:Adjustments,command:EditCommand):Adjustmen
    if(patch.manualModel&&patch.manualModel!==current.manualModel){
     const snapshot=command.perspectiveModelSnapshot;
     if(!snapshot||snapshot.manualModel!==patch.manualModel)throw new Error('跨几何模型的联动缺少完整参数快照。');
-    validatePerspective(snapshot);next.perspective=convertPerspectiveEdit(current,patch,snapshot);continue;
+    validatePerspective(snapshot);next.perspective=convertPerspectiveEdit(current,patch,snapshot,geometry?.effectiveFill,boundsOnly);continue;
    }
   }
   (next as unknown as Record<string,unknown>)[group]=merged(base[group]??editDefaults[group],command.merge![group]);
  }
  for(const key of command.unset)delete (next as unknown as Record<string,unknown>)[key];
  validateCurveRefine(next);
+ validatePerspective(next.perspective);
  return next;
 }
 export interface CameraExposureMatch {target:SyncDocument;delta:number;exposure:number}

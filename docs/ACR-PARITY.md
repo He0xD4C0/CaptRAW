@@ -1,6 +1,8 @@
 # ACR 18.7 对齐记录
 
-## 当前执行范围（2026-10-29）
+当前执行范围和状态以[收尾账本](CLOSEOUT.md)为准。本文以下保留既有对齐调查与历史证据；其中同值算法、标准显影XMP写回及旧阶段门槛不再作为本轮任务。
+
+## 历史执行范围（2026-10-29）
 
 从 **CaptRAW 0.64** 起，以固定 **ACR 18.7（2743）** 为参照，完整对齐现有工具，**工作流优先**。本范围替换旧阶段 0–8 扩展计划；下方原始参考、能力矩阵、阶段编号与缺口保留为历史及后续追踪，不再作为本轮排期或全局入口门槛，也不自动获得新范围内的施工授权。完整对齐是目标，不能由控件存在、字段往返或 ART 自对照宣称完成。
 
@@ -41,7 +43,7 @@ U3 索引：以下 `ui/`、`renders/`、`cases/`、`source/`、`panorama/` 均�
 
 | 取证项 | 实际证据 | 判定边界 |
 |---|---|---|
-| 真实输入 / 默认显影 / 曝光 | `ui/01-nef-edit.png`、`04-cr3-edit.png`、`05-raf-edit.png`、`14-chart-accepted.png`、`15-chart-exposure.png`；对应六份输入／曝光参考及三份修复参考见下表 | NEF / CR3 / RAF 的 neutral 是各相机打开时默认，含相机配置与默认锐化等，不是数学线性或全部零设置；chart 是自制数学图，非实测商业色卡。旧 `synthetic.dng` 被拒绝；新 `tests/acr-reference-fixtures.py` 的 `source/acr-chart.dng` 已被真实 ACR 接受并导出默认 / +1 EV，接受不等于受控参考修复与跨引擎语义验收完成 |
+| 真实输入 / 默认显影 / 曝光 | `ui/01-nef-edit.png`、`04-cr3-edit.png`、`05-raf-edit.png`、`14-chart-accepted.png`、`15-chart-exposure.png`；对应六份输入／曝光参考及三份修复参考见下表 | NEF / CR3 / RAF 的 neutral 是各相机打开时默认，含相机配置与默认锐化等，不是数学线性或全部零设置；chart 是自制数学图，非实测商业色卡。旧 `synthetic.dng` 被拒绝；新 `tests/fixtures/generators/acr-reference-fixtures.py` 的 `source/acr-chart.dng` 已被真实 ACR 接受并导出默认 / +1 EV，接受不等于受控参考修复与跨引擎语义验收完成 |
 | 点颜色 / 传统蒙版 / 局部面板 | `ui/07-point-color{,-panel}.png`、`08-masking-panel.png`、`09-brush-panel.png`、`10-local-scroll-panel.png`、`12-mask-top.png`、`13-local-exposure.png`、`80`–`86` 对应 TXT / PNG | 点颜色无样本时内部参数灰显；ui/81 颜色 / 亮度 / 深度范围菜单已见，无真实深度输入。ui/82→83 双向由0切为1、对称覆盖已截图，Done 保存 `cases/nikon-bidirectional-gradient.xmp` 含 `Bidirectional=true`、`Zero2X/Y`、`FullPointDistance`；这不是局部效果像素或完整参数语义验收。ui/85 实际为局部点颜色；ui/86 为局部曲线 / 优化饱和度及锐化 / 减少杂色 / 摩尔纹 / 去边。仅 RAF 画笔局部曝光 +0.50 有固定效果输出；其 XMP `LocalExposure2012="0.125"`、`CorrectionAmount="1"` 及 Paint / Dabs 已见，不能把 UI 数值直接当 XMP 标量 |
 | 配置 / Look / RAW WB | `ui/47-profile-menu.{png,txt}`、`48-profile-browser-panel.png`、`49-profile-browser-menu.{png,txt}`、`50-profile-groups-panel.png`、`51-look-profiles-panel.png`、`52-look-amount.{png,txt}`、`53-look-amount150.{png,txt}`、`54-raw-whitebalance-menu.{png,txt}` | 下拉、浏览器、导入配置和预设 / 管理配置 / list-grid、分组及 Artistic Look 已见。Artistic 01 数量100→150 后原生 Done 保存 `cases/nikon-look-artistic01-amount150.xmp`，Look Amount实际为1.5；不外推完整范围 / Look 资产解析 / 质量。RAW WB 原照 / 自动 / 日光 / 阴天 / 阴影 / 白炽灯 / 荧光灯 / 闪光灯 / 自定菜单已见，逐模式效果未验 |
 | 曲线 / 混色器 / 处理版本 | `ui/55`–`60`、`63-hsl-mixer.{png,txt}`、`64-mixer-modes.{png,txt}`、`66-black-white-mixer.{png,txt}`、`67-calibration-processing.{png,txt}`、`68-processing-versions.{png,txt}` | 点 / 参数曲线已展开；Linear / Medium / Strong / Custom 预设可见，TAT 右键含参数曲线 / 点曲线 / Hue / Sat / Lum / 黑白混合（彩色时灰显）。HSL / Color 模式菜单、实际黑白八色面板、处理版本1–6菜单已见；定点拖动、预设曲线点值、版本转换 / 同值效果未验 |
@@ -68,7 +70,7 @@ U3 索引：以下 `ui/`、`renders/`、`cases/`、`source/`、`panorama/` 均�
 
 另有本机私有 Nikon Z5II ISO 32000 参考，不计入上述十一份公共清单，不公开原片或参考图；相关 UI 取证不改变其私有属性。十一份 ACR 原生 TIFF 参考与另列的 SDR 格式输出只证明限定参考已产生，尚未完成 CaptRAW 像素 / 参数语义对照、质量盲评或产品验收。
 
-受控 RAW / 已渲染输入由 `build/qa-venv/bin/python tests/acr-reference-fixtures.py --tiff --output-dir <独立临时目录>` 复现；依赖沿用 README 的 QA 虚拟环境。`fixture-verification.json` 记录本次两份输入与 ACR 实际接受版本逐字节一致；不运行旧 `tests/synthetic.py` 覆盖既有回归金标。
+受控 RAW / 已渲染输入由 `build/qa-venv/bin/python tests/fixtures/generators/acr-reference-fixtures.py --tiff --output-dir <独立临时目录>` 复现；依赖沿用 README 的 QA 虚拟环境。`fixture-verification.json` 记录本次两份输入与 ACR 实际接受版本逐字节一致；不运行旧 `tests/fixtures/generators/synthetic.py` 覆盖既有回归金标。
 
 全景输入来自 Stefan Chirila 的 Stony path，CC-BY-SA-4.0，出处 / 许可 / 四张 ARW 原始 hash 见 `panorama/{manifest,source-evidence}.json`；四张源图 WB 不同，本次未先统一。人工镜头无法自动选中有效 profile 的警告已接受；此次为球面、Boundary Warp=0、Fill Edges / Auto Settings / Auto Crop 全关闭。**ACR 预览是独立新窗口；旧计划要求 CaptRAW 使用独立 Electron 窗口，此路线留待后续，本轮不启动全景。** `35-panorama-preview.txt` 捕获到灰显状态，不据此认定三个投影均操作通过。 用户补充的启用状态截图已归档为 `../acr-baseline/panorama-preview.png`（身份见同目录 manifest），与本次原生合并流程交叉核对。
 
@@ -115,12 +117,12 @@ U3 索引：以下 `ui/`、`renders/`、`cases/`、`source/`、`panorama/` 均�
 
 源码路径均相对仓库根；它们证明接线边界，不证明固定 ACR 的同级质量：
 
-- C1：`packages/contracts/index.ts`、`native/core.cc`、`native/recipe.cc`；当前 RAW 判别包含扩展名路径，输入语义未完成分类验收。`CalibrationSettings` 仅六个原色值，`LocalMask` 无局部曲线 / 分级 / 去朦胧等完整字段，`RepairSpot` 是源 / 目标圆形点，`Point` 无流量 / 密度。
-- C2：`apps/desktop/src/Panels.tsx`、`InputProfilePanel.tsx`、`ColorGradingPanel.tsx`、`LensPanel.tsx`、`CurveEditor.tsx`；当前已有基础滑杆 / 传统细节控制，没有以资源名称补出 Glow、Point Color 或定点工具。
-- C3：`apps/desktop/src/CropControls.tsx`、`PerspectivePanel.tsx`、`RepairPanel.tsx`、`useGuidedPerspective.ts`、`useRepairGesture.ts`；当前自定义比例只能显示已有“当前比例”，不是新建比例入口；`flipCrop` 是横竖比例切换，不是照片镜像；手动透视 UI 仅垂直 / 水平 / 旋转 / 倾斜，结构里的 aspect 等不等于已开放控件。
-- C4：`apps/desktop/src/App.tsx`、`useWorkbench.ts`、`useComparison.ts`、`PresetsPanel.tsx`、`RatingControls.tsx`、`packages/desktop-core/src/presets.ts`；预设 `apply` 当前只传一个目标，前状态为会话引用，不等于持久快照；评分与当前曝光匹配不等于图库或场景光线分析。
-- C5：`packages/desktop-core/src/xmp.ts`、`documents.ts`、`packages/contracts/presets.ts`、`synchronize.ts`；标准参数稀疏合并与未知结构保留均需真实 Adobe 双向样本复核。未支持的组件会整组不应用；保留 AI 结构不算接入 AI。
-- C6：`apps/desktop/src/ExportMenu.tsx`、`packages/contracts/export-options.ts`、`packages/desktop-core/src/batch-export.ts`、`native/hdr-avif.cc`；当前格式枚举仅 jpeg / tiff / avif，AVIF UI 和编码为 **Rec.2020 / PQ HDR 12 位**，不是 SDR AVIF。无 JXL / PSD / DNG 写入路径声明；有尺寸 / USM 不等于 PPI 或介质锐化。
+- C1：`packages/contracts/index.ts`、`native/src/core.cc`、`native/src/recipe.cc`；当前 RAW 判别包含扩展名路径，输入语义未完成分类验收。`CalibrationSettings` 仅六个原色值，`LocalMask` 无局部曲线 / 分级 / 去朦胧等完整字段，`RepairSpot` 是源 / 目标圆形点，`Point` 无流量 / 密度。
+- C2：`apps/desktop/src/components/Panels.tsx`、`InputProfilePanel.tsx`、`ColorGradingPanel.tsx`、`LensPanel.tsx`、`CurveEditor.tsx`；当前已有基础滑杆 / 传统细节控制，没有以资源名称补出 Glow、Point Color 或定点工具。
+- C3：`apps/desktop/src/components/CropControls.tsx`、`PerspectivePanel.tsx`、`RepairPanel.tsx`、`useGuidedPerspective.ts`、`useRepairGesture.ts`；当前自定义比例只能显示已有“当前比例”，不是新建比例入口；`flipCrop` 是横竖比例切换，不是照片镜像；手动透视 UI 仅垂直 / 水平 / 旋转 / 倾斜，结构里的 aspect 等不等于已开放控件。
+- C4：`apps/desktop/src/app/App.tsx`、`useWorkbench.ts`、`useComparison.ts`、`PresetsPanel.tsx`、`RatingControls.tsx`、`packages/desktop-core/src/presets/presets.ts`；预设 `apply` 当前只传一个目标，前状态为会话引用，不等于持久快照；评分与当前曝光匹配不等于图库或场景光线分析。
+- C5：`packages/desktop-core/src/documents/xmp.ts`、`documents.ts`、`packages/contracts/presets.ts`、`synchronize.ts`；标准参数稀疏合并与未知结构保留均需真实 Adobe 双向样本复核。未支持的组件会整组不应用；保留 AI 结构不算接入 AI。
+- C6：`apps/desktop/src/components/ExportMenu.tsx`、`packages/contracts/export-options.ts`、`packages/desktop-core/src/export/batch-export.ts`、`native/src/hdr-avif.cc`；当前格式枚举仅 jpeg / tiff / avif，AVIF UI 和编码为 **Rec.2020 / PQ HDR 12 位**，不是 SDR AVIF。无 JXL / PSD / DNG 写入路径声明；有尺寸 / USM 不等于 PPI 或介质锐化。
 
 ## 原阶段 0 收口登记（历史与待封存项）
 
@@ -203,7 +205,7 @@ U3 索引：以下 `ui/`、`renders/`、`cases/`、`source/`、`panorama/` 均�
 |---|---|---|---|---|---|---|
 | B01 | 1 | Nikon Bayer NEF、Canon CR3、Fujifilm X-Trans RAF | 已接入，样本有限 | U2 / U3：NEF / CR3 / RAF 已实际打开并各导出默认 TIFF16 sRGB；见 ui/01、04、05 与公共参考表 | V1；按样本独立解码 / TIFF16 / 源哈希 | 固定三种真实样本与 ART CLI 同配方输出完全一致；不能推及全部机型与模式 |
 | B02 | 1（0回归） | Nikon Z5II HE / HE★ | 已接入，固定样本验证 | U2 / U3：Z5II NEF 与 ISO 32000 私有参考已见；此 UI 不证明 HE / HE★ 压缩模式，私有图不公开 | V1；HE / HE★ 感光点与默认构图分开 | 公开清单中的画幅 / 比例样本全部匹配上游及独立 Adobe 感光点；用户 HE★ 文件另有解码证据。0.9 默认构图匹配相机 CropArea，保留旧配方基线；不等于 ACR 默认显影色彩 |
-| B03 | 1（0回归） | 其他 Nikon HE / HE★ 机型、比例及尺寸 | 已接入，安装版固定样本重验 | U0；候选：各机型原片打开 | V1；tests/nikon-he.mjs、nikon-he-e2e.mjs，固定清单 | 0.64 安装核心与真实隐藏 GUI 重新通过 **29 / 29** 清单样本：禁网 / Homebrew 禁读的原生核心及包内 LibRaw 工具匹配固定上游感光点校验值；界面预览、曝光、XMP 保存和源哈希通过。0.58 另有 Adobe DNG Converter 18.0 独立未压缩 DNG 的逐感光点零差异历史证据，本批未重跑该独立转换。覆盖 Z9、Z8、Z f、Z6III、Z5II、Z50II 清单所列画幅 / 比例；不能推及全部固件、额外比例或未来相机。当前证据见 `artifacts/acceptance-0.64/nikon-{native,gui}/report.json` |
+| B03 | 1（0回归） | 其他 Nikon HE / HE★ 机型、比例及尺寸 | 已接入，安装版固定样本重验 | U0；候选：各机型原片打开 | V1；tests/integration/platform/nikon-he.mjs、nikon-he-e2e.mjs，固定清单 | 0.64 安装核心与真实隐藏 GUI 重新通过 **29 / 29** 清单样本：禁网 / Homebrew 禁读的原生核心及包内 LibRaw 工具匹配固定上游感光点校验值；界面预览、曝光、XMP 保存和源哈希通过。0.58 另有 Adobe DNG Converter 18.0 独立未压缩 DNG 的逐感光点零差异历史证据，本批未重跑该独立转换。覆盖 Z9、Z8、Z f、Z6III、Z5II、Z50II 清单所列画幅 / 比例；不能推及全部固件、额外比例或未来相机。当前证据见 `artifacts/acceptance-0.64/nikon-{native,gui}/report.json` |
 | B04 | 1 | RAW 默认有效区与相机构图裁切 | Nikon 已接入，其他品牌未验证 | U2：当前构图可见；有效区 / 相机裁切控制 U0 | V1 + V2；默认 / 清除 / 恢复与方向、TIFF16 | 读取 Nikon CropArea 并在基线 4 默认裁切；旋转 / TIFF16 / 保存恢复已测。当前只接受基线 4，旧基线 2 / 3 已移除；可清除或恢复相机构图。尺寸一致不等于 ACR 显影色彩一致 |
 | B05 | 1 | 其他相机、特殊压缩、像素位移及多帧 RAW | 未验证 | U0；按固定 18.7 的机型 / 输入可用性取证 | V1；按机型 / 固件 / 压缩逐项，不由库列表扩围 | 必须按机型、压缩模式和样本逐项登记，LibRaw 名称列表不作通过证据 |
 | B06 | 1 | 曝光、对比、白平衡、自然饱和度、饱和度 | 已接入，语义部分对齐 | U1 控件可见；U3：chart 默认 / 全局曝光 +1.00 输出及全景曝光 +1.00、WB6500/+3 保存已实测；对比 / 饱和度等非零仍待 | V1；white-balance-reference、xmp-partial 与真实非零输出 | 0.33 全局白平衡改为 Adobe Temperature / Tint 坐标，通过当前 DCP / 相机矩阵生成系数；50 组独立白点与三组双光源 DNG 验证。当前工作区已将五个字段保存为 Adobe `crs` 标准属性并通过导入、真实 TIFF 像素、预设局部应用与引擎 22→23 迁移，但处理仍为 ART 语义，不代表 ACR 同值同色 |
@@ -376,7 +378,7 @@ U3 索引：以下 `ui/`、`renders/`、`cases/`、`source/`、`panorama/` 均�
 
 尚无画质盲评、ACR 对照耗时和全部关键缺口的可信实现证明，因此完整同级替代可行性仍未证实。不会因版本迭代增加控件而降低目标或宣布完成。
 
-依据：用户本机固定版本截图、`native/recipe.cc`、`native/patch-art.mjs`、`apps/desktop/src/`、`tests/` 和本机 `artifacts/`；上游代码为 [ART 固定版本](https://github.com/artraweditor/ART/tree/1e0e12c62e4f329d30bb5624d62a23a663ffbe6b) 与 [LibRaw 解码分支固定版本](https://github.com/pdcgomes/redlamp-libraw/tree/3b20539d3faa766a370e93a529a3b87edffbf0f6)。交互参考 [Adobe 蒙版说明](https://helpx.adobe.com/camera-raw/desktop/edit-and-enhance-images/masking-and-local-adjustments/masking.html) 和 [Adobe 快捷键](https://helpx.adobe.com/camera-raw/desktop/get-started/overview-and-setup/default-keyboard-shortcuts.html)，网页后续更新不改变固定验收基线。
+依据：用户本机固定版本截图、`native/src/recipe.cc`、`native/patches/patch-art.mjs`、`apps/desktop/src/`、`tests/` 和本机 `artifacts/`；上游代码为 [ART 固定版本](https://github.com/artraweditor/ART/tree/1e0e12c62e4f329d30bb5624d62a23a663ffbe6b) 与 [LibRaw 解码分支固定版本](https://github.com/pdcgomes/redlamp-libraw/tree/3b20539d3faa766a370e93a529a3b87edffbf0f6)。交互参考 [Adobe 蒙版说明](https://helpx.adobe.com/camera-raw/desktop/edit-and-enhance-images/masking-and-local-adjustments/masking.html) 和 [Adobe 快捷键](https://helpx.adobe.com/camera-raw/desktop/get-started/overview-and-setup/default-keyboard-shortcuts.html)，网页后续更新不改变固定验收基线。
 
 裁切交互参考 [Adobe 裁切说明](https://helpx.adobe.com/camera-raw/desktop/edit-and-enhance-images/crop-rotate-and-geometry/rotate-crop-retouch-images-camera.html) 的比例、横竖切换和控制点行为；页面其他新增能力不纳入已支持声明。
 

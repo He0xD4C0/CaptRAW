@@ -18,6 +18,8 @@ import {InputProfiles} from '@captraw/desktop-core/input-profiles';
 import {Synchronizer} from '@captraw/desktop-core/synchronize';
 import {BatchExporter,validateBatch} from '@captraw/desktop-core/batch-export';
 import {finishOutputMetadata} from '@captraw/desktop-core/output-metadata';
+import {nativeSidecar} from '@captraw/desktop-core/native-codec';
+import {SYNC_GROUPS} from '@captraw/contracts/synchronize';
 import {executableName,isContainedFile,documentRelativePath} from '@captraw/desktop-core/runtime';
 import {captureSourceIdentity,verifySourceIdentity} from '@captraw/desktop-core/source-identity';
 import type { ImageSession, EditDocument, EngineEvent, ExportRequest,SourceIdentity } from '@captraw/contracts';
@@ -105,61 +107,106 @@ function native() {
 function requireSession(id: string) {
   if (openingImage || !session || session.id !== id) throw new Error('当前图片正在切换，请等待载入完成后重试。'); return session;
 }
+type OpenDocument=Awaited<ReturnType<Documents['readForImage']>>;
+// Reopening an in-session photo uses the same opening interpretation; the
+// renderer then restores its immutable current edit, without another import.
+const openingDocuments=new Map<string,{loaded:OpenDocument|undefined;recipeFile:string}>();
 async function openImage(path: string,expectedSource?:SourceIdentity) {
-  autoPerspective.cancel();
-  path=resolve(path);const explicitRecipe=/\.xmp$/i.test(path);
-  if(/\.json$/i.test(path))throw new Error('仅支持 XMP 编辑文件；旧 JSON 格式已移除。');
-  const recipeFile=explicitRecipe?path:join(dirname(path),basename(path,extname(path))+'.xmp');
-  let loaded:Awaited<ReturnType<Documents['readForImage']>>|undefined;
-  if(existsSync(recipeFile)){
-    loaded=await documents.readForImage(recipeFile);
-    if(explicitRecipe){
-      if(loaded.source)path=resolve(dirname(recipeFile),loaded.source.path);
-      else{
-        const stem=basename(recipeFile,extname(recipeFile)).toLowerCase();
-        const candidates=(await readdir(dirname(recipeFile))).filter(name=>basename(name,extname(name)).toLowerCase()===stem&&/\.(nef|cr3|cr2|arw|raf|dng|orf|rw2|pef|tiff?|jpe?g|png)$/i.test(name));
-        if(candidates.length!==1)throw new Error('XMP 旁边未找到唯一同名原片。请将 XMP 与对应原片放在同一目录后重试。');
-        path=join(dirname(recipeFile),candidates[0]);
+  autoPerspective.cancel();path=resolve(path);
+  const explicitNative=/\.captraw$/i.test(path),explicitXMP=/\.xmp$/i.test(path),explicitRecipe=explicitNative||explicitXMP;
+  if(/\.json$/i.test(path))throw new Error('旧 JSON 编辑格式不受支持，请使用 .captraw 文件。');
+  let recipeFile=explicitRecipe?path:nativeSidecar(path),loaded:OpenDocument|undefined;
+  const remembered=!explicitRecipe&&expectedSource?openingDocuments.get(path):undefined;
+  if(remembered){loaded=structuredClone(remembered.loaded);recipeFile=remembered.recipeFile;}
+  else{
+    if(!explicitRecipe&&!existsSync(recipeFile))recipeFile=join(dirname(path),basename(path,extname(path))+'.xmp');
+    if(existsSync(recipeFile)){
+      loaded=await documents.readForImage(recipeFile);
+      if(explicitRecipe){
+        if(loaded.source)path=resolve(dirname(recipeFile),loaded.source.path);
+        else{
+          const stem=basename(recipeFile,extname(recipeFile)).toLowerCase();
+          const candidates=(await readdir(dirname(recipeFile))).filter(name=>basename(name,extname(name)).toLowerCase()===stem&&/\.(nef|cr3|cr2|arw|raf|dng|orf|rw2|pef|tiff?|jpe?g|png)$/i.test(name));
+          if(candidates.length!==1)throw new Error('编辑文件旁未找到唯一对应原片，请打开原片后导入设置。');
+          path=join(dirname(recipeFile),candidates[0]);
+        }
       }
     }
+    if(!loaded&&!explicitRecipe&&/\.(jpe?g|tiff?)$/i.test(path))loaded=await documents.readForImage(path);
   }
   const sourceIdentity=expectedSource===undefined?await captureSourceIdentity(path):expectedSource;
   if(expectedSource!==undefined)await verifySourceIdentity(path,expectedSource);
-  // An external sidecar owns the edit. Otherwise use the rendered container's
-  // complete SDK packet; embedded True/False follows the same opening policy.
-  if(!loaded&&!explicitRecipe&&/\.(jpe?g|tiff?)$/i.test(path))loaded=await documents.readForImage(path);
-  if(loaded?.source&&(sourceIdentity.size!==loaded.source.size||sourceIdentity.sha256!==loaded.source.sha256))throw new Error('XMP 关联的原始图片已改变，停止加载编辑。');
-  if(explicitRecipe&&dirtyPaths.has(path))throw new Error('这张照片还有未保存编辑。请先保存或关闭照片，再打开其他编辑文件。');
-  const activeDocument=!!loaded&&!loaded.metadataOnly&&(loaded.openingKind==='legacy-active'||!!loaded.engineVersion||!!loaded.artProfile||Object.keys(loaded.adjustments).length>0);
+  if(loaded?.source&&(sourceIdentity.size!==loaded.source.size||sourceIdentity.sha256!==loaded.source.sha256))throw new Error('编辑文件关联的原片已改变，停止加载。');
+  if(explicitRecipe&&dirtyPaths.has(path))throw new Error('这张照片还有未保存编辑，请先保存或关闭后再打开其他编辑文件。');
+  const activeDocument=!!loaded&&!loaded.metadataOnly&&(loaded.hasDevelopSettings||!!loaded.engineVersion||!!loaded.artProfile||Object.keys(loaded.adjustments).length>0);
+  const adobeImport=activeDocument&&loaded!.storageKind==='adobe-xmp';
+  const currentDefaults=!activeDocument||adobeImport;
   const candidate=createEngine();openingEngine=candidate;
   try{
-  const image=await candidate.call('open',{path,sessionId:randomUUID(),effectsDefaults:activeDocument?'legacy':'current',whiteBalanceDefaults:activeDocument?'legacy':'current',sourceFramePolicy:sourceFramePolicyForDocument(activeDocument?loaded:undefined),...sourceFrameOpenSnapshot(activeDocument?loaded!.adjustments:{},activeDocument?loaded!.artProfile:'')});
-  let recipe:EditDocument|undefined;
-  if(loaded&&activeDocument){
-    const groups=partialAdjustmentGroups(loaded.adjustments);
-    const inherited=loaded.artProfile&&groups.length?await candidate.call('adjustmentBase',{artProfile:loaded.artProfile,groups}):{};
-    let adjustments=mergeAdjustmentPatch({...image.adjustments,...inherited},loaded.adjustments);
-    if(loaded.adjustments.fineRotation===undefined)delete adjustments.fineRotation;
-    if(loaded.adjustments.perspective===undefined)delete adjustments.perspective;
-    if(!loaded.engineVersion&&(loaded.adjustments.temperature!==undefined||loaded.adjustments.tint!==undefined||loaded.adjustments.incrementalTemperature!==undefined||loaded.adjustments.incrementalTint!==undefined))adjustments={...adjustments,wbMode:'custom',wbMultipliers:null,wbApproximate:false};
-    recipe={...loaded,rating:loaded.rating??image.rating,label:loaded.label??image.label,source:loaded.source||{path,size:sourceIdentity.size,sha256:sourceIdentity.sha256},adjustments};
-    recipe=await restoreRecipeMasks(candidate,recipeFile,recipe,cache);
-    if(recipe.adjustments.colorProfile?.look)recipe.adjustments.colorProfile=await inputProfiles.resolveSettings(recipe.adjustments.colorProfile,image.profileCamera||image.camera,image.inputKind!=='rendered');
-    const checked=await candidate.call('validate',{artProfile:recipe.artProfile,adjustments:recipe.adjustments});
-    if(checked.colorProfile?.mode==='inherited'&&checked.colorProfile.reference!=='(none)')inputProfiles.assertCompatible(await candidate.call('inspectInputProfile',{path:checked.colorProfile.reference.replace(/^file:/,'')}),image.profileCamera||image.camera,image.inputKind!=='rendered');
-    for(const key of ['colorProfile','blackWhite','colorGrading'] as const)if(checked[key])recipe.adjustments[key]=checked[key];
-    recipe.adjustments.masks=checked.masks;recipe.adjustments.fineRotation=checked.fineRotation;recipe.adjustments.perspective=checked.perspective;
-  }else if(loaded){
-    recipe={...loaded,rating:loaded.rating??image.rating,label:loaded.label??image.label,source:loaded.source||{path,size:sourceIdentity.size,sha256:sourceIdentity.sha256},artProfile:image.artProfile||'',adjustments:structuredClone(image.adjustments)};
-  }
-  if(quitting)throw new Error('应用正在退出。');
-  await verifySourceIdentity(path,sourceIdentity);
-  stopComparison();const previous=engine;engine=candidate;previous?.terminate();
-  session={...image,sourceIdentity,rating:recipe?.rating??image.rating,label:recipe?.label??image.label,initialAdjustments:image.adjustments,recipe,xmpWarnings:loaded?.warnings};
-  if(recipe)session!.adjustments=recipe.adjustments;
-  return session;
+    const image=await candidate.call('open',{path,sessionId:randomUUID(),effectsDefaults:currentDefaults?'current':'legacy',whiteBalanceDefaults:currentDefaults?'current':'legacy',sourceFramePolicy:sourceFramePolicyForDocument(activeDocument?loaded:undefined),...sourceFrameOpenSnapshot(activeDocument?loaded!.adjustments:{},activeDocument?loaded!.artProfile:'')});
+    let recipe:EditDocument|undefined,importedFromAdobe=false;const skippedImportGroups=new Set<string>();
+    if(loaded&&activeDocument){
+      const groups=partialAdjustmentGroups(loaded.adjustments);
+      const inherited=loaded.artProfile&&groups.length?await candidate.call('adjustmentBase',{artProfile:loaded.artProfile,groups}):{};
+      let adjustments=mergeAdjustmentPatch({...image.adjustments,...inherited},loaded.adjustments);
+      if(loaded.adjustments.fineRotation===undefined)delete adjustments.fineRotation;
+      if(loaded.adjustments.perspective===undefined)delete adjustments.perspective;
+      if(!loaded.engineVersion&&(loaded.adjustments.temperature!==undefined||loaded.adjustments.tint!==undefined||loaded.adjustments.incrementalTemperature!==undefined||loaded.adjustments.incrementalTint!==undefined))adjustments={...adjustments,wbMode:'custom',wbMultipliers:null,wbApproximate:false};
+      recipe={...loaded,rating:loaded.rating??image.rating,label:loaded.label??image.label,source:loaded.source||{path,size:sourceIdentity.size,sha256:sourceIdentity.sha256},adjustments};
+      if(adobeImport){
+        // Prepare the two independent asset groups separately. A missing Look
+        // must not discard a usable mask, or a missing mask the input profile.
+        recipe.artProfile='';
+        for(const part of ['profile','masks'] as const){
+          const partial={...recipe,adjustments:{...recipe.adjustments,colorProfile:part==='profile'?recipe.adjustments.colorProfile:image.adjustments.colorProfile,masks:part==='masks'?recipe.adjustments.masks:[]},maskAssets:part==='masks'?recipe.maskAssets:undefined,inputProfileAsset:part==='profile'?recipe.inputProfileAsset:undefined};
+          try{
+            const restored=await restoreRecipeMasks(candidate,recipeFile,partial,cache);
+            if(part==='profile')recipe.adjustments.colorProfile=restored.adjustments.colorProfile;
+            else recipe.adjustments.masks=restored.adjustments.masks;
+          }catch(error){
+            loaded.warnings.push(`${part==='profile'?'输入配置文件／Look':'蒙版'}未应用：`+(error instanceof Error?error.message:String(error)));
+            if(part==='profile'){skippedImportGroups.add('profile');recipe.adjustments.colorProfile=image.adjustments.colorProfile;delete recipe.inputProfileAsset;}
+            else{skippedImportGroups.add('masks');recipe.adjustments.masks=[];delete recipe.maskAssets;}
+          }
+        }
+      }else recipe=await restoreRecipeMasks(candidate,recipeFile,recipe,cache);
+      if(recipe.adjustments.colorProfile?.look){
+        try{recipe.adjustments.colorProfile=await inputProfiles.resolveSettings(recipe.adjustments.colorProfile,image.profileCamera||image.camera,image.inputKind!=='rendered');}
+        catch(error){if(!adobeImport)throw error;loaded.warnings.push('Look未应用：'+(error instanceof Error?error.message:String(error)));recipe.adjustments.colorProfile={...recipe.adjustments.colorProfile,look:null};}
+      }
+
+      let checked;
+      try{checked=await candidate.call('validate',{artProfile:recipe.artProfile,adjustments:recipe.adjustments});}
+      catch(error){
+        if(!adobeImport||!recipe.adjustments.colorProfile?.look)throw error;
+        loaded.warnings.push('Look未应用：'+(error instanceof Error?error.message:String(error)));
+        recipe.adjustments.colorProfile={...recipe.adjustments.colorProfile,look:null};
+        checked=await candidate.call('validate',{artProfile:recipe.artProfile,adjustments:recipe.adjustments});
+      }
+      if(checked.colorProfile?.mode==='inherited'&&checked.colorProfile.reference!=='(none)')inputProfiles.assertCompatible(await candidate.call('inspectInputProfile',{path:checked.colorProfile.reference.replace(/^file:/,'')}),image.profileCamera||image.camera,image.inputKind!=='rendered');
+      for(const key of ['colorProfile','blackWhite','colorGrading'] as const)if(checked[key])recipe.adjustments[key]=checked[key];
+      recipe.adjustments.masks=checked.masks;recipe.adjustments.fineRotation=checked.fineRotation;recipe.adjustments.perspective=checked.perspective;
+      if(adobeImport&&!remembered){
+        const fields=SYNC_GROUPS.filter(group=>!skippedImportGroups.has(group.id)&&group.fields.some(key=>Object.hasOwn(loaded!.adjustments,key))).map(group=>group.label).join('、')||'没有可应用的显影参数';
+        const {response}=await dialog.showMessageBox(win,{type:'question',message:'导入 Adobe 设置？',detail:`${basename(path)}\nCaptRAW使用自己的显影算法，结果可能与ACR不同。\n可转换的参数项：${fields}\n${loaded.warnings.join('\n')}\n保存将使用 .captraw，源XMP不修改。`,buttons:['使用默认显影','导入 Adobe 设置'],defaultId:0,cancelId:0,noLink:true});
+        if(response===1)importedFromAdobe=true;
+        else{
+          loaded={...loaded,adjustments:{},artProfile:'',metadataOnly:true,hasDevelopSettings:false,warnings:[]};
+          recipe={...recipe,artProfile:image.artProfile,adjustments:structuredClone(image.adjustments),maskAssets:undefined,inputProfileAsset:undefined};
+        }
+      }else importedFromAdobe=adobeImport;
+    }else if(loaded)recipe={...loaded,rating:loaded.rating??image.rating,label:loaded.label??image.label,source:loaded.source||{path,size:sourceIdentity.size,sha256:sourceIdentity.sha256},artProfile:image.artProfile||'',adjustments:structuredClone(image.adjustments)};
+    if(quitting)throw new Error('应用正在退出。');
+    await verifySourceIdentity(path,sourceIdentity);
+    if(loaded)loaded.warnings=[...new Set(loaded.warnings)];
+    openingDocuments.set(path,{loaded:structuredClone(loaded),recipeFile});
+    stopComparison();const previous=engine;engine=candidate;previous?.terminate();
+    session={...image,sourceIdentity,rating:recipe?.rating??image.rating,label:recipe?.label??image.label,initialAdjustments:image.adjustments,initialArtProfile:image.artProfile,recipe,xmpWarnings:loaded?.warnings,importedFromAdobe,needsNativeSave:importedFromAdobe||loaded?.storageKind==='legacy-xmp'};
+    if(recipe)session.adjustments=recipe.adjustments;
+    return session;
   }catch(error){candidate.terminate();throw error;}finally{if(openingEngine===candidate)openingEngine=undefined;}
 }
+
 function registerIPC() {
   ipcMain.handle('comparison:update',async(_,p)=>{
     const current=requireSession(p.sessionId);stopComparison();if(!p.settings)return;
@@ -221,8 +268,8 @@ function registerIPC() {
   ipcMain.handle('presets:packs',()=>presets.listPacks());
   ipcMain.handle('presets:preview',(_,request)=>presetPreview.preview(request));
   ipcMain.handle('presets:preview-cancel',()=>presetPreview.cancel());
-  ipcMain.handle('presets:import',async()=>{const r=await dialog.showOpenDialog(win,{title:'导入 XMP 预设',properties:['openFile'],filters:[{name:'XMP 预设',extensions:['xmp']}]});return r.canceled||!r.filePaths.length?null:presets.importFile(r.filePaths[0]);});
-  ipcMain.handle('presets:export',async(_,id)=>{const r=await dialog.showSaveDialog(win,{title:'导出 XMP 预设',message:'移动预设时请同时保留配套 .assets 文件夹。',defaultPath:'预设.xmp',filters:[{name:'XMP 预设',extensions:['xmp']}]});if(r.canceled||!r.filePath)return null;await presets.exportFile(id,r.filePath);return r.filePath;});
+  ipcMain.handle('presets:import',async()=>{const r=await dialog.showOpenDialog(win,{title:'导入预设',properties:['openFile'],filters:[{name:'CaptRAW / Adobe 预设',extensions:['captrawpreset','xmp']}]});return r.canceled||!r.filePaths.length?null:presets.importFile(r.filePaths[0]);});
+  ipcMain.handle('presets:export',async(_,id)=>{const r=await dialog.showSaveDialog(win,{title:'导出 CaptRAW 预设',message:'移动预设时请同时保留配套 .assets 文件夹。',defaultPath:'预设.captrawpreset',filters:[{name:'CaptRAW 预设',extensions:['captrawpreset']}]});if(r.canceled||!r.filePath)return null;await presets.exportFile(id,r.filePath);return r.filePath;});
   ipcMain.handle('object:begin',(_,p)=>objects.begin(requireSession(p.sessionId),p.adjustments,p.artProfile));
   ipcMain.handle('object:predict',(_,p)=>objects.predict(p.id,p.prompts,p.box));
   ipcMain.handle('object:parts',(_,id)=>objects.predictPersonParts(id));
@@ -255,16 +302,16 @@ function registerIPC() {
   ipcMain.handle('curve:parametric',async(_,settings)=>native().call('parametricCurve',settings));
   ipcMain.handle('documents:dirty',(_,paths:string[])=>{dirtyPaths.clear();for(const path of paths)dirtyPaths.add(resolve(path));dirtyCount=dirtyPaths.size;});
   ipcMain.handle('document:confirm-close',async(_,name:string)=>{
-    const {response}=await dialog.showMessageBox(win,{type:'question',message:`保存“${name}”的更改？`,detail:'保存会写入独立的编辑配方。放弃更改不会修改原片。',buttons:['保存','放弃更改','取消'],defaultId:0,cancelId:2,noLink:true});
+    const {response}=await dialog.showMessageBox(win,{type:'question',message:`保存“${name}”的更改？`,detail:'保存会写入 .captraw 编辑文件，不会改写原片或源XMP。放弃仅撤销未保存修改。',buttons:['保存','放弃更改','取消'],defaultId:0,cancelId:2,noLink:true});
     return ['save','discard','cancel'][response];
   });
-  ipcMain.handle('files:choose', async () => (await dialog.showOpenDialog(win, { title: '打开 RAW 或编辑配方', properties: ['openFile', 'multiSelections'], filters: [{ name: '照片与配方', extensions: ['nef','cr3','cr2','arw','raf','dng','orf','rw2','pef','tif','tiff','jpg','jpeg','png','xmp'] }] })).filePaths);
+  ipcMain.handle('files:choose', async () => (await dialog.showOpenDialog(win, { title: '打开照片或编辑文件', properties: ['openFile', 'multiSelections'], filters: [{ name: '照片与编辑文件', extensions: ['nef','cr3','cr2','arw','raf','dng','orf','rw2','pef','tif','tiff','jpg','jpeg','png','captraw','xmp'] }] })).filePaths);
   ipcMain.handle('image:open', async (_, path: string,expectedSource?:SourceIdentity) => {
     if(openingImage)throw new Error('正在载入照片，请稍候。');
     openingImage=true;
-    try{brushSnapshot=undefined;await brushes.invalidate();await objects.cancel();return await openImage(path,expectedSource);}finally{openingImage=false;}
+    try{brushSnapshot=undefined;await curveSampling?.cancel();await brushes.invalidate();await objects.cancel();return await openImage(path,expectedSource);}finally{openingImage=false;}
   });
-  ipcMain.handle('image:update', async (_, p) => { requireSession(p.sessionId);brushSnapshot=undefined;brushes.adopt(p.adjustments);await brushes.invalidate();objects.invalidate(p.sessionId,p.adjustments,p.artProfile||'');const result=await native().call('update', p);brushSnapshot={sessionId:p.sessionId,revision:p.revision,adjustments:structuredClone(p.adjustments),artProfile:result.artProfile};return result; });
+  ipcMain.handle('image:update', async (_, p) => { requireSession(p.sessionId);brushSnapshot=undefined;await curveSampling?.cancel();brushes.adopt(p.adjustments);await brushes.invalidate();objects.invalidate(p.sessionId,p.adjustments,p.artProfile||'');const result=await native().call('update', p);brushSnapshot={sessionId:p.sessionId,revision:p.revision,adjustments:structuredClone(p.adjustments),artProfile:result.artProfile};return result; });
   ipcMain.handle('image:viewport', async (_, p) => { requireSession(p.sessionId); await native().call('viewport', p); });
   ipcMain.handle('image:coordinates',async(_,p)=>{requireSession(p.sessionId);return native().call('coordinates',p);});
   ipcMain.handle('image:repair-source',async(_,request)=>{requireSession(request.sessionId);return native().call('repairSource',request);});
@@ -292,7 +339,7 @@ function registerIPC() {
   ipcMain.handle('image:white-balance',async(_,p)=>{requireSession(p.sessionId);return native().call('whiteBalance',p.request);});
   ipcMain.handle('image:close', async () => {
     autoPerspective.cancel();stopComparison();await objects.cancel();
-    brushSnapshot=undefined;await brushes.invalidate();const closing=engine;engine=undefined;session=undefined;
+    brushSnapshot=undefined;await curveSampling?.cancel();await brushes.invalidate();const closing=engine;engine=undefined;session=undefined;
     // Discarding a session must also work after its preview process has exited.
     if(closing?.alive)await closing.call('close').catch(()=>{});
     closing?.terminate();
@@ -301,7 +348,7 @@ function registerIPC() {
     if(savePending)throw new Error('已有批量保存任务正在运行。');
     validateBatchSave(request);savePending=true;
     try{
-      const result=await dialog.showOpenDialog(win,{title:`保存 ${request.documents.length} 张照片的 XMP：选择文件夹`,message:'每张照片生成独立 XMP，包含蒙版和配置文件资产。同名文件保留，新文件自动编号。',properties:['openDirectory','createDirectory']});
+      const result=await dialog.showOpenDialog(win,{title:`保存 ${request.documents.length} 张照片的编辑：选择文件夹`,message:'每张照片生成独立 .captraw，包含蒙版和配置文件资产。同名文件保留，新文件自动编号。',properties:['openDirectory','createDirectory']});
       if(result.canceled||!result.filePaths.length)return null;
       return await batchSaver.run(request,result.filePaths[0]);
     }finally{savePending=false;}
@@ -317,7 +364,7 @@ function registerIPC() {
     savePending=true;
     try{
       const source=request.documents[0].path;
-      const result=await dialog.showSaveDialog(win,{title:'将失败的编辑另存为 XMP',defaultPath:join(dirname(source),basename(source,extname(source))+'.xmp'),filters:[{name:'XMP 编辑文件',extensions:['xmp']}]});
+      const result=await dialog.showSaveDialog(win,{title:'将失败的编辑另存为 CaptRAW',defaultPath:nativeSidecar(source),filters:[{name:'CaptRAW 编辑文件',extensions:['captraw']}]});
       if(result.canceled||!result.filePath)return null;
       return await sessionSaver.run(request,result.filePath);
     }finally{savePending=false;}
@@ -330,24 +377,24 @@ function registerIPC() {
   });
   ipcMain.handle('session:forget',(_,id:string)=>{
     if(typeof id!=='string'||!id.trim())throw new Error('保存会话标识无效。');
-    sessionSaver.forgetSession(id);
+    sessionSaver.forgetSession(id);openingDocuments.clear();
   });
   ipcMain.handle('recipes:cancel',()=>{batchSaver.cancel();sessionSaver.cancel();});
   ipcMain.handle('recipe:save', async (_, { session: supplied, artProfile }: { session: ImageSession; artProfile: string }) => {
     const current = requireSession(supplied.id);
     await verifySourceIdentity(current.path,current.sourceIdentity);
-    const result = await dialog.showSaveDialog(win, { title: '保存无损编辑配方', message: '含外部蒙版或输入配置文件时会同时保存资产文件夹；移动配方时请保留配套文件夹。', defaultPath: join(dirname(current.path),basename(current.path,extname(current.path))+'.xmp'), filters: [{ name: 'XMP 编辑文件', extensions: ['xmp'] }] });
+    const result = await dialog.showSaveDialog(win, { title: '另存 CaptRAW 编辑', message: '含外部蒙版或输入配置文件时会同时保存资产文件夹；移动编辑文件时请保留配套文件夹。', defaultPath: nativeSidecar(current.path), filters: [{ name: 'CaptRAW 编辑文件', extensions: ['captraw'] }] });
     if (result.canceled || !result.filePath) return '';
-    if (resolve(result.filePath) === current.path || !/\.xmp$/i.test(result.filePath)) throw new Error('请使用 .xmp 保存编辑。');
+    if (resolve(result.filePath) === current.path || !/\.captraw$/i.test(result.filePath)) throw new Error('请使用 .captraw 保存编辑。');
     await native().call('validate',{artProfile,adjustments:supplied.adjustments});
     const snapshotPacket=supplied.recipe?.xmpPacket??current.recipe?.xmpPacket;
     const target=await saveTargetState(result.filePath);
-    const recipe: EditDocument = { xmpPacket: target.packet??snapshotPacket, engineVersion: ENGINE_VERSION, source: { path: documentRelativePath(dirname(result.filePath),current.path), size: current.sourceIdentity.size, sha256: current.sourceIdentity.sha256 }, artProfile, adjustments: supplied.adjustments,rating:supplied.rating,label:supplied.label,baselineVersion:4 };
+    const recipe: EditDocument = { xmpPacket:snapshotPacket,nativePacket:target.nativePacket??supplied.recipe?.nativePacket??current.recipe?.nativePacket, engineVersion: ENGINE_VERSION, source: { path: documentRelativePath(dirname(result.filePath),current.path), size: current.sourceIdentity.size, sha256: current.sourceIdentity.sha256 }, artProfile, adjustments: supplied.adjustments,rating:supplied.rating,label:supplied.label,baselineVersion:4 };
     await saveRecipeWithMasks(native(),result.filePath,recipe,value=>documents.serialize(value,[snapshotPacket,current.recipe?.xmpPacket]),true,async()=>{
       await verifySourceIdentity(current.path,current.sourceIdentity);
-      if((await saveTargetState(result.filePath!)).stamp!==target.stamp)throw new Error('XMP 在保存期间被外部修改，未覆盖原数据。请重试并重新确认目标。');
+      if((await saveTargetState(result.filePath!)).stamp!==target.stamp)throw new Error('编辑文件在保存期间被外部修改，未覆盖原数据。请重试并重新确认目标。');
     });
-    current.recipe={...recipe,xmpPacket:(await documents.xmp.read(result.filePath)).packet};
+    const saved=await documents.read(result.filePath);current.recipe={...recipe,...saved,source:saved.source??recipe.source,adjustments:mergeAdjustmentPatch(recipe.adjustments,saved.adjustments)};
     return result.filePath;
   });
   ipcMain.handle('image:export', async (_, input:ExportRequest) => {
@@ -415,7 +462,7 @@ app.whenReady().then(async () => {
   documents=new Documents(xmp);
   batchSaver=new BatchDocumentSaver(binary,resources,cache,documents,message=>send({event:'save-progress',message}));
   sessionSaver=new SessionDocumentSaver(binary,resources,cache,documents,async targets=>{
-    const {response}=await dialog.showMessageBox(win,{type:'warning',message:'确认保存这些 XMP 旁车？',detail:targets.map(target=>`${target.output} · ${target.exists?'已存在，将替换':'新建'}${target.changed?' · 目标已变化，需重新确认':''}`).join('\n')+'\n原片不会修改；现有 XMP 的未知字段将保留。',buttons:['取消','保存'],defaultId:0,cancelId:0,noLink:true});
+    const {response}=await dialog.showMessageBox(win,{type:'warning',message:'确认保存这些 CaptRAW 编辑文件？',detail:targets.map(target=>`${target.output} · ${target.exists?'已存在，将替换':'新建'}${target.changed?' · 目标已变化，需重新确认':''}`).join('\n')+'\n原片和源XMP不会修改；导入来源资料将随编辑文件保留。',buttons:['取消','保存'],defaultId:0,cancelId:0,noLink:true});
     return response===1;
   },message=>send({event:'save-progress',message}));
   inputProfiles=new InputProfiles(join(app.getPath('userData'),'input-profiles'),{call:(method,params)=>native().call(method,params)},xmp);
@@ -451,7 +498,7 @@ app.whenReady().then(async () => {
     command(action);
   };
   const edit=(action:'copy-all'|'copy-selected'|'paste')=>{void editCommand(action).catch(error=>send({event:'error',message:String(error)}));};
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'CaptRAW', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'quit' }] },{label:'文件',submenu:[{label:'打开…',accelerator:'CommandOrControl+O',click:()=>command('open')},{label:'导出设置…',accelerator:'CommandOrControl+S',click:()=>command('export')},{label:'保存 XMP 编辑…',accelerator:'CommandOrControl+Shift+S',click:()=>command('save')},{label:'关闭文件',accelerator:'CommandOrControl+W',click:()=>command('close')}]}, { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, {label:'复制',accelerator:'CommandOrControl+C',click:()=>edit('copy-all')},{label:'复制所选设置…',accelerator:'CommandOrControl+Alt+C',click:()=>edit('copy-selected')},{label:'粘贴',accelerator:'CommandOrControl+V',click:()=>edit('paste')}, { role: 'selectAll' }] }, { label: '窗口', submenu: [{ role: 'minimize' }, { role: 'zoom' }] }]));
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: 'CaptRAW', submenu: [{ role: 'about' }, { type: 'separator' }, { role: 'quit' }] },{label:'文件',submenu:[{label:'打开…',accelerator:'CommandOrControl+O',click:()=>command('open')},{label:'导出设置…',accelerator:'CommandOrControl+S',click:()=>command('export')},{label:'保存 CaptRAW 编辑…',accelerator:'CommandOrControl+Shift+S',click:()=>command('save')},{label:'关闭文件',accelerator:'CommandOrControl+W',click:()=>command('close')}]}, { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, {label:'复制',accelerator:'CommandOrControl+C',click:()=>edit('copy-all')},{label:'复制所选设置…',accelerator:'CommandOrControl+Alt+C',click:()=>edit('copy-selected')},{label:'粘贴',accelerator:'CommandOrControl+V',click:()=>edit('paste')}, { role: 'selectAll' }] }, { label: '窗口', submenu: [{ role: 'minimize' }, { role: 'zoom' }] }]));
   if (process.env.CAPTRAW_DEV_URL) await win.loadURL(process.env.CAPTRAW_DEV_URL); else await win.loadURL('captraw://app/index.html');
 });
 app.on('window-all-closed', () => app.quit());

@@ -1,0 +1,19 @@
+{
+  "release": "5.6.2",
+  "commit": "20891f6c6fa7be995e5bf9dff9d1ee5062051773",
+  "license": "GPL-3.0-or-later per module notices; original license and all source notices accompany generated sources.",
+  "sha256": {
+    "src/iop/colorequal.c": "39d7072b2662a51522d6d3a62e6c98a3f6a4699c5b691db4c840bd0b51329882",
+    "src/common/math.h": "74354b19316ac70372d5216eda7c691401859b14d33e86c446ab4f5583f46f42",
+    "src/common/dttypes.h": "1ba0d0d1b8dbff5ed3acde385f27b0b1547ff7a8c8f4952a8fbd55557c27d8cd",
+    "src/common/gaussian.h": "0ae94c657702866d9d530758531523f67c07a641884cf60179113967ce16c966",
+    "src/common/gaussian.c": "5aced4fc73f32b50a5e579701bff29fae44794b36d26277dcadc444639368a34",
+    "src/common/fast_guided_filter.h": "d82bd29e78ae6ca345ebb4c5e6e3277d09edf5a0b9167f043e1756341ee7a372",
+    "src/common/colorspaces_inline_conversions.h": "3b2abd590ac854da3f9735b172e3990e2bbc251bbfa8bcd3780b6fcea84e29dd",
+    "src/common/colorspaces.h": "b9565605fe4013c2627ad7c23c837346776a7f6008c31f7ab543202213c10606",
+    "src/common/chromatic_adaptation.h": "654127f3414671de49f7db1b14d8851ed1c5904c0a7af3262d7fd8ae7a5d10e5",
+    "src/common/darktable_ucs_22_helpers.h": "5d5974aaf339f5fcebf3031dcbfd8ab7c76de08be62b09ac79b80cf49cc37cc9",
+    "src/iop/choleski.h": "0619e046a1f8c9f156a3b73ec4a529df9462b3df5bf499fa2a5a9b70671990f4",
+    "LICENSE": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  }
+}

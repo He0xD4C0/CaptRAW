@@ -1,7 +1,7 @@
 import type {Adjustments,AdjustmentPatch,EditDocument,ImageSession,SourceFrame,SourceIdentity} from './index.js';
 import {ENGINE_VERSION,READABLE_ENGINE_VERSIONS,mergeAdjustmentPatch,hasRelativeWhiteBalance} from './index.js';
 import {SYNC_GROUPS,type SyncGroup} from './synchronize.js';
-export interface PresetDocument {isoAnchors?:ISOAnchor[];supportsAmount?:boolean;supportsAmount2?:boolean;xmpPacket?:string;warnings?:string[];engineVersion:string;name:string;group:string;groups:SyncGroup[];artProfile:string;adjustments:AdjustmentPatch;maskAssets?:EditDocument['maskAssets'];inputProfileAsset?:EditDocument['inputProfileAsset'];approximateWB?:boolean}
+export interface PresetDocument {isoAnchors?:ISOAnchor[];supportsAmount?:boolean;supportsAmount2?:boolean;xmpPacket?:string;nativePacket?:string;warnings?:string[];unsupportedSettings?:string[];engineVersion:string;name:string;group:string;groups:SyncGroup[];artProfile:string;adjustments:AdjustmentPatch;maskAssets?:EditDocument['maskAssets'];inputProfileAsset?:EditDocument['inputProfileAsset'];approximateWB?:boolean}
 export interface PresetSummary {origin?:'user'|'builtin';favorite?:boolean;isoAdaptive?:boolean;supportsAmount?:boolean;packageId?:string;packageVersion?:string;id:string;name:string;group:string;groups:SyncGroup[];approximateWB:boolean;warnings?:string[]}
 export interface PresetInput {name:string;group:string;groups:SyncGroup[];adjustments:Adjustments;artProfile?:string;sourceFrame?:SourceFrame;sourcePath?:string;sourceIdentity?:SourceIdentity}
 export function presetName(value:unknown){if(typeof value!=='string'||!value.trim()||value.trim().length>100||/[\x00-\x1f]/.test(value))throw new Error('名称须为 1–100 个字符。');return value.trim();}
@@ -38,7 +38,7 @@ export interface PresetPackManifest {id:string;version:string;engineVersions:str
 // Amount is deliberately limited to neutral, zero-centred controls. Absolute WB,
 // curves, geometry, masks and detail radii are held fixed, with explicit warnings.
 const amountFields=new Set(['exposure','contrast','highlights','shadows','whites','blacks','saturation','vibrance','texture','clarity','dehaze','glow','vignette','lensManualDistortion','lensVignette']);
-const isoFields=new Set([...amountFields,'temperature','tint','sharpening','sharpenRadius','sharpenDetail','sharpenEdgeMask','luminanceNoise','luminanceNoiseDetail','luminanceNoiseContrast','colorNoise','colorNoiseDetail','colorNoiseSmoothness','grain','postCropVignetteFeather','postCropVignetteRoundness']);
+const isoFields=new Set([...amountFields,'temperature','tint','sharpening','sharpenRadius','sharpenDetail','sharpenEdgeMask','luminanceNoise','luminanceNoiseDetail','luminanceNoiseContrast','colorNoise','colorNoiseDetail','colorNoiseSmoothness','grain','grainSize','grainRoughness','postCropVignetteFeather','postCropVignetteRoundness','postCropVignetteMidpoint','postCropVignetteHighlights','curveRefineSaturation','glowRange','glowSpread','glowWarmth']);
 const ordered=(value:unknown):unknown=>Array.isArray(value)?value.map(ordered):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,v])=>[key,ordered(v)])):value;
 const same=(a:unknown,b:unknown)=>JSON.stringify(ordered(a))===JSON.stringify(ordered(b));
 export function isoAnchors(documents:ISOPresetInput['documents'],groups:SyncGroup[]):ISOAnchor[]{
