@@ -11,12 +11,12 @@ for(const path of files)await copyFile(resolve('build/samples/synthetic.dng'),pa
 let app,page,passed=false;
 const pass=s=>{checks.push(s);console.log('PASS',s);},input=name=>page.getByRole('spinbutton',{name,exact:true});
 const photo=i=>page.locator('.film-item').filter({hasText:basename(files[i])});
-async function idle(){await expect(page.getByRole('button',{name:'打开',exact:true})).toBeEnabled();await expect(page.locator('.workbench')).not.toHaveAttribute('inert','');await page.waitForTimeout(180);await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas')?.dataset.frame===window.__frames.filter(f=>f.kind==='fit').at(-1)?.url);}
+async function idle(){await expect(page.getByRole('button',{name:'打开',exact:true})).toBeEnabled();await expect(page.locator('.workbench')).not.toHaveAttribute('inert','');await page.waitForTimeout(180);await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas[aria-label="显影预览"]')?.dataset.frame===window.__frames.filter(f=>f.kind==='fit').at(-1)?.url);}
 async function select(i){await photo(i).locator('.film-open').click();await expect(photo(i).locator('.film-open')).toHaveAttribute('aria-current','true');await idle();}
 async function value(name,v){await input(name).fill(String(v));await input(name).press('Tab');await idle();}
 async function save(){await page.getByRole('button',{name:'保存所选…',exact:true}).click();const d=page.getByRole('dialog',{name:'保存照片编辑',exact:true});await d.getByRole('button',{name:'返回编辑',exact:true}).click();await idle();}
-const sidecar=i=>files[i]+'.captraw',pixels=async()=>createHash('sha256').update(await page.locator('canvas').evaluate(c=>c.toDataURL())).digest('hex');
-async function canvasSnapshot(name){const value=await page.locator('canvas').evaluate(c=>({url:c.toDataURL(),width:c.width,height:c.height,data:{...c.dataset}}));await writeFile(join(scratch,name+'.png'),Buffer.from(value.url.split(',')[1],'base64'));return {...value,url:undefined,hash:createHash('sha256').update(value.url).digest('hex')};}
+const sidecar=i=>files[i]+'.captraw',pixels=async()=>createHash('sha256').update(await page.locator('canvas[aria-label="显影预览"]').evaluate(c=>c.toDataURL())).digest('hex');
+async function canvasSnapshot(name){const value=await page.locator('canvas[aria-label="显影预览"]').evaluate(c=>({url:c.toDataURL(),width:c.width,height:c.height,data:{...c.dataset}}));await writeFile(join(scratch,name+'.png'),Buffer.from(value.url.split(',')[1],'base64'));return {...value,url:undefined,hash:createHash('sha256').update(value.url).digest('hex')};}
 try{
  app=await electron.launch();page=await app.firstWindow();page.setDefaultTimeout(45000);page.on('pageerror',e=>errors.push(String(e)));
  await app.evaluate(({dialog},paths)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:paths});dialog.showMessageBox=async()=>({response:1});},files);

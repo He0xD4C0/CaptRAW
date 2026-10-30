@@ -18,13 +18,14 @@ import {DEFAULT_EXPORT_OPTIONS,type ExportOptions} from '@captraw/contracts/expo
 import {ExportMenu} from '../components/ExportMenu';
 import {SynchronizeDialog} from '../components/SynchronizeDialog';
 import {BatchSaveDialog} from '../components/BatchSaveDialog';
+import {SourceColorDialog} from '../components/SourceColorDialog';
 import {Histogram,setClipping,useClipping} from '../components/Histogram';
 import {rotateCrop,type CanvasEditTransaction} from '../lib/geometry';
-import {OUTPUT_COLOR_SPACES,type EngineEvent,type MaskGeometry,type MaskType,type Point,type SpotSettings,type RepairSpot,type OutputColorSpace,type CurveSampleChannel } from '@captraw/contracts';
+import {OUTPUT_COLOR_SPACES,type EngineEvent,type InputProfileOption,type MaskGeometry,type MaskType,type Point,type SpotSettings,type RepairSpot,type OutputColorSpace,type CurveSampleChannel } from '@captraw/contracts';
 const maskTool=(type?:MaskType):Tool=>!type||type==='raster'?'hand':type;
 export function App() {
   const w=useWorkbench();
-  const comparison=useComparison(w.active,!!w.frame?.linear);const dual=comparison.layout!=='off',comparing=comparison.showBefore,setComparing=comparison.setShowBefore;
+  const comparison=useComparison(w.active,w.frame?.linear?.colorSpace);const dual=comparison.layout!=='off',comparing=comparison.showBefore,setComparing=comparison.setShowBefore;
   const [selectedPaths,setSelectedPaths]=useState<string[]>([]);
   useEffect(()=>setSelectedPaths(w.active?[w.active.image.path]:[]),[w.active?.image.path]);
   const [ratingFilter,setRatingFilter]=useState<RatingFilter>('all');
@@ -78,12 +79,32 @@ export function App() {
   const autoPerspective=useAutoPerspective({document:w.active,frame:w.frame,enabled:tab==='adjust'&&tool==='hand'&&!comparing&&!dual,busy:w.busy,begin:w.beginCanvasEdit,error:w.setError});
   const guidedPerspective=useGuidedPerspective({document:w.active,frame:w.frame,enabled:tab==='adjust'&&tool==='perspective'&&!comparing&&!dual,busy:w.busy,begin:w.beginCanvasEdit,error:w.setError,done:()=>setTool('hand')});
   const [brushSize,setBrushSize]=useState(.25),[overlay,setOverlay]=useState(true),[exportMenu,setExportMenu]=useState(false);
+  const [dismissedSourceColor,setDismissedSourceColor]=useState<string[]>([]);
   const [brush,setBrush]=useState({flow:100,density:100,autoMask:false});
   const [sampleSize,setSampleSize]=useState(11);const [luminanceMap,setLuminanceMap]=useState(false);
   const [gridView,setGridView]=useState(false);
   const clipping=useClipping();
   const [outputOptions,setOutputOptions]=useState<ExportOptions>(()=>structuredClone(DEFAULT_EXPORT_OPTIONS));
   const [outputColorSpace,setOutputColorSpace]=useState<OutputColorSpace>('srgb');
+  const sourceColorOpen=!!w.active?.image.inputColorNeedsConfirmation&&!dismissedSourceColor.includes(w.active.image.path);
+  function dismissSourceColor(){if(w.active)setDismissedSourceColor(paths=>paths.includes(w.active!.image.path)?paths:[...paths,w.active!.image.path]);}
+  function applySourceColor(profile:InputProfileOption){
+    if(!w.active||!profile.reference)return;
+    const colorProfile={mode:'inherited' as const,reference:profile.reference,toneCurve:false,lookTable:false,hueSatMap:true,baselineExposure:true,illuminant:0 as const,look:null};
+    if(w.active.adjustments.wbMultipliers)void w.whiteBalance({mode:'profile',colorProfile});
+    else w.edit(adjustments=>({...adjustments,colorProfile}));
+    dismissSourceColor();
+  }
+  function closeExportMenu(){setExportMenu(false);void w.previewOutput(null).catch(()=>{});}
+  useEffect(()=>{
+    if(!sourceColorOpen)return;
+    const dismiss=(event:PointerEvent)=>{if(!(event.target as Element|null)?.closest('.source-color-dialog'))dismissSourceColor();};
+    document.addEventListener('pointerdown',dismiss,true);return()=>document.removeEventListener('pointerdown',dismiss,true);
+  },[sourceColorOpen,w.active?.image.path]);
+  useEffect(()=>{
+    if(!exportMenu||!w.active||w.busy||comparing)return;
+    void w.previewOutput(outputColorSpace).catch(()=>{});
+  },[exportMenu,outputColorSpace,w.active?.image.id,w.active?.adjustments,w.active?.profileId,w.busy,comparing]);
   const viewCommandSequence=useRef(0),[viewCommand,setViewCommand]=useState<{action:'fit'|'actual'|'zoom-in'|'zoom-out';sequence:number}>();
   const [dustEnabled,setDustEnabled]=useState(false),[dustThreshold,setDustThreshold]=useState(50);
   const [spotId,setSpotId]=useState(''),[spotSource,setSpotSource]=useState<Point>(),[selectingSource,setSelectingSource]=useState(false),[spotGuides,setSpotGuides]=useState(true);
@@ -94,7 +115,9 @@ export function App() {
   const visibleCrop=rotateCrop(visibleAdjustments?.crop||null,visibleAdjustments?.rotation||0);
   const selectedSpot=a?.spots?.find(s=>s.id===spotId),spotSettings=selectedSpot||spotDefaults;
   useEffect(()=>{if(selectedSpot)setSpotSource(selectedSpot.source);},[selectedSpot?.source.x,selectedSpot?.source.y]);
-  const profileName=w.active?.image.inputProfiles?.find(p=>p.id===(a?.colorProfile?.mode||'auto'))?.name||(a?.colorProfile?.mode==='inherited'?'配方中的配置文件':'ART 默认显影');
+  const profileName=a?.colorProfile?.mode==='inherited'
+    ?w.active?.image.inputProfiles?.find(p=>p.reference===a.colorProfile?.reference)?.name||'配方中的配置文件'
+    :w.active?.image.inputProfiles?.find(p=>p.id===(a?.colorProfile?.mode||'auto'))?.name||'ART 默认显影';
   const component=selected?.components?.find(c=>c.id===componentId)||selected?.components?.[0];
   const geometry=selected?.components?(component?{...selected,...component,brush:component.brush,referenceAngle:component.referenceAngle,geometryReference:component.geometryReference,id:selected.id,enabled:selected.enabled&&component.enabled}:undefined):selected;
   const object=useObjectSelection(w.flush,({raster,referenceAngle})=>{
@@ -170,7 +193,7 @@ export function App() {
     if(next==='repair')setTab('repair');
     if(next==='crop'||next==='straighten'||next==='white-balance')setTab('adjust');setTool(next);
   }
-  function compare(value:boolean){if(w.opening)return;if(dual)comparison.setLayout('off');setComparing(value);}
+  function compare(value:boolean){if(w.opening)return;if(value&&exportMenu)closeExportMenu();if(dual)comparison.setLayout('off');setComparing(value);}
   useEffect(()=>{
     const textContext=(target:EventTarget|null)=>target instanceof Element&&!!target.closest('input,textarea,select,[contenteditable]');
     const modal=()=>w.syncOpen||!!document.querySelector('dialog[open]');
@@ -193,7 +216,7 @@ export function App() {
       if(command&&!e.altKey&&!e.shiftKey&&key==='o'){e.preventDefault();if(!e.repeat&&!w.opening)void choose();return;}
       if(command&&!e.altKey&&!e.shiftKey&&key==='w'){e.preventDefault();if(!e.repeat&&w.active&&!w.opening)void w.closeDocument(w.active.image.id);return;}
       if(editable)return;
-      if(e.key==='Escape'){if(curveJob.current){e.preventDefault();cancelCurvePick();return;}if(w.cancelEdit()){e.preventDefault();return;}guidedPerspective.cancel();autoPerspective.cancel();setTool(tool==='straighten'?'crop':'hand');setTab('adjust');setExportMenu(false);setGridView(false);setClipping(null);return;}
+      if(e.key==='Escape'){if(curveJob.current){e.preventDefault();cancelCurvePick();return;}if(w.cancelEdit()){e.preventDefault();return;}guidedPerspective.cancel();autoPerspective.cancel();setTool(tool==='straighten'?'crop':'hand');setTab('adjust');closeExportMenu();setGridView(false);setClipping(null);return;}
       if(command&&e.shiftKey&&!e.altKey&&!editable&&w.active&&(e.key==='0'||e.code==='Digit0')&&selectedDocuments.length&&!w.opening&&!comparing){e.preventDefault();void w.setLabel('Purple',selectedVisiblePaths);return;}
       if(command&&w.active&&(e.key==='0'||e.code==='Digit0')){e.preventDefault();setViewCommand({action:e.altKey?'actual':'fit',sequence:++viewCommandSequence.current});return;}
       if(command&&w.active&&(e.key==='+'||e.key==='=')){e.preventDefault();setViewCommand({action:'zoom-in',sequence:++viewCommandSequence.current});return;}
@@ -247,9 +270,10 @@ export function App() {
   useEffect(()=>{if(dual||comparing)setClipping(null);},[dual,comparing]);
   useEffect(()=>{if(tab!=='presets'||comparing||dual)void w.presetPreview.cancel();},[tab,comparing,dual]);
   return <ControlEditContext.Provider value={w.cancelEdit}><div className="app">
-    <header className="titlebar"><div className="brand"><img src={logo} width={28} height={28} alt="CaptRAW 标志"/><b>Capt<span>RAW</span></b><em>显影工作台</em></div><div className="document-title">{w.active?<>{w.active.image.name}{w.active.dirty&&<i className="dirty-dot"/>}<button className="close-document" aria-label="关闭当前文件" title="关闭当前文件 ⌘W" onClick={()=>w.closeDocument(w.active!.image.id)}><X size={14}/></button></>:<span>每张原片，都值得好好显影。</span>}</div><div className="header-actions"><button className="icon-text" disabled={w.opening} onClick={choose} title="打开照片 ⌘O"><FolderOpen size={15}/>打开</button><button className="icon-text" disabled={!w.active||w.opening} onClick={w.save} title="保存 CaptRAW 编辑 · ⌘⇧S（应用扩展）"><Save size={15}/>保存</button><div className="export-container"><button className="export-button" title="导出设置 ⌘S" disabled={!canExport} onMouseDown={event=>{if(event.button===0&&document.activeElement?.closest('input,textarea,select,[contenteditable]'))event.preventDefault();}} onClick={()=>setExportMenu(!exportMenu)}><ArrowDownToLine size={15}/>导出<ChevronDown size={12}/></button>{exportMenu&&<ExportMenu disabled={w.opening||w.exportPending||w.job?.state==='running'} options={outputOptions} setOptions={setOutputOptions} image={selectedDocuments[0]?.image} adjustments={selectedDocuments[0]?.adjustments} count={selectedDocuments.length} colorSpace={outputColorSpace} change={setOutputColorSpace} close={()=>setExportMenu(false)} run={format=>{if(!canExport)return;setExportMenu(false);void w.exportImage(format,outputColorSpace,selectedVisiblePaths,structuredClone(outputOptions));}}/>}</div></div></header>
+    <header className="titlebar"><div className="brand"><img src={logo} width={28} height={28} alt="CaptRAW 标志"/><b>Capt<span>RAW</span></b><em>显影工作台</em></div><div className="document-title">{w.active?<>{w.active.image.name}{w.active.dirty&&<i className="dirty-dot"/>}<button className="close-document" aria-label="关闭当前文件" title="关闭当前文件 ⌘W" onClick={()=>w.closeDocument(w.active!.image.id)}><X size={14}/></button></>:<span>每张原片，都值得好好显影。</span>}</div><div className="header-actions"><button className="icon-text" disabled={w.opening} onClick={choose} title="打开照片 ⌘O"><FolderOpen size={15}/>打开</button><button className="icon-text" disabled={!w.active||w.opening} onClick={w.save} title="保存 CaptRAW 编辑 · ⌘⇧S（应用扩展）"><Save size={15}/>保存</button><div className="export-container"><button className="export-button" title="导出设置 ⌘S" disabled={!canExport} onMouseDown={event=>{if(event.button===0&&document.activeElement?.closest('input,textarea,select,[contenteditable]'))event.preventDefault();}} onClick={()=>exportMenu?closeExportMenu():setExportMenu(true)}><ArrowDownToLine size={15}/>导出<ChevronDown size={12}/></button>{exportMenu&&<ExportMenu disabled={w.opening||w.exportPending||w.job?.state==='running'} options={outputOptions} setOptions={setOutputOptions} image={selectedDocuments[0]?.image} adjustments={selectedDocuments[0]?.adjustments} count={selectedDocuments.length} colorSpace={outputColorSpace} change={setOutputColorSpace} close={closeExportMenu} run={format=>{if(!canExport)return;closeExportMenu();void w.exportImage(format,outputColorSpace,selectedVisiblePaths,structuredClone(outputOptions));}}/>}</div></div></header>
     <div className="workbench" inert={w.opening}>
     <main className="stage"><div className="stage-toolbar"><div className="stage-meta">{w.active?<><span className="camera-name">{w.active.image.camera}</span><span>{w.active.image.iso?`ISO ${w.active.image.iso}`:''}</span><span>{w.frame?`${Math.round(w.frame.fullWidth*(visibleCrop?.width??1))} × ${Math.round(w.frame.fullHeight*(visibleCrop?.height??1))}`:''}</span></>:<span>RAW DEVELOPMENT</span>}</div><div className="stage-actions"><button title="撤销 ⌘Z" aria-label="撤销" disabled={!w.canUndo()} onClick={()=>w.undo()}><Undo2 size={15}/></button><button title="重做 ⇧⌘Z" aria-label="重做" disabled={!w.canUndo(true)} onClick={()=>w.undo(true)}><Redo2 size={15}/></button><span className="toolbar-separator"/><button className={comparing?'active':''} disabled={!a||!w.active?.opened||w.opening} onPointerDown={e=>{e.currentTarget.setPointerCapture(e.pointerId);compare(true);}} onPointerUp={()=>compare(false)} onPointerCancel={()=>compare(false)} title="按住查看前状态；P 切换对比"><Layers2 size={15}/><span>{comparing?comparison.label:'按住对比'}</span></button></div></div>
+      {sourceColorOpen&&w.active&&<SourceColorDialog key={w.active.image.id} image={w.active.image} onApply={applySourceColor} onDismiss={dismissSourceColor}/>}
       {(tool==='crop'||tool==='straighten')&&a&&<CropControls value={a} image={w.active!.image} edit={w.edit} commit={w.commit} done={()=>setTool('hand')} straighten={tool==='straighten'} straightenDisabled={comparing||dual} toggleStraighten={()=>setTool(tool==='straighten'?'crop':'straighten')}/>}
       <Viewport sampleCurve={pickCurve} dustView={{enabled:tab==='repair'&&tool==='repair'&&!comparing&&!dual&&dustEnabled,threshold:dustThreshold}} clipping={clipping} viewCommand={viewCommand} guided={guidedPerspective} straightenDone={()=>setTool('crop')} imageSize={w.active?.image} beginCanvasEdit={w.beginCanvasEdit} beginMaskEdit={w.beginMaskEdit} error={w.setError} sessionId={w.active?.image.id} beforeLabel={comparing?comparison.label:undefined} comparison={dual?comparison:undefined} object={!dual&&object.active?{url:object.url,prompts:object.prompts,pick:object.pick,mode:object.mode,box:object.box,ready:object.ready,pickBox:object.pickBox}:undefined} frame={comparing?comparison.frame:hoverPreview?.frame||w.frame} detailFrame={comparing?comparison.detail:hoverPreview?undefined:w.detailFrame} adjustments={visibleAdjustments} tool={comparing||dual||hoverPreview?'hand':tool} luminanceMap={!dual&&rangeActive&&luminanceMap} cancelSample={w.cancelLuminanceSample} sampleRange={async(start,end,append,transaction)=>{if(selected){if(colorActive)await w.sampleColor(selected.id,component?.id,start,end,append,transaction);else await w.sampleLuminance(selected.id,component?.id,start,end,transaction);}}} removeColor={removeColor} selectedMask={!dual&&!comparing&&!object.active&&tab==='mask'&&geometry?.enabled?geometry:undefined} maskId={comparing||dual?'':previewMaskId} componentId={component?.id} sample={point=>w.whiteBalance({mode:'sample',x:point.x,y:point.y,size:sampleSize})} repair={{source:spotSource,selectingSource,selectedId:spotId,guides:spotGuides,settings:spotDefaults,pick:repairPick,select:selectSpot}} brushSize={brushSize} brush={brush} overlay={overlay} busy={w.busy||!!hoverPreview||w.presetPreview.pending||comparison.busy||!!w.active&&!selectedVisiblePaths.includes(w.active.image.path)} edit={w.edit} commit={w.commit} open={choose} drop={w.openPaths} viewport={comparing?comparison.viewport:w.viewport} comparisonControl={<><select aria-label="前后对比视图" title="Q 切换对比视图 · Shift+Q 反向切换" disabled={!a||w.opening} value={comparison.layout} onChange={e=>{if(comparing)compare(false);comparison.setLayout(e.target.value as typeof comparison.layout);}}>{comparisonLayouts.map(v=><option key={v} value={v}>{comparisonNames[v]}</option>)}</select><button aria-label="保存前状态" title="将当前设置保存为前状态 · Option/Alt+P" disabled={!w.active?.opened||w.busy||comparing} onClick={()=>w.comparisonState('capture')}><Copy size={14}/></button><button aria-label="交换前后设置" title="交换前后设置 · 保持当前构图 · 可撤销" disabled={!w.active?.opened||w.busy||comparing} onClick={()=>w.comparisonState('swap')}><ArrowLeftRight size={14}/></button><button aria-label="还原打开时状态" title="将对比前状态还原为打开照片时的设置" disabled={!w.active?.before||w.busy||comparing} onClick={()=>w.comparisonState('reset')}><RotateCcw size={14}/></button></>}/>
       {(w.error||comparison.error)&&<div className="error-banner" role="alert"><span>{(w.error||comparison.error).replace('Error: ','')}</span>{w.active&&<button onClick={()=>w.switchDocument(w.active!.image.id,true)}>重新载入当前编辑</button>}<button title="关闭错误" onClick={()=>{w.setError('');comparison.setLayout('off');setComparing(false);}}><X size={15}/></button></div>}

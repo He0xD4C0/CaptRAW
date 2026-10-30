@@ -3,6 +3,7 @@ import {mkdir,rm,copyFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {NativeEngine} from '../engine/engine.js';
 import {prepareSourceIdentities,verifySourceIdentity} from '../engine/source-identity.js';
+import {isContainedFile} from '../engine/runtime.js';
 import {autoTone,validateWhiteBalanceTarget,sourceFrameOpenSnapshot,type EffectiveGeometry,type PerspectiveSettings} from '@captraw/contracts';
 import {applyEditCommand,validateEditCommand,synchronizedAdjustments,type SyncRequest,type SyncResult} from '@captraw/contracts/synchronize';
 
@@ -10,7 +11,7 @@ import {applyEditCommand,validateEditCommand,synchronizedAdjustments,type SyncRe
 export class Synchronizer {
  private worker?:NativeEngine;private cancelled=false;private active=false;private directory='';
  readonly previews=new Map<string,string>();
- constructor(private binary:string,private resources:string,private cache:string,private progress:(message:string)=>void){}
+ constructor(private binary:string,private resources:string,private cache:string,private progress:(message:string)=>void,private monitorPreview=false){}
  get running(){return this.active;}
  cancel(){this.cancelled=true;this.worker?.terminate();}
  async run(request:SyncRequest):Promise<SyncResult[]|null>{
@@ -76,7 +77,7 @@ export class Synchronizer {
      const render=async(revision:number,profile:string)=>{
       let listener:(message:any)=>void=()=>{},timeout:ReturnType<typeof setTimeout>|undefined;
       const preview=new Promise<any>((accept,reject)=>{listener=message=>{if(message.event==='preview'&&message.frame.sessionId===sessionId&&message.frame.revision===revision&&message.frame.kind==='fit')accept(message.frame);else if(message.event==='error')reject(new Error(message.message));};worker.on('engine-event',listener);timeout=setTimeout(()=>reject(new Error('照片预览超时，请重试。')),120000);});
-      try{return await Promise.all([worker.call('update',{revision,adjustments:target.adjustments,artProfile:profile}),preview]);}finally{worker.off('engine-event',listener);clearTimeout(timeout);}
+      try{return await Promise.all([worker.call('update',{revision,adjustments:target.adjustments,artProfile:profile,...(this.monitorPreview?{monitorPreview:'display-p3'}:{})}),preview]);}finally{worker.off('engine-event',listener);clearTimeout(timeout);}
      };
      let [result,frame]=await render(1,target.profile);
      const recompute=request.recompute;
@@ -101,8 +102,14 @@ export class Synchronizer {
      if(isAbsolute(previewPath)||previewPath==='..'||previewPath.startsWith('../')||previewPath.startsWith('..\\'))throw new Error('无效的同步预览。');
      const key=`sync/${randomUUID()}.png`,file=join(this.directory,basename(key));await copyFile(frame.file,file);this.previews.set(key,file);
      const preview=`captraw://preview/${key}`;
+     let linear=null;
+     if(frame.linear?.file){
+      if(!isContainedFile(join(this.directory,'engine'),resolve(frame.linear.file)))throw new Error('无效的同步浮点预览。');
+      const linearKey=`sync/${randomUUID()}.rgba16f`,linearFile=join(this.directory,basename(linearKey));await copyFile(frame.linear.file,linearFile);this.previews.set(linearKey,linearFile);
+      const {file:_linearFile,...plane}=frame.linear;linear={...plane,url:`captraw://preview/${linearKey}`};
+     }
      const {file:_file,...metadata}=frame;
-     results.push({path:target.image.path,adjustments:target.adjustments,profile:result.artProfile,preview,frame:{...metadata,url:preview}});
+     results.push({path:target.image.path,adjustments:target.adjustments,profile:result.artProfile,preview,frame:{...metadata,linear,url:preview}});
     }catch(error){if(this.cancelled)return null;throw new Error(`${target.image.name}：${error instanceof Error?error.message:String(error)}`);}
    }
    for(const target of targets){

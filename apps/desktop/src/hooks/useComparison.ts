@@ -1,9 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
-import type {ComparisonLayout,PreviewFrame} from '@captraw/contracts';
+import type {ComparisonLayout,PreviewFrame,LinearPreview} from '@captraw/contracts';
 import type {DocumentState} from './workbench/model';
 export const comparisonLayouts:ComparisonLayout[]=['off','left-right','top-bottom','split-vertical','split-horizontal'];
 export const comparisonNames:Record<ComparisonLayout,string>={off:'单图', 'left-right':'左右对比','top-bottom':'上下对比','split-vertical':'左右分割','split-horizontal':'上下分割'};
-export function useComparison(active:DocumentState|undefined,linearPreview=false){
+export function useComparison(active:DocumentState|undefined,monitorSpace:LinearPreview['colorSpace']|undefined=undefined){
  const [layout,setLayout]=useState<ComparisonLayout>('off'),[showBefore,setShowBefore]=useState(false),[frame,setFrame]=useState<PreviewFrame>(),[detail,setDetail]=useState<PreviewFrame>(),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const token=useRef(0),session=useRef('');
  const a=active?.adjustments,geometry=JSON.stringify(a?{rotation:a.rotation,flipHorizontal:a.flipHorizontal??active?.image.effectiveGeometry?.flipHorizontal,flipVertical:a.flipVertical??active?.image.effectiveGeometry?.flipVertical,fineRotation:a.fineRotation,perspective:a.perspective,crop:a.crop,lensCorrections:a.lensCorrections,lensProfile:a.lensProfile,lensManualDistortion:a.lensManualDistortion}:null);
@@ -17,9 +17,9 @@ export function useComparison(active:DocumentState|undefined,linearPreview=false
   const id=active?.image.id;session.current=id||'';const revision=++token.current;
   setFrame(undefined);setDetail(undefined);setError('');setBusy(!!id&&enabled&&!!before);
   if(!id)return;
-  void window.captraw.comparison(id,revision,enabled&&before?{adjustments:before.adjustments,artProfile:before.profile,geometry:JSON.parse(geometry)}:null,linearPreview).catch(e=>{if(token.current===revision){setError(String(e));setBusy(false);}});
+  void window.captraw.comparison(id,revision,enabled&&before?{adjustments:before.adjustments,artProfile:before.profile,geometry:JSON.parse(geometry)}:null,monitorSpace==='rec709-linear',monitorSpace).catch(e=>{if(token.current===revision){setError(String(e));setBusy(false);}});
   return()=>{++token.current;void window.captraw.comparison(id,token.current,null).catch(()=>{});};
- },[active?.image.id,enabled,geometry,before,linearPreview]);
+ },[active?.image.id,enabled,geometry,before,monitorSpace]);
  useEffect(()=>{setLayout('off');setShowBefore(false);},[active?.image.id]);
  async function viewport(x:number,y:number,width:number,height:number){
   if(!frame||!enabled)return;

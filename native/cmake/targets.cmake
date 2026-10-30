@@ -54,6 +54,8 @@ string(REGEX REPLACE "^export const ENGINE_VERSION='([^']+)'.*$" "\\1"
 target_compile_definitions(captraw-engine PRIVATE CAPTRAW_ENGINE_VERSION="${CAPTRAW_ENGINE_VERSION}")
 target_compile_features(captraw-engine PUBLIC cxx_std_17)
 target_link_libraries(captraw-engine PRIVATE captraw-core)
+add_executable(captraw-color-chain-probe EXCLUDE_FROM_ALL "${CAPTRAW_SOURCE_DIR}/../tests/native/color/color-chain-probe.cc")
+target_link_libraries(captraw-color-chain-probe PRIVATE captraw-core)
 add_executable(captraw-wb-probe EXCLUDE_FROM_ALL "${CAPTRAW_SOURCE_DIR}/../tests/native/color/white-balance-probe.cc")
 add_executable(captraw-enhanced-table-probe EXCLUDE_FROM_ALL "${CAPTRAW_SOURCE_DIR}/../tests/native/color/enhanced-table-probe.cc" "${CAPTRAW_SOURCE_DIR}/src/enhanced-table.cc" "${CAPTRAW_SOURCE_DIR}/src/enhanced-profile.cc")
 target_compile_features(captraw-enhanced-table-probe PRIVATE cxx_std_17)
@@ -73,6 +75,7 @@ target_link_libraries(captraw-art-reference PRIVATE art_engine art_utils
   ${CAIROMM_LIBRARIES} ${GIOMM_LIBRARIES} ${GIO_LIBRARIES} ${GTKMM_LIBRARIES}
   ${RSVG_LIBRARIES} ${EXIV2_LIBRARIES})
 if(APPLE)
+  target_link_libraries(captraw-color-chain-probe PRIVATE "-framework Foundation")
   target_link_libraries(captraw-wb-probe PRIVATE "-framework Foundation")
   target_link_libraries(captraw-geometry-probe PRIVATE "-framework Foundation")
   target_link_libraries(captraw-auto-crop-probe PRIVATE "-framework Foundation")

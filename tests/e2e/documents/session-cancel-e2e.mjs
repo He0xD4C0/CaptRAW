@@ -10,8 +10,8 @@ const files=['尼康 照片.NEF','佳能 照片.CR3'].map(name=>join(scratch,nam
 const hash=async path=>createHash('sha256').update(await readFile(path)).digest('hex'),original=await Promise.all(inputs.map(hash));
 for(const [i,path] of files.entries())await copyFile(inputs[i],path);
 let app,page,passed=false;
-const photo=i=>page.locator('.film-item').filter({hasText:basename(files[i])}),exposure=()=>page.getByRole('spinbutton',{name:'曝光',exact:true}),pixels=async()=>createHash('sha256').update(await page.locator('canvas').evaluate(c=>c.toDataURL())).digest('hex');
-async function idle(){await expect(page.getByRole('button',{name:'打开',exact:true})).toBeEnabled();await expect(page.locator('.workbench')).not.toHaveAttribute('inert','');await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas')?.dataset.frame===window.__frames.filter(f=>f.kind==='fit').at(-1)?.url);}
+const photo=i=>page.locator('.film-item').filter({hasText:basename(files[i])}),exposure=()=>page.getByRole('spinbutton',{name:'曝光',exact:true}),pixels=async()=>createHash('sha256').update(await page.locator('canvas[aria-label="显影预览"]').evaluate(c=>c.toDataURL())).digest('hex');
+async function idle(){await expect(page.getByRole('button',{name:'打开',exact:true})).toBeEnabled();await expect(page.locator('.workbench')).not.toHaveAttribute('inert','');await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>document.querySelector('canvas[aria-label="显影预览"]')?.dataset.frame===window.__frames.filter(f=>f.kind==='fit').at(-1)?.url);}
 const pass=message=>{checks.push(message);console.log('PASS',message);};
 try{
  app=await electron.launch();page=await app.firstWindow();page.setDefaultTimeout(60000);page.on('pageerror',error=>errors.push(String(error)));

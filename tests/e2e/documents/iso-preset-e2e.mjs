@@ -20,8 +20,8 @@ const button=name=>page.getByRole('button',{name,exact:true});
 const input=name=>page.getByRole('spinbutton',{name,exact:true});
 const photo=i=>page.locator('.film-item').filter({hasText:basename(files[i])}).locator('.film-open');
 const sidecar=i=>files[i]+'.captraw';
-const pixels=async()=>hash(await page.locator('canvas').evaluate(c=>c.toDataURL()));
-async function idle(){await expect(button('打开')).toBeEnabled();await expect(page.locator('.workbench')).not.toHaveAttribute('inert','');await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>{const frame=window.__isoFrames.filter(f=>f.kind==='fit').at(-1);return frame&&document.querySelector('canvas')?.dataset.frame===frame.url;});}
+const pixels=async()=>hash(await page.locator('canvas[aria-label="显影预览"]').evaluate(c=>c.toDataURL()));
+async function idle(){await expect(button('打开')).toBeEnabled();await expect(page.locator('.workbench')).not.toHaveAttribute('inert','');await page.locator('.rendering').waitFor({state:'hidden'});await page.waitForFunction(()=>{const frame=window.__isoFrames.filter(f=>f.kind==='fit').at(-1);return frame&&document.querySelector('canvas[aria-label="显影预览"]')?.dataset.frame===frame.url;});}
 async function choose(paths=files){await app.evaluate(({dialog},paths)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:paths});},paths);await button('打开').click();await expect(page.locator('.film-item')).toHaveCount(paths.length);await idle();}
 async function select(i,modifiers=[]){await photo(i).scrollIntoViewIfNeeded();await expect(photo(i)).toBeInViewport();await photo(i).click({modifiers});await expect(photo(i)).toHaveAttribute(modifiers.length?'aria-pressed':'aria-current','true');await idle();if(!modifiers.length)await expect(page.locator('.exposure-meta')).toContainText(`ISO ${[64,100,160][i]}`);}
 async function value(name,value){const control=input(name);await control.scrollIntoViewIfNeeded();await expect(control).toBeInViewport();await expect(control).toBeEnabled();await control.fill(String(value));await control.press('Tab');await idle();await expect(control).toHaveValue(String(value));}

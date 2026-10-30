@@ -1,24 +1,34 @@
-# 安全政策
+# Security Policy
 
-## 报告漏洞
+> 中文版本见 [这里](docs/SECURITY_ZH.md)。
 
-请不要在公开 issue、讨论区或 Pull Request 中披露未修复漏洞、利用代码、
-用户照片、路径、凭据或其他敏感信息。
+## Reporting vulnerabilities
 
-通过 GitHub 仓库的 **Security → Advisories → Report a vulnerability**
-私密报告。仓库所有者需要保持 GitHub Private Vulnerability Reporting 开启。
+Do not disclose unfixed vulnerabilities, exploit code, user photos, paths,
+credentials, or other sensitive information in public issues, discussions, or
+pull requests.
 
-报告应尽量包含受影响版本、平台、复现步骤、影响和最小样本。收到报告后，
-维护者会通过私密 advisory 确认接收、评估影响并协调修复与披露。响应时间
-取决于问题严重程度和维护者可用性，不承诺固定 SLA。
+Report vulnerabilities privately through the repository's
+**Security → Advisories → Report a vulnerability** flow. Repository owners must
+keep GitHub Private Vulnerability Reporting enabled.
 
-## 支持范围
+Reports should include the affected version, platform, reproduction steps,
+impact, and a minimal sample where possible. After receiving a report,
+maintainers use a private advisory to acknowledge receipt, assess impact, and
+coordinate remediation and disclosure. Response time depends on severity and
+maintainer availability; no fixed SLA is promised.
 
-安全修复优先应用于 `main` 和最新发布版本。用户应验证下载文件的
-`SHA256SUMS`，并仅从项目 GitHub Releases 或项目明确说明的镜像获取安装包。
+## Supported scope
 
-## 不在范围内
+Security fixes are prioritized for `main` and the latest release. Users should
+verify the `SHA256SUMS` file and obtain installation packages only from project
+GitHub Releases or mirrors explicitly documented by the project.
 
-- 已被第三方确认、但 CaptRAW 尚未采用或分发的上游漏洞；
-- 需要攻击者已经控制本机账户、修改系统库或替换应用文件的场景；
-- 仅影响已明确标记为实验性且没有安全边界声明的功能。
+## Out of scope
+
+- upstream vulnerabilities already confirmed by a third party but not yet
+  adopted or distributed by CaptRAW;
+- scenarios requiring an attacker to already control the local account,
+  modify system libraries, or replace application files;
+- issues affecting only features explicitly marked experimental that have no
+  declared security boundary.

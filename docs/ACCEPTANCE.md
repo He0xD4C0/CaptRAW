@@ -1,5 +1,27 @@
 # CaptRAW 本机验收记录
 
+## 阶段C色彩链路体验候选（2026-10-30）
+
+版本 `0.66.0-beta.1`，唯一候选 `791f1dcdc86467cb`。交付位于 [release/0.66.0-beta.1](../release/0.66.0-beta.1/)，[统一身份与结果](../release/0.66.0-beta.1/evidence/release.json)，[候选检查](../release/0.66.0-beta.1/evidence/checks.json)。源码归档包含当前未提交实现；安装包、源码、依赖许可和多平台风险清单位于同一目录。
+
+- 公共单测：108项通过。颜色 candidate 另通过独立数值链、无ICC输入、P3 GUI、目标proof、JPEG/TIFF16设置与原生编码检查。
+- 安装包：从DMG安装至 `~/Applications/CaptRAW-0.66.0-beta.1.app`，严格签名校验通过。安装版隐藏、不聚焦窗口通过源空间选择与持久化、Display P3适屏／1:1／对比、目标色域proof、失败回退与重试、保存重开，以及单张／批量JPEG和TIFF16实际ICC、PPI、位深、像素保持。
+- 色彩数值：固定独立 D65 矩阵覆盖灰阶、暗部、渐变、P3全色域及带符号扩展值共216个样本；线性Display P3平均ΔE00 0.00965、最大0.06528；显示传递最大0.04522；sRGB目标proof最大0.04522。负值与超白在目标proof裁剪前保留。
+- 输入解释：未声明ICC的渲染文件明确显示源空间选择并默认sRGB；选择Display P3改变实际受管理预览，保存为内容寻址资产，重开后恢复且不再次提示。原片字节不变。
+- 可见窗口：安装版真实RAW打开后完成Display P3监看和ProPhoto RGB目标proof；[截图](../release/0.66.0-beta.1/evidence/color-experience.png)。该检查为可见自动化工作流，不是独立人工色彩评审；显示设备校色、多显示器切换和其他机器仍未验收。
+
+## 阶段D摄影工作流收尾（2026-10-30）
+
+最终候选 `047645006a542a92` 与 `0.66.0-beta.1` 安装包绑定，[最终检查](../release/0.66.0-beta.1/evidence/checks.json)全部通过。安装版隐藏、不聚焦窗口完成以下集中任务：
+
+- 两图导入、可见选择、评分与绿色色标、联动曝光、径向蒙版、局部亮度、批量原生保存、完成会话、打开两份 `.captraw` 和整组取消；两份原片字节不变，取消后保存配方不变。
+- 会话事务9组：联动事务、参与照片独立撤销、Esc 回滚、目标消失整组失败、隐藏活动图拒绝回退、Done部分失败保留、重试、Cancel与已保存旁车保留。
+- 会话保存恢复8组、取消／核心退出3组、常规预设8组、ISO自适应4组和连续修复16组；均操作真实控件并验证画面、历史或文件。
+- 单张／双图JPEG与TIFF16实际ICC、PPI、位深与像素；双图TIFF16输出与单张快照一致。
+- 性能：[报告](../release/0.66.0-beta.1/evidence/workflow/performance-smoke.json)，45MP D850 RAW首帧1.19秒（目标≤5秒），基础显影停止后适屏更新147–403毫秒（目标P95≤1秒；1:1首次详细区1.94秒单列）。
+
+可见安装版工作流截图见 [RAW打开](../release/0.66.0-beta.1/evidence/workflow/raw-open.png)、[局部蒙版](../release/0.66.0-beta.1/evidence/workflow/mask-edit.png) 和 [1:1](../release/0.66.0-beta.1/evidence/workflow/detail-1to1.png)。隐藏 E2E通过不替代外部机器人工验收；Developer ID签名、公证、多显示器、物理显示校准和Windows／Linux仍按边界清单另立。
+
 ## 阶段B安装体验候选（2026-10-30）
 
 版本 `0.65.0-beta.1`，唯一候选 `dfce261b10a49bb1`。交付位于 [release/0.65.0-beta.1](../release/0.65.0-beta.1/)，[统一身份与结果](../release/0.65.0-beta.1/evidence/release.json)。源码归档内的产品构建输入与候选逐项校验一致。并行目录整理期间使用独立临时快照构建，完成后已清理。

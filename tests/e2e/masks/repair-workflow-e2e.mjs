@@ -11,7 +11,7 @@ import {createHash} from 'node:crypto';
 
 // Real production App + main/preload + native RPC. No renderer/component harness.
 // Build coordination is external: this test deliberately performs no builds.
-const scratch=await mkdtemp(join(tmpdir(),'captraw-repair-app-')),source=join(scratch,'修复 工作流.png'),sidecar=source.replace('.png','.xmp');
+const scratch=await mkdtemp(join(tmpdir(),'captraw-repair-app-')),source=join(scratch,'修复 工作流.png'),sidecar=source+'.captraw';
 const checks=[],errors=[],findings=[];let app,page,passed=false,failure;
 const button=name=>page.getByRole('button',{name,exact:true});
 const list=()=>page.getByRole('list',{name:'修复列表'}).getByRole('listitem');
@@ -50,7 +50,7 @@ async function launch(){
    return result;
   });
   dialog.showMessageBox=async(...args)=>{const options=args.at(-1);
-   if(options.message==='确认保存这些 XMP 旁车？')return {response:1};
+   if(options.message==='确认保存这些 CaptRAW 编辑文件？')return {response:1};
    const discard=options.buttons?.findIndex(v=>v.includes('放弃'));return {response:discard>=0?discard:0};
   };
  });

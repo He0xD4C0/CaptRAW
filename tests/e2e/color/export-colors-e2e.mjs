@@ -24,11 +24,12 @@ async function exportFile(space,name,format='tiff',cancel=false){
 }
 try{
  app=await electron.launch({executablePath,args:executablePath?[]:[process.cwd()]});page=await app.firstWindow();page.setDefaultTimeout(45000);page.on('pageerror',e=>errors.push(String(e)));
+ await app.evaluate(({dialog})=>{dialog.showMessageBox=async()=>({response:1});});
  await page.evaluate(()=>{window.__frames=[];window.captraw.onEvent(e=>{if(e.event==='preview')window.__frames.push(e.frame);});});
- await open(source);const before=await save('before');const preview=await page.locator('canvas').getAttribute('data-frame');
+ await open(source);const before=await save('before');const canvas=page.locator('canvas[aria-label="显影预览"]'),previewPixels=await canvas.evaluate(c=>c.toDataURL());
  await menu();const choice=page.getByRole('combobox',{name:'输出色彩空间'});await expect(choice).toHaveValue('srgb');await expect(choice.locator('option')).toHaveCount(5);await expect(choice).toBeFocused();
- await choice.selectOption('prophoto-rgb');await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'导出设置'})).toHaveCount(0);await expect(page.getByRole('button',{name:'导出',exact:true})).toBeFocused();pass('visible export color selector exposes five SDR spaces and Escape restores focus');
- await menu();await expect(choice).toHaveValue('prophoto-rgb');await page.locator('.stage-meta').click();await expect(page.getByRole('dialog',{name:'导出设置'})).toHaveCount(0);expect(await page.locator('canvas').getAttribute('data-frame')).toBe(preview);pass('outside click closes export options without changing preview or document');
+ await choice.selectOption('prophoto-rgb');await page.waitForFunction(()=>document.querySelector('canvas[aria-label="显影预览"]')?.dataset.outputProfile==='prophoto-rgb');expect(await canvas.evaluate(c=>c.toDataURL())).not.toBe(previewPixels);await page.keyboard.press('Escape');await expect(page.getByRole('dialog',{name:'导出设置'})).toHaveCount(0);await expect(page.getByRole('button',{name:'导出',exact:true})).toBeFocused();await page.waitForFunction(()=>document.querySelector('canvas[aria-label="显影预览"]')?.dataset.outputProfile==='');expect(await canvas.evaluate(c=>c.toDataURL())).toBe(previewPixels);pass('visible export color selector exposes five SDR spaces, previews the target gamut and Escape restores focus and pixels');
+ await menu();await expect(choice).toHaveValue('prophoto-rgb');await page.locator('.stage-meta').click();await expect(page.getByRole('dialog',{name:'导出设置'})).toHaveCount(0);await page.waitForFunction(()=>document.querySelector('canvas[aria-label="显影预览"]')?.dataset.outputProfile==='');expect(await canvas.evaluate(c=>c.toDataURL())).toBe(previewPixels);pass('outside click closes export options without changing edits and restores the unproved preview');
  for(const [space,label] of Object.entries({'srgb':'sRGB','adobe-rgb':'Adobe RGB (1998)','prophoto-rgb':'ProPhoto RGB','display-p3':'Display P3','rec2020':'Rec. 2020'})){
   const r=await exportFile(space,space);expect(r.options.filters[0].name).toContain(label);expect(existsSync(r.path)).toBe(true);
  }

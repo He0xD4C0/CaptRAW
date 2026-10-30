@@ -25,7 +25,7 @@ function registrar(runtime,ipc=createIpc()){
 
 test('main IPC registrars expose the complete unique channel set',()=>{
   const {channels,once}=registrar({});
-  assert.equal(channels.length,62);
+  assert.equal(channels.length,63);
   assert.equal(new Set(channels.map(item=>item.channel)).size,channels.length);
   assert(channels.every(item=>/^[a-z]+:[a-z-]+$/.test(item.channel)));
   assert.deepEqual(once.map(item=>item.event),['will-quit']);

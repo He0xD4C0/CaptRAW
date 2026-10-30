@@ -1,34 +1,47 @@
-# CaptRAW 治理
+# CaptRAW Governance
 
-## 维护者
+> 中文版本见 [这里](docs/GOVERNANCE_ZH.md)。
 
-当前维护者为 `@He0xD4C0`，负责合并、发布、安全响应、许可证和仓库设置。
+## Maintainers
 
-新维护者由现有维护者在公开 issue 中提名，说明持续贡献、审查质量和社区
-协作记录。提名须经现有维护者明确批准，并同步更新
-`.github/CODEOWNERS` 与本文档。
+The current maintainer is `@He0xD4C0`, who is responsible for merging,
+releases, security response, licensing, and repository settings.
 
-维护者长期不活跃、主动退出或严重违反行为准则时，其他维护者可公开讨论
-权限变更；在只有一个维护者的阶段，需要该维护者本人确认或由 GitHub
-账户所有权流程处理。
+New maintainers are nominated by existing maintainers in a public issue,
+documenting sustained contributions, review quality, and community
+collaboration. A nomination requires explicit approval from the existing
+maintainers and updates to both `.github/CODEOWNERS` and this document.
 
-## 决策
+If a maintainer remains inactive for an extended period, voluntarily steps
+down, or seriously violates the Code of Conduct, other maintainers may discuss
+permission changes publicly. During the single-maintainer phase, the maintainer
+must confirm the change personally or the GitHub account-ownership process must
+be used.
 
-普通技术决定在 issue 或 Pull Request 中讨论，由维护者根据测试、兼容性、
-维护成本和社区意见作出结论。无法形成共识时，维护者必须公开说明决定及
-理由，并允许后续用新证据重新讨论。
+## Decisions
 
-以下变更必须使用独立 Pull Request，经过公告和明确审查：
+Routine technical decisions are discussed in an issue or pull request. The
+maintainer reaches a conclusion based on tests, compatibility, maintenance
+cost, and community feedback. If consensus cannot be reached, the maintainer
+must publish the decision and reasoning and allow the topic to be revisited
+with new evidence.
 
-- 修改许可证或新增再许可安排；
-- 修改本文档或维护者权限；
-- 改变 DCO、CLA 或其他贡献认证机制；
-- 引入无法从公开来源重建的依赖。
+The following changes require a separate pull request, advance notice, and
+explicit review:
 
-已合入的 GPL 衍生代码不能仅凭维护者决定改为闭源许可。任何未来的双许可
-或商业许可安排都需要相应版权权利人的合法授权，并单独公告。
+- changing the license or adding a relicensing arrangement;
+- changing this document or maintainer permissions;
+- changing DCO, CLA, or another contribution-certification mechanism;
+- introducing a dependency that cannot be reconstructed from public sources.
 
-## 发布
+GPL-derived code already merged into the project cannot be relicensed as
+closed source by a maintainer's decision alone. Any future dual-licensing or
+commercial-licensing arrangement requires valid authorization from the relevant
+copyright holders and a separate public announcement.
 
-发布者负责确认版本、测试结论、完整对应源码、第三方许可证和校验文件
-一致。GitHub 标签、应用包和源码归档是同一发布记录，不得只发布二进制。
+## Releases
+
+The release owner must verify that the version, test conclusions, complete
+corresponding source, third-party licenses, and checksum files are consistent.
+GitHub tags, application packages, and source archives form one release record;
+publishing only a binary is not sufficient.

@@ -27,7 +27,7 @@ async function pass(message){await hidden();checks.push(message);console.log('PA
 async function idle(){
  await expect(button('打开')).toBeEnabled();await expect(page.locator('.workbench')).not.toHaveAttribute('inert','');
  await page.locator('.rendering').waitFor({state:'hidden'});
- if(await page.locator('.film-item').count())await page.waitForFunction(()=>{const f=window.__saveFrames.filter(f=>f.kind==='fit').at(-1);return f&&document.querySelector('canvas')?.dataset.frame===f.url;});
+ if(await page.locator('.film-item').count())await page.waitForFunction(()=>{const f=window.__saveFrames.filter(f=>f.kind==='fit').at(-1);return f&&document.querySelector('canvas[aria-label="显影预览"]')?.dataset.frame===f.url;});
 }
 async function open(paths=files,count=paths.length){
  await app.evaluate(({dialog},filePaths)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths});},paths);

@@ -83,7 +83,7 @@
       "parallel": false,
       "exclusive": true,
       "manual": true,
-      "pathTriggers": ["native/src/grading.cc", "native/src/effects.cc", "native/src/white-balance.cc", "tests/native/color/**"]
+      "pathTriggers": ["native/src/grading.cc", "native/src/effects.cc", "native/src/float-preview.cc", "native/src/white-balance.cc", "tests/native/color/**"]
     },
     {
       "id": "native.masks",

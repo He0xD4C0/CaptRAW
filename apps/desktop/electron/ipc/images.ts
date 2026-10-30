@@ -1,13 +1,21 @@
 import type {App,IpcMain} from 'electron';
 import {CurveSampling} from '@captraw/desktop-core/editing';
 import {verifySourceIdentity} from '@captraw/desktop-core/engine';
+import {OUTPUT_COLOR_SPACES} from '@captraw/contracts';
 import type {MainRuntime} from './context.js';
 
 export function registerImagesIpc(ipc:IpcMain,app:App,runtime:MainRuntime){
   ipc.handle('images:synchronize',(_,request)=>runtime.synchronizer.run(request));
   ipc.handle('images:synchronize-cancel',()=>{runtime.presets.cancel();runtime.synchronizer.cancel();});
   ipc.handle('curve:parametric',async(_,settings)=>runtime.native().call('parametricCurve',settings));
-  ipc.handle('image:update',async(_,p)=>{runtime.requireSession(p.sessionId);runtime.brushSnapshot=undefined;await runtime.curveSampling?.cancel();runtime.brushes.adopt(p.adjustments);await runtime.brushes.invalidate();runtime.objects.invalidate(p.sessionId,p.adjustments,p.artProfile||'');const result=await runtime.native().call('update',p);runtime.brushSnapshot={sessionId:p.sessionId,revision:p.revision,adjustments:structuredClone(p.adjustments),artProfile:result.artProfile};return result;});
+  ipc.handle('image:update',async(_,p)=>{runtime.requireSession(p.sessionId);runtime.brushSnapshot=undefined;await runtime.curveSampling?.cancel();runtime.brushes.adopt(p.adjustments);await runtime.brushes.invalidate();runtime.objects.invalidate(p.sessionId,p.adjustments,p.artProfile||'');const result=await runtime.native().call('update',{...p,monitorPreview:p.monitorPreview??'display-p3'});runtime.brushSnapshot={sessionId:p.sessionId,revision:p.revision,adjustments:structuredClone(p.adjustments),artProfile:result.artProfile};return result;});
+  ipc.handle('image:output-preview',async(_,p)=>{
+    runtime.requireSession(p.sessionId);
+    if(p.colorSpace!==null&&!Object.hasOwn(OUTPUT_COLOR_SPACES,p.colorSpace))throw new Error('不支持的输出预览色彩空间。');
+    const snapshot=runtime.brushSnapshot;
+    if(!snapshot||snapshot.sessionId!==p.sessionId)throw new Error('当前预览尚未完成，请稍后选择输出色彩空间。');
+    await runtime.native().call('update',{revision:p.revision,adjustments:snapshot.adjustments,artProfile:snapshot.artProfile,monitorPreview:'display-p3',...(p.colorSpace?{outputPreview:p.colorSpace}:{})});
+  });
   ipc.handle('image:viewport',async(_,p)=>{runtime.requireSession(p.sessionId);await runtime.native().call('viewport',p);});
   ipc.handle('image:coordinates',async(_,p)=>{runtime.requireSession(p.sessionId);return runtime.native().call('coordinates',p);});
   ipc.handle('image:repair-source',async(_,request)=>{runtime.requireSession(request.sessionId);return runtime.native().call('repairSource',request);});

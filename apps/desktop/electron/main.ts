@@ -13,7 +13,7 @@ import {BatchExporter} from '@captraw/desktop-core/export';
 import {registerIpc} from './ipc/index.js';
 import type {MainRuntime} from './ipc/context.js';
 import {SYNC_GROUPS} from '@captraw/contracts/synchronize';
-import type { ImageSession, EditDocument, EngineEvent,SourceIdentity } from '@captraw/contracts';
+import type { ImageSession, EditDocument, EngineEvent,SourceIdentity,InputProfileOption,ColorProfileSettings } from '@captraw/contracts';
 import {mergeAdjustmentPatch,partialAdjustmentGroups,sourceFrameOpenSnapshot,sourceFramePolicyForDocument} from '@captraw/contracts';
 protocol.registerSchemesAsPrivileged([{ scheme: 'captraw', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
 const backgroundTest=process.env.CAPTRAW_E2E_BACKGROUND==='1';
@@ -100,6 +100,19 @@ function requireSession(id: string) {
   if (openingImage || !session || session.id !== id) throw new Error('当前图片正在切换，请等待载入完成后重试。'); return session;
 }
 type OpenDocument=Awaited<ReturnType<Documents['readForImage']>>;
+const standardInputProfileDefinitions=[
+ ['sRGB','RTv4_sRGB.icc'],
+ ['Display P3','RTv4_DisplayP3.icc'],
+ ['Adobe RGB (1998)','RTv4_Medium.icc'],
+ ['ProPhoto RGB','RTv4_Large.icc'],
+ ['Rec. 2020','RTv4_Rec2020.icc'],
+] as const;
+function standardInputProfileOptions():InputProfileOption[]{
+ return standardInputProfileDefinitions.map(([name,file])=>({id:'inherited',name,kind:'icc',reference:`file:${join(resources,'iccprofiles','output',file)}`}));
+}
+function sourceColorSettings(option:InputProfileOption):ColorProfileSettings{
+ return {mode:'inherited',reference:option.reference,toneCurve:false,lookTable:false,hueSatMap:true,baselineExposure:true,illuminant:0,look:null};
+}
 // Reopening an in-session photo uses the same opening interpretation; the
 // renderer then restores its immutable current edit, without another import.
 const openingDocuments=new Map<string,{loaded:OpenDocument|undefined;recipeFile:string}>();
@@ -136,6 +149,15 @@ async function openImage(path: string,expectedSource?:SourceIdentity) {
   const candidate=createEngine();openingEngine=candidate;
   try{
     const image=await candidate.call('open',{path,sessionId:randomUUID(),effectsDefaults:currentDefaults?'current':'legacy',whiteBalanceDefaults:currentDefaults?'current':'legacy',sourceFramePolicy:sourceFramePolicyForDocument(activeDocument?loaded:undefined),...sourceFrameOpenSnapshot(activeDocument?loaded!.adjustments:{},activeDocument?loaded!.artProfile:'')});
+    if(image.inputKind==='rendered'){
+      const standardProfiles=standardInputProfileOptions();
+      image.inputProfiles=[...standardProfiles,...(image.inputProfiles??[]).filter((profile:InputProfileOption)=>!standardProfiles.some(standard=>standard.reference===profile.reference))];
+      if(image.inputColorDeclaration==='unspecified'||image.inputColorDeclaration==='format-srgb'){
+        const currentProfile=image.adjustments?.colorProfile;
+        if(!currentProfile?.reference)image.adjustments={...image.adjustments,colorProfile:sourceColorSettings(standardProfiles[0])};
+      }
+      image.inputColorNeedsConfirmation=image.inputColorDeclaration==='unspecified';
+    }
     let recipe:EditDocument|undefined,importedFromAdobe=false;const skippedImportGroups=new Set<string>();
     if(loaded&&activeDocument){
       const groups=partialAdjustmentGroups(loaded.adjustments);
@@ -193,7 +215,7 @@ async function openImage(path: string,expectedSource?:SourceIdentity) {
     if(loaded)loaded.warnings=[...new Set(loaded.warnings)];
     openingDocuments.set(path,{loaded:structuredClone(loaded),recipeFile});
     stopComparison();const previous=engine;engine=candidate;previous?.terminate();
-    const next:ImageSession={...image,sourceIdentity,rating:recipe?.rating??image.rating,label:recipe?.label??image.label,initialAdjustments:image.adjustments,initialArtProfile:image.artProfile,recipe,xmpWarnings:loaded?.warnings,importedFromAdobe,needsNativeSave:importedFromAdobe||loaded?.storageKind==='legacy-xmp'};
+    const next:ImageSession={...image,sourceIdentity,rating:recipe?.rating??image.rating,label:recipe?.label??image.label,initialAdjustments:image.adjustments,initialArtProfile:image.artProfile,recipe,xmpWarnings:loaded?.warnings,importedFromAdobe,needsNativeSave:importedFromAdobe||loaded?.storageKind==='legacy-xmp',inputColorNeedsConfirmation:image.inputKind==='rendered'&&image.inputColorDeclaration==='unspecified'&&!(loaded&&activeDocument&&recipe?.adjustments.colorProfile?.reference)};
     if(recipe)next.adjustments=recipe.adjustments;session=next;
     return next;
   }catch(error){candidate.terminate();throw error;}finally{if(openingEngine===candidate)openingEngine=undefined;}
@@ -236,7 +258,7 @@ app.whenReady().then(async () => {
   objects=new ObjectSelection(binary,resources,join(segmentation,executableName('captraw-segment')),join(segmentation,'models','small'),cache,(id,message)=>send({event:'object-progress',id,message}));
   autoPerspective=new AutoPerspective(binary,resources,cache);
   brushes=new BrushPreparation(binary,resources,cache,()=>native());
-  synchronizer=new Synchronizer(binary,resources,cache,message=>send({event:'synchronize-progress',message}));
+  synchronizer=new Synchronizer(binary,resources,cache,message=>send({event:'synchronize-progress',message}),true);
   xmp=new XMP(app.isPackaged?join(root,executableName('captraw-xmp')):resolve(__dirname,'../../../../build/xmp',executableName('captraw-xmp')));
   documents=new Documents(xmp);
   batchSaver=new BatchDocumentSaver(binary,resources,cache,documents,message=>send({event:'save-progress',message}));
@@ -246,7 +268,7 @@ app.whenReady().then(async () => {
   },message=>send({event:'save-progress',message}));
   inputProfiles=new InputProfiles(join(app.getPath('userData'),'input-profiles'),{call:(method,params)=>native().call(method,params)},xmp);
   presets=new Presets(join(app.getPath('userData'),'xmp-presets'),{call:(method,params)=>native().call(method,params)},cache,xmp);
-  presetPreviewSynchronizer=new Synchronizer(binary,resources,join(cache,'preset-hover'),()=>{});
+  presetPreviewSynchronizer=new Synchronizer(binary,resources,join(cache,'preset-hover'),()=>{},true);
   presetPreview=new PresetPreview(new Presets(join(app.getPath('userData'),'xmp-presets'),{call:(method,params)=>native().call(method,params)},join(cache,'preset-hover'),xmp),presetPreviewSynchronizer);
   batchExporter=new BatchExporter(binary,resources,cache,job=>send({event:'job',job}),xmp);
   protocol.handle('captraw', async request => {

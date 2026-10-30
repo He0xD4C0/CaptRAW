@@ -274,6 +274,7 @@ export interface EditDocument {
   inputProfileAsset?:{id:string;path:string;bytes:number};
 }
 export type InputKind='mosaic-raw'|'linear-raw'|'rendered';
+export type SourceColorDeclaration='raw'|'embedded-icc'|'format-srgb'|'unspecified';
 export interface EffectiveGeometry {
   readonly rotation:number;readonly angle:number;
   readonly effectiveFill?:boolean; // Native full-profile projection, never an editable recipe field.
@@ -300,6 +301,8 @@ export interface ImageSession {
   needsNativeSave?:boolean;
   baselineVersion?:4;whiteBalancePresets?:{id:string;name:string}[];
   inputProfiles?:InputProfileOption[];
+  inputColorDeclaration?:SourceColorDeclaration;
+  inputColorNeedsConfirmation?:boolean;
   cameraCrop?:Adjustments['crop'];
   aperture?:number;shutter?:number;focalLength?:number;exposureCompensation?:number;
 }
@@ -322,7 +325,7 @@ export interface RepairSourceResult {
 export interface StraightenResult {angle:number;axis:'horizontal'|'vertical';previousAngle:number;residualDegrees:number}
 export interface MaskPreview {id:string;url:string;x:number;y:number;width:number;height:number}
 // Relative white is 1; this transport alone does not certify HDR presentation.
-export interface LinearPreview {url:string;width:number;height:number;rowBytes:number;encoding:'rgba16float-le';colorSpace:'rec709-linear';histogram?:{bins:number[][];headroom:number;below:number[];above:number[]}}
+export interface LinearPreview {url:string;width:number;height:number;rowBytes:number;encoding:'rgba16float-le';colorSpace:'rec709-linear'|'display-p3-linear'|'display-p3';outputProfile?:'srgb'|'adobe-rgb'|'prophoto-rgb'|'display-p3'|'rec2020';histogram?:{bins:number[][];headroom:number;below:number[];above:number[]}}
 export type ComparisonLayout = 'off'|'left-right'|'top-bottom'|'split-vertical'|'split-horizontal';
 export type ComparisonGeometry = Pick<Adjustments,'rotation'|'flipHorizontal'|'flipVertical'|'fineRotation'|'perspective'|'crop'|'lensCorrections'|'lensProfile'|'lensManualDistortion'>;
 export interface ComparisonSettings {adjustments:Adjustments;artProfile:string;geometry:ComparisonGeometry}
@@ -396,7 +399,8 @@ export interface CaptRAWAPI {
   droppedFiles(files: File[]): string[];
   open(path: string,expectedSource?:SourceIdentity): Promise<ImageSession>;
   update(sessionId: string, revision: number, adjustments: Adjustments, artProfile?: string, maskId?:string, luminance?:boolean,colorSampling?:boolean): Promise<{ artProfile: string; lensStatus:LensProfileStatus;geometry?:EffectiveGeometry }>;
-  comparison(sessionId:string,revision:number,settings:ComparisonSettings|null,linearPreview?:boolean):Promise<void>;
+  previewOutput(sessionId:string,revision:number,colorSpace:OutputColorSpace|null):Promise<void>;
+  comparison(sessionId:string,revision:number,settings:ComparisonSettings|null,linearPreview?:boolean,monitorSpace?:LinearPreview['colorSpace']):Promise<void>;
   comparisonViewport(sessionId:string,revision:number,x:number,y:number,width:number,height:number):Promise<void>;
   viewport(sessionId: string, revision: number, x: number, y: number, width: number, height: number): Promise<void>;
   coordinates(sessionId:string,revision:number,from:CoordinateSpace,to:CoordinateSpace,points:{x:number;y:number}[],referenceAngle?:number,geometryReference?:MaskGeometryReference|'current'):Promise<CoordinateMapping>;

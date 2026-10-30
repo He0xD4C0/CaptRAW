@@ -9,7 +9,7 @@ struct LinearPixels {
     int width, height;
     std::vector<uint16_t> rgba;
 };
-LinearPixels linearPixels(art::engine::Imagefloat &,const art::engine::procparams::ColorManagementParams &,int x,int y,int width,int height);
+LinearPixels linearPixels(art::engine::Imagefloat &,const art::engine::procparams::ColorManagementParams &,int x,int y,int width,int height,const std::string &colorSpace="rec709-linear",const std::string &outputPreview="");
 void writeLinearPixels(const LinearPixels &,const std::string &file,int x,int y,int width,int height);
 struct HDRHistogram {
     std::array<std::array<uint32_t,512>,3> bins{};

@@ -41,7 +41,7 @@ export function registerComparisonIpc(ipc:IpcMain,runtime:MainRuntime){
       await verifySourceIdentity(current.path,current.sourceIdentity);
       if(worker!==runtime.comparisonEngine||current.id!==runtime.session?.id)return;
       const {rotation,flipHorizontal,flipVertical,fineRotation,perspective,crop,lensCorrections,lensProfile,lensManualDistortion}=p.settings.geometry;
-      await worker.call('update',{revision:p.revision,artProfile:p.settings.artProfile,linearPreview:!!p.linearPreview,adjustments:{...p.settings.adjustments,rotation,flipHorizontal,flipVertical,fineRotation,perspective,crop,lensCorrections,lensProfile,lensManualDistortion}});
+      await worker.call('update',{revision:p.revision,artProfile:p.settings.artProfile,linearPreview:!!p.linearPreview,monitorPreview:p.monitorSpace??'display-p3',adjustments:{...p.settings.adjustments,rotation,flipHorizontal,flipVertical,fineRotation,perspective,crop,lensCorrections,lensProfile,lensManualDistortion}});
     }catch(error){if(worker===runtime.comparisonEngine){runtime.stopComparison();throw error;}}
   });
   ipc.handle('comparison:viewport',async(_,p)=>{runtime.requireSession(p.sessionId);const worker=runtime.comparisonEngine;if(worker)await worker.call('viewport',p);});

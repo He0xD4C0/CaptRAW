@@ -100,7 +100,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
     std::unique_ptr<CurveSampler> curveSampler;
     std::atomic<bool> maskFailure{false};
     bool colorEnabled=false,samplingColor=false;std::unique_ptr<ae::Imagefloat> sampleColorCache;int colorX=0,colorY=0;
-    bool linearEnabled=false,linearFailure=false;Json fitLinear,detailLinear;
+    bool linearEnabled=false,linearFailure=false;std::string monitorSpace="rec709-linear",outputPreview;Json fitLinear,detailLinear;
     std::unique_ptr<LinearPixels> fullDetailLinear;
     bool luminanceEnabled=false,samplingLuminance=false;Json fitLuminance,detailLuminance;
     std::unique_ptr<ae::PlanarWhateverData<float>> fullDetailLuminance,sampleLuminanceCache;
@@ -144,7 +144,8 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         const auto file=cache+"/"+cacheId+"-linear-"+std::to_string(++frameSequence)+".rgba16f";
         try{writeLinearPixels(image,file,sx,sy,width,height);}
         catch(...){fs::remove(file);throw;}
-        (detailed?detailLinear:fitLinear)={{"file",file},{"width",width},{"height",height},{"rowBytes",width*8},{"encoding","rgba16float-le"},{"colorSpace","rec709-linear"}};
+        (detailed?detailLinear:fitLinear)={{"file",file},{"width",width},{"height",height},{"rowBytes",width*8},{"encoding","rgba16float-le"},{"colorSpace",monitorSpace}};
+        if(!outputPreview.empty())(detailed?detailLinear:fitLinear)["outputProfile"]=outputPreview;
         if(params.toneCurve.whitePoint>1.){
             const double headroom=std::log2(params.toneCurve.whitePoint);const auto histogram=linearHistogram(image,sx,sy,width,height,headroom);
             (detailed?detailLinear:fitLinear)["histogram"]={{"bins",histogram.bins},{"headroom",headroom},{"below",histogram.below},{"above",histogram.above}};
@@ -152,7 +153,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
     }
     void floatPreviewReady(ae::Imagefloat &image,int,int,int sx,int sy,int width,int height,bool detailed)override{
         try{
-            auto pixels=linearPixels(image,params.icm,sx,sy,width,height);
+            auto pixels=linearPixels(image,params.icm,sx,sy,width,height,monitorSpace,outputPreview);
             if(detailed&&fullDetailContext()){
                 fullDetailLinear=std::make_unique<LinearPixels>(std::move(pixels));
                 linearWindow(*fullDetailLinear,true,dx,dy,dw,dh);
@@ -417,10 +418,14 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
             if(dcp&&!dcp->getCameraModel().empty())profileCamera=dcp->getCameraModel();
         }
         Json result={{"sourceFrame",documentFrame},{"lensCatalog",lensCatalog()},{"lensStatus",lensStatus()},{"cameraCrop",cameraCrop},{"inputProfiles",profileOptions},{"baselineVersion",4},{"whiteBalancePresets",options},{"id",id},{"path",path},{"name",fs::path(path).filename().string()},
-            {"width",baseWidth},{"height",baseHeight},{"inputKind",classifyInputKind(*initial->getImageSource())},{"camera",md->getCamera()},{"profileCamera",profileCamera},{"lens",md->getLens()},
+            {"width",baseWidth},{"height",baseHeight},{"inputKind",classifyInputKind(*initial->getImageSource())},{"inputColorDeclaration",frameSource->isRAW()?"raw":frameSource->getEmbeddedProfile()?"embedded-icc":"unspecified"},{"camera",md->getCamera()},{"profileCamera",profileCamera},{"lens",md->getLens()},
             {"iso",md->getISOSpeed()},{"aperture",md->getFNumber()},{"shutter",md->getShutterSpeed()},{"focalLength",md->getFocalLen()},{"exposureCompensation",md->getExpComp()},{"adjustments",adjustments},{"effectiveGeometry",geometryProjection(params)},{"artProfile",profileText(params)}};
         // ART's metadata wrapper rejects images without EXIF before reading XMP.
         auto metadata=Exiv2::ImageFactory::open(path);metadata->readMetadata();const auto &xmp=metadata->xmpData();
+        if(result.at("inputColorDeclaration")=="unspecified"){
+            const auto colorSpace=metadata->exifData().findKey(Exiv2::ExifKey("Exif.Photo.ColorSpace"));
+            if(colorSpace!=metadata->exifData().end()&&colorSpace->toInt64()==1)result["inputColorDeclaration"]="format-srgb";
+        }
         const auto entry=xmp.findKey(Exiv2::XmpKey("Xmp.xmp.Rating"));
         if(entry!=xmp.end()){
             std::istringstream value(entry->toString());value.imbue(std::locale::classic());double rating=0;
@@ -433,6 +438,10 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
     Json update(const Json &a,bool before=false){
         if(!processor)throw std::runtime_error("No image is open");
         if(a.contains("linearPreview")&&!a.at("linearPreview").is_boolean())throw std::runtime_error("Invalid float preview request");
+        const auto requestedMonitor=a.value("monitorPreview",std::string());
+        if(!requestedMonitor.empty()&&requestedMonitor!="display-p3"&&requestedMonitor!="display-p3-linear"&&requestedMonitor!="rec709-linear")throw std::runtime_error("Invalid monitor color space");
+        const auto requestedOutputPreview=a.value("outputPreview",std::string());
+        if(!requestedOutputPreview.empty()&&requestedOutputPreview!="srgb"&&requestedOutputPreview!="adobe-rgb"&&requestedOutputPreview!="prophoto-rgb"&&requestedOutputPreview!="display-p3"&&requestedOutputPreview!="rec2020")throw std::runtime_error("Invalid output preview color space");
         processor->stopProcessing();curveSampler.reset();revision=a.at("revision");kind=before?"before":"fit";
         const Json previous=adjustments;
         const auto previousGrading=params.captrawGrading;
@@ -486,7 +495,7 @@ struct Engine::Impl: ae::PreviewImageListener,ae::DetailedCropListener,ae::Progr
         if(!luminanceEnabled||fingerprint!=luminanceFingerprint){sampleLuminanceCache.reset();fitLuminance=nullptr;detailLuminance=nullptr;}
         luminanceFingerprint=fingerprint;
         fullDetailImage.reset();fullDetailCoverage.reset();fullDetailLuminance.reset();
-        fullDetailLinear.reset();linearEnabled=!before&&(params.toneCurve.captrawHDREditMode||a.value("linearPreview",false));linearFailure=false;fitLinear=nullptr;detailLinear=nullptr;
+        fullDetailLinear.reset();monitorSpace=requestedMonitor.empty()||params.toneCurve.captrawHDREditMode?"rec709-linear":requestedMonitor;outputPreview=params.toneCurve.captrawHDREditMode?std::string():requestedOutputPreview;linearEnabled=!before&&(params.toneCurve.captrawHDREditMode||a.value("linearPreview",false)||!requestedMonitor.empty());linearFailure=false;fitLinear=nullptr;detailLinear=nullptr;
         const auto previousMask=selectedMask;selectedMask=before?std::string():a.value("maskId",std::string());
         if(selectedMask!=previousMask||previous["masks"]!=adjustments["masks"]||previous["rotation"]!=adjustments["rotation"]||previous.value("fineRotation",Json())!=adjustments.value("fineRotation",Json())||previous.value("perspective",Json())!=adjustments.value("perspective",Json())){fitMask=nullptr;detailMask=nullptr;}
         const bool flipsChanged=previous.value("flipHorizontal",Json())!=adjustments.value("flipHorizontal",Json())||previous.value("flipVertical",Json())!=adjustments.value("flipVertical",Json());

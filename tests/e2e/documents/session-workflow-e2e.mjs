@@ -18,7 +18,7 @@ async function idle(){
  await expect(page.getByRole('button',{name:'打开',exact:true})).toBeEnabled();
  await expect(page.locator('.workbench')).not.toHaveAttribute('inert','');
  await page.locator('.rendering').waitFor({state:'hidden'});
- await page.waitForFunction(()=>document.querySelector('canvas')?.dataset.frame===window.__frames.filter(f=>f.kind==='fit').at(-1)?.url);
+ await page.waitForFunction(()=>document.querySelector('canvas[aria-label="显影预览"]')?.dataset.frame===window.__frames.filter(f=>f.kind==='fit').at(-1)?.url);
 }
 async function select(i){await idle();await photo(i).locator('.film-open').click();await expect(photo(i).locator('.film-open')).toHaveAttribute('aria-current','true');await idle();}
 async function value(name,v){await idle();await input(name).fill(String(v));await input(name).press('Tab');await idle();await expect(input(name)).toHaveValue(String(v));}
@@ -27,7 +27,7 @@ async function open(){
  await page.getByRole('button',{name:'打开',exact:true}).click();await expect(page.locator('.film-item')).toHaveCount(files.length);await idle();
 }
 async function save(){await page.getByRole('button',{name:'保存',exact:true}).click();await idle();await expect(page.locator('.document-title .dirty-dot')).toHaveCount(0);}
-const pixels=async()=>createHash('sha256').update(await page.locator('canvas').evaluate(c=>c.toDataURL())).digest('hex');
+const pixels=async()=>createHash('sha256').update(await page.locator('canvas[aria-label="显影预览"]').evaluate(c=>c.toDataURL())).digest('hex');
 async function selected(){await select(0);await photo(1).locator('.film-open').click({modifiers:['Shift']});await expect(page.locator('.film-open[aria-pressed=true]')).toHaveCount(2);}
 async function saveSelected(){await page.getByRole('button',{name:'保存所选…',exact:true}).click();const d=page.getByRole('dialog',{name:'保存照片编辑',exact:true});await expect(d.getByRole('button',{name:'返回编辑',exact:true})).toBeVisible();await d.getByRole('button',{name:'返回编辑',exact:true}).click();await idle();}
 try{

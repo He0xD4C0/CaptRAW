@@ -27,7 +27,8 @@ export class LinearCanvas {
    const context=canvas.getContext('webgpu');if(!context||!('configure' in context))throw new Error('无法创建浮点画布。');
    context.configure({device,format:'rgba16float',colorSpace:'srgb',alphaMode:'premultiplied',toneMapping:{mode:'extended'},usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
    configured=context;
-   if(context.getConfiguration()?.toneMapping?.mode!=='extended')throw new Error('当前图形环境不接受扩展范围画布。');
+   const configuration=context.getConfiguration();
+   if(configuration?.format!=='rgba16float'||configuration.colorSpace!=='srgb'||configuration.toneMapping?.mode!=='extended')throw new Error('当前图形环境未接受请求的浮点色彩配置。');
    const module=device.createShaderModule({code:shader}),info=await module.getCompilationInfo();if(info.messages.some(m=>m.type==='error'))throw new Error(info.messages.map(m=>m.message).join('\n'));
    const pipeline=await device.createRenderPipelineAsync({layout:'auto',vertex:{module,entryPoint:'vs'},fragment:{module,entryPoint:'fs',targets:[{format:'rgba16float'}]}}),renderer=new LinearCanvas(canvas,context,device,pipeline);
    void device.lost.then(info=>{if(!renderer.disposed)lost(info.message||'图形设备已断开。');});device.addEventListener('uncapturederror',event=>{event.preventDefault();if(!renderer.disposed)lost(event.error.message);});return renderer;
@@ -57,8 +58,27 @@ export class LinearCanvas {
     pass.setBindGroup(0,this.device.createBindGroup({layout:this.pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:texture.createView()},{binding:1,resource:{buffer:uniform}}]}));pass.draw(3);
    };
    for(const {pane,fit,detail} of textures){draw(fit,pane.destination,pane.clip,false);if(detail&&pane.detail){const f=pane.detail,scaleX=pane.destination.width/pane.frame.fullWidth,scaleY=pane.destination.height/pane.frame.fullHeight;draw(detail,{x:pane.destination.x+(f.x||0)*scaleX,y:pane.destination.y+(f.y||0)*scaleY,width:f.width*scaleX,height:f.height*scaleY},pane.clip,true);}}
-   pass.end();this.device.queue.submit([encoder.finish()]);for(const buffer of buffers)buffer.destroy();return true;
+   pass.end();this.device.queue.submit([encoder.finish()]);for(const buffer of buffers)buffer.destroy();await this.device.queue.onSubmittedWorkDone();return !this.disposed&&serial===this.serial;
   }catch(error){if(this.disposed||serial!==this.serial)return false;throw error;}
  }
  destroy(){this.disposed=true;++this.serial;for(const entry of this.cache.values()){entry.abort.abort();entry.texture?.destroy();}this.cache.clear();if(this.context.getConfiguration()?.device===this.device)this.context.unconfigure();this.device.destroy();}
+}
+
+// The deployed browser supports these standard float16 2D members; the pinned
+// DOM type package has not included the colorType/Float16Array overload yet.
+export const P3_CONTEXT={colorSpace:'display-p3',colorType:'float16'} as const;
+export function isFloatP3Context(context:CanvasRenderingContext2D){
+ const attributes=context.getContextAttributes() as CanvasRenderingContext2DSettings&{colorType?:string};
+ return attributes.colorSpace==='display-p3'&&attributes.colorType==='float16';
+}
+export async function loadFloatP3(frame:PreviewFrame,signal:AbortSignal){
+ const plane=frame.linear;
+ if(!plane||plane.colorSpace!=='display-p3'||plane.encoding!=='rgba16float-le'||plane.width!==frame.width||plane.height!==frame.height||plane.rowBytes!==frame.width*8)throw new Error('浮点 P3 帧描述无效。');
+ const response=await fetch(plane.url,{signal});if(!response.ok)throw new Error('浮点预览已失效，请重试。');
+ const bytes=await response.arrayBuffer();if(bytes.byteLength!==plane.rowBytes*plane.height)throw new Error('浮点帧大小不匹配。');
+ const canvas=document.createElement('canvas');canvas.width=plane.width;canvas.height=plane.height;
+ const context=canvas.getContext('2d',P3_CONTEXT) as CanvasRenderingContext2D|null;if(!context||!isFloatP3Context(context))throw new Error('当前图形环境未接受 P3 半浮点画布。');
+ const FloatImageData=ImageData as unknown as {new(data:Float16Array<ArrayBuffer>,width:number,height:number,settings:ImageDataSettings):ImageData};
+ context.putImageData(new FloatImageData(new Float16Array(bytes),plane.width,plane.height,{colorSpace:'display-p3',pixelFormat:'rgba-float16'}),0,0);
+ return canvas;
 }

@@ -4,7 +4,15 @@
 </h1>
 <p align="center">An open-source RAW development workbench for macOS</p>
 
-[简体中文](docs/README.md) · [GPL-3.0-or-later](LICENSE) · [Contributing](CONTRIBUTING.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Security](SECURITY.md) · [Governance](GOVERNANCE.md)
+<p align="center">
+  <a href="LICENSE">GPL-3.0-or-later</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="CODE_OF_CONDUCT.md">Code of Conduct</a> ·
+  <a href="SECURITY.md">Security</a> ·
+  <a href="GOVERNANCE.md">Governance</a>
+</p>
+
+> 中文 `README.md` 自述文件在 [这里](docs/README_ZH.md) ！
 
 CaptRAW uses a local native core to process RAW files. It provides non-destructive editing, multi-image sessions, masks, geometry correction, presets, comparison tools, and high-quality export. Photos and edit recipes stay on your machine, and the product does not require cloud services or network access.
 
@@ -13,15 +21,15 @@ CaptRAW uses a local native core to process RAW files. It provides non-destructi
 | Item | Version | Status |
 |---|---|---|
 | Published installation baseline | 0.64 | DMG, source archive, and acceptance identity registered |
-| Installation-experience candidate | `0.65.0-beta.1` / `dfce261b10a49bb1` | Native editing workflow delivered; software color pipeline and visible acceptance remain pending |
+| Installation-experience candidate | `0.66.0-beta.1` / `047645006a542a92` | Trustworthy color pipeline and scoped macOS photography workflow delivered; full ACR replacement remains future work |
 
-The [macOS closeout ledger](docs/CLOSEOUT.md) defines the current development and acceptance scope. Installation, signing, hashes, and prior acceptance evidence for 0.64 are recorded in the [acceptance log](docs/ACCEPTANCE.md). Earlier ACR research and acceptance records are retained for traceability only; they do not mean that the current source has completed the new color pipeline.
+The [macOS closeout ledger](docs/CLOSEOUT.md) defines the current development and acceptance scope. Installation, signing, hashes, and prior acceptance evidence are recorded in the [acceptance log](docs/ACCEPTANCE.md). Earlier ACR research and acceptance records are retained for traceability only.
 
 The current acceptance target is **macOS 26.0+ on Apple Silicon**. Native builds and product acceptance are not yet implemented for Windows or Linux. See the [platform notes](docs/PLATFORMS.md) for the current boundary.
 
 ### Storage differences between the released build and current source
 
-| Item | Released 0.64 | Current 0.65 source |
+| Item | Released 0.64 | Current 0.66 source |
 |---|---|---|
 | Edit sidecar | CaptRAW XMP | `.captraw` |
 | Adobe XMP | Read and write | Import source only; source XMP is not overwritten |
@@ -32,20 +40,20 @@ The current acceptance target is **macOS 26.0+ on Apple Silicon**. Native builds
 
 ## Features
 
-- Local RAW development: white balance, exposure, curves, HSL, color grading, detail, lens, and output color configuration.
+- Local RAW development: white balance, exposure, curves, HSL, color grading, detail, lens, and output color configuration, with a managed float Display P3 SDR monitor path.
 - Multi-image workflows: filmstrip, grid, multi-selection, synchronization, per-image undo, batch save, and batch export.
 - Masks and repair: brush, linear and radial gradients, color and luminance ranges, object and person-part selection, local adjustments, and repair spots.
 - Geometry correction: crop, rotation, straightening, perspective, guided lines, and lens correction.
 - Presets and comparison: preset strength, hover preview, favorites, before/after comparison, and multiple split-comparison layouts.
-- Output: JPEG and 16-bit TIFF with ICC profiles, plus experimental HDR AVIF in the current source.
+- Output: JPEG and 16-bit TIFF with ICC profiles and selectable target-gamut preview, plus experimental HDR AVIF in the current source.
 
-CaptRAW may use algorithms that differ from Adobe Camera Raw and does not promise identical parameters, functions, or pixels. Unfinished HDR, color-pipeline, and ACR alignment boundaries are documented in [HDR](docs/HDR.md), [color grading](docs/COLOR-GRADING.md), and [ACR parity](docs/ACR-PARITY.md).
+CaptRAW may use algorithms that differ from Adobe Camera Raw and does not promise identical parameters, functions, or pixels. HDR and remaining ACR alignment boundaries are documented in [HDR](docs/HDR.md), [color grading](docs/COLOR-GRADING.md), and [ACR parity](docs/ACR-PARITY.md).
 
 ## Install and use
 
-Installation-experience candidate: [0.65.0-beta.1 DMG](release/0.65.0-beta.1/CaptRAW-0.65.0-beta.1-arm64.dmg). The matching source, dependency licenses, and evidence are in the same directory. The local copy is `~/Applications/CaptRAW-0.65.0-beta.1.app`. The stable installation baseline remains available as `release/CaptRAW-0.64.0-arm64.dmg` and `~/Applications/CaptRAW-0.64.app`.
+Installation-experience candidate: [0.66.0-beta.1 DMG](release/0.66.0-beta.1/CaptRAW-0.66.0-beta.1-arm64.dmg). The matching source, dependency licenses, and evidence are in the same directory. The local copy is `~/Applications/CaptRAW-0.66.0-beta.1.app`. The stable installation baseline remains available as `release/CaptRAW-0.64.0-arm64.dmg` and `~/Applications/CaptRAW-0.64.app`.
 
-0.64 is ad-hoc signed and has no Developer ID signature or Apple notarization. A successful local installation does not establish Gatekeeper acceptance on another machine or human-visible workflow acceptance. `0.65.0-beta.1` is an installation-experience candidate; color-pipeline and visible acceptance remain pending.
+0.64 and 0.66 are ad-hoc signed and have no Developer ID signature or Apple notarization. A successful local installation does not establish Gatekeeper acceptance on another machine. `0.66.0-beta.1` closes the approved macOS color and workflow scope; it is not a claim of complete ACR parity.
 
 Primary menu shortcuts in the current source:
 

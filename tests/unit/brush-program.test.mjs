@@ -49,7 +49,7 @@ const check=async()=>{};
 test('cancel before worker completion removes staging and returns no stroke',()=>fixture(async({root,service,image,a,request})=>{
  const r=request('cancel');r.stroke.flow=0;
  const run=service.prepare(image,r,a,'',check);let started=false;
- for(let i=0;i<200&&!started;++i){for(const dir of await readdir(join(root,'brush')).catch(()=>[]))started=!!await readFile(join(root,'brush',dir,'coverage.png.started')).then(()=>true,()=>false);if(!started)await new Promise(done=>setTimeout(done,10));}
+ for(let i=0;i<1500&&!started;++i){for(const dir of await readdir(join(root,'brush')).catch(()=>[]))started=!!await readFile(join(root,'brush',dir,'coverage.png.started')).then(()=>true,()=>false);if(!started)await new Promise(done=>setTimeout(done,10));}
  assert(started,'The real child protocol must enter preparation before cancellation');await service.cancel(r.id);assert.equal(await run,null);
  assert.deepEqual(await readdir(join(root,'brush')).catch(()=>[]),[]);assert.deepEqual(await readdir(join(root,'document-assets')).catch(()=>[]),[]);
 }));

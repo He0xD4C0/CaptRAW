@@ -1,81 +1,96 @@
-# 参与 CaptRAW 开发
+# Contributing to CaptRAW
 
-感谢你参与 CaptRAW。提交代码、文档、测试、翻译、设计或其他可纳入仓库
-的作品前，请先阅读本指南。
+[简体中文](docs/CONTRIBUTING_ZH.md) · English
 
-## 许可与贡献认证
+Thank you for contributing to CaptRAW. Please read this guide before submitting
+code, documentation, tests, translations, designs, or other work intended for
+the repository.
 
-CaptRAW 以 `GPL-3.0-or-later` 发布。你提交的贡献默认以相同许可证提供。
-项目采用 [Developer Certificate of Origin 1.1](DCO)，不要求版权转让。
+## Licensing and contributor certification
 
-每个普通提交都必须由提交者认证，并使用真实可识别的作者身份添加签署行：
+CaptRAW is released under `GPL-3.0-or-later`. By default, your contributions
+are provided under the same license. The project uses the
+[Developer Certificate of Origin 1.1](DCO) and does not require a copyright
+assignment.
+
+Every regular commit must be certified by its author with a sign-off using a
+real, identifiable author identity:
 
 ```sh
 git commit -s -m "feat: describe the change"
 ```
 
-签署行必须与提交作者一致：
+The sign-off must match the commit author:
 
 ```text
 Signed-off-by: Your Name <your-email@example.com>
 ```
 
-忘记签署时可修正当前提交：
+To add a missing sign-off to the current commit:
 
 ```sh
 git commit --amend -s --no-edit
 ```
 
-多个提交可交互式重排并逐个补充签署。不要替其他贡献者签署，也不要提交
-无法确认来源或授权的代码、媒体、模型、字体和数据。
+For multiple commits, use an interactive rebase to add a sign-off to each
+commit. Do not sign on behalf of another contributor. Do not submit code,
+media, models, fonts, or data whose origin or licensing cannot be verified.
 
-## 新增第三方内容
+## Third-party material
 
-引入第三方代码或资源时，Pull Request 必须同时提供：
+When introducing third-party code or assets, the pull request must include:
 
-- 上游项目、固定版本或提交号，以及直链；
-- 精确许可证和必要的版权、专利或 NOTICE；
-- 文件校验值，以及测试或样本数据的来源；
-- 若改动上游文件，清楚说明修改内容并保留已有声明。
+- the upstream project, pinned version or commit, and a direct link;
+- the exact license and any required copyright, patent, or NOTICE material;
+- checksums and the source of tests or sample data;
+- if an upstream file is modified, a clear description of the changes and
+  preservation of existing notices.
 
-同步更新 `THIRD_PARTY.md` 和打包清单。来源不明或许可证不兼容的内容不得合入。
+Update `THIRD_PARTY.md` and the packaging inventory at the same time. Material
+with an unknown source or an incompatible license must not be merged.
 
-新增 CaptRAW 自有源码文件应包含：
+New CaptRAW source files must include:
 
 ```text
 SPDX-License-Identifier: GPL-3.0-or-later
 ```
 
-现有文件的历史版权头不做批量改写。
+Do not bulk-rewrite historical copyright headers in existing files.
 
-## 开发与验证
+## Development and verification
 
-环境、原生依赖和完整构建说明见 [README.md](README.md)。常用检查：
+See [README.md](README.md) for environment setup, native dependencies, and
+full build instructions. Common checks:
 
 ```sh
 pnpm install --frozen-lockfile
 pnpm ci:check
 ```
 
-涉及原生核心、显示、导出或用户交互时，还应运行对应的集成、原生或 E2E
-检查。测试必须使用临时目录并清理中间产物；提交中只保留可复现夹具和
-明确交付物。
+When changing the native core, display pipeline, export path, or user
+interaction, also run the relevant integration, native, or E2E checks. Tests
+must use temporary directories and clean up intermediate files. Commits should
+retain only reproducible fixtures and explicit deliverables.
 
-Pull Request 应保持范围集中，说明问题、行为变化、测试结果、许可证影响
-和仍需人工确认的事项。界面改动需要实际打开并操作对应控件，不能只证明
-内部函数可调用。
+Pull requests should stay focused and explain the problem, behavioral changes,
+test results, licensing impact, and anything that still requires human
+confirmation. Interface changes must be opened and exercised through the
+affected controls; proving that an internal function can be called is not
+enough.
 
-## 分支与合入
+## Branches and merging
 
-1. 从最新 `main` 创建分支，不使用主分支直接开发。
-2. 保持提交可独立审查，并为每个普通提交添加 DCO 签署。
-3. 提交 Pull Request，修复 CI、类型检查、测试和审查意见。
-4. 维护者使用 **Rebase and merge** 合入，保留线性历史及提交签署。
+1. Create a branch from the latest `main`; do not develop directly on the main branch.
+2. Keep commits independently reviewable and add a DCO sign-off to every regular commit.
+3. Open a pull request and resolve CI, type-check, test, and review findings.
+4. Maintainers use **Rebase and merge** to preserve a linear history and commit sign-offs.
 
-主分支要求 Pull Request、CI、DCO 和代码所有者审查。禁止强推或删除
-`main`。紧急绕行必须由维护者明确说明原因。
+The main branch requires a pull request, CI, DCO, and code-owner review. Force
+pushing or deleting `main` is prohibited. Any emergency exception must be
+explicitly justified by a maintainer.
 
-## 行为与安全
+## Conduct and security
 
-交流遵循 [行为准则](CODE_OF_CONDUCT.md)。安全漏洞不要公开披露，按
-[安全政策](SECURITY.md) 私密报告。
+All communication follows the [Code of Conduct](CODE_OF_CONDUCT.md). Do not
+disclose security vulnerabilities publicly; report them privately as described
+in the [security policy](SECURITY.md).

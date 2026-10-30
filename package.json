@@ -1,6 +1,6 @@
 {
   "name": "captraw",
-  "version": "0.65.0-beta.1",
+  "version": "0.66.0-beta.1",
   "private": true,
   "description": "A local, non-destructive RAW development workbench",
   "license": "GPL-3.0-or-later",
@@ -87,7 +87,7 @@
       "minimumSystemVersion": "26.0.0"
     },
     "dmg": {
-      "title": "CaptRAW 0.65.0-beta.1"
+      "title": "CaptRAW 0.66.0-beta.1"
     }
   }
 }

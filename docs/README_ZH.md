@@ -4,7 +4,15 @@
 </h1>
 <p align="center">macOS 上的开源 RAW 显像工作台</p>
 
-[English](../README.md) · [GPL-3.0-or-later](../LICENSE) · [参与贡献](../CONTRIBUTING.md) · [行为准则](../CODE_OF_CONDUCT.md) · [安全政策](../SECURITY.md) · [项目治理](../GOVERNANCE.md)
+<p align="center">
+  <a href="../LICENSE">GPL-3.0-or-later</a> ·
+  <a href="CONTRIBUTING_ZH.md">贡献指南</a> ·
+  <a href="../CODE_OF_CONDUCT.md">贡献者公约</a> ·
+  <a href="SECURITY_ZH.md">安全策略</a> ·
+  <a href="GOVERNANCE_ZH.md">治理章程</a>
+</p>
+
+> Find [English Version](../README.md) here.
 
 CaptRAW 使用本地原生核心处理 RAW，提供非破坏编辑、多图会话、蒙版、几何校正、预设、比较和高质量导出。照片与编辑配方保留在本机，产品运行不依赖云服务或网络。
 
@@ -13,15 +21,15 @@ CaptRAW 使用本地原生核心处理 RAW，提供非破坏编辑、多图会�
 | 对象 | 版本 | 状态 |
 |---|---|---|
 | 已发布安装基线 | 0.64 | 已登记 DMG、源码归档和验收身份 |
-| 安装体验候选 | `0.65.0-beta.1`／`dfce261b10a49bb1` | 原生编辑闭环已交付；软件色彩链路与人工可见验收待完成 |
+| 安装体验候选 | `0.66.0-beta.1`／`047645006a542a92` | 可信色彩链路与冻结范围内的 macOS 摄影工作流已交付；完整 ACR 替代仍属后续目标 |
 
-当前施工与验收范围以 [macOS 收尾账本](CLOSEOUT.md) 为准。0.64 的安装、签名、哈希与既有验收记录见 [验收记录](ACCEPTANCE.md)。旧对齐研究和历史验收仅作追溯，不代表当前源码已经完成新色彩链路。
+当前施工与验收范围以 [macOS 收尾账本](CLOSEOUT.md) 为准。安装、签名、哈希与既有验收记录见 [验收记录](ACCEPTANCE.md)。旧对齐研究和历史验收仅作追溯。
 
 当前验收平台为 **macOS 26.0+ / Apple Silicon**。Windows 和 Linux 尚未实现原生构建与产品验收，平台边界见 [适配说明](PLATFORMS.md)。
 
 ### 安装版与源码的格式差异
 
-| 项目 | 已发布 0.64 | 当前 0.65 源码 |
+| 项目 | 已发布 0.64 | 当前 0.66 源码 |
 |---|---|---|
 | 编辑旁车 | CaptRAW XMP | `.captraw` |
 | Adobe XMP | 读取和写回 | 仅作为导入来源，不覆盖源文件 |
@@ -32,20 +40,20 @@ CaptRAW 使用本地原生核心处理 RAW，提供非破坏编辑、多图会�
 
 ## 功能
 
-- 本地 RAW 显影：白平衡、曝光、曲线、HSL、颜色分级、细节、镜头与输出色彩配置。
+- 本地 RAW 显影：白平衡、曝光、曲线、HSL、颜色分级、细节、镜头与输出色彩配置，并提供受管理浮点 Display P3 SDR 监看。
 - 多图工作流：胶片条、网格、多选、同步、逐图撤销、批量保存与导出。
 - 蒙版与修复：画笔、线性与径向渐变、颜色 / 亮度范围、对象与人物部位选择、局部调整和修复点。
 - 几何校正：裁切、旋转、拉直、透视、引导线和镜头校正。
 - 预设与比较：预设强度、悬停预览、收藏、前后比较和多种分割对比。
-- 输出：带 ICC 的 JPEG、16 位 TIFF，以及当前源码中的实验性 HDR AVIF。
+- 输出：带 ICC 的 JPEG、16 位 TIFF 和目标色域 proof 预览，以及当前源码中的实验性 HDR AVIF。
 
-算法允许采用与 Adobe Camera Raw 不同的实现，不承诺同参数、同函数或同像素结果。HDR、色彩链路和 ACR 对照的未完成边界分别见 [HDR 文档](HDR.md)、[色彩分类](COLOR-GRADING.md) 和 [ACR 对齐记录](ACR-PARITY.md)。
+算法允许采用与 Adobe Camera Raw 不同的实现，不承诺同参数、同函数或同像素结果。HDR 和其余 ACR 对照边界见 [HDR 文档](HDR.md)、[色彩分类](COLOR-GRADING.md) 和 [ACR 对齐记录](ACR-PARITY.md)。
 
 ## 安装与使用
 
-安装体验候选：[0.65.0-beta.1 DMG](../release/0.65.0-beta.1/CaptRAW-0.65.0-beta.1-arm64.dmg)。对应源码、依赖许可和证据位于同目录；本机副本为 `~/Applications/CaptRAW-0.65.0-beta.1.app`。稳定安装基线 `../release/CaptRAW-0.64.0-arm64.dmg` 和 `~/Applications/CaptRAW-0.64.app` 保留。
+安装体验候选：[0.66.0-beta.1 DMG](../release/0.66.0-beta.1/CaptRAW-0.66.0-beta.1-arm64.dmg)。对应源码、依赖许可和证据位于同目录；本机副本为 `~/Applications/CaptRAW-0.66.0-beta.1.app`。稳定安装基线 `../release/CaptRAW-0.64.0-arm64.dmg` 和 `~/Applications/CaptRAW-0.64.app` 保留。
 
-0.64 使用 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证。本机安装通过不代表其他机器的 Gatekeeper 或人工可见工作流通过。0.65.0-beta.1 为安装体验候选，色彩链路与人工可见验收尚未完成。
+0.64 和 0.66 使用 ad-hoc 签名，没有 Developer ID 签名和 Apple 公证。本机安装通过不代表其他机器的 Gatekeeper。`0.66.0-beta.1` 完成本轮批准的 macOS 色彩与工作流范围，不宣称完整 ACR 同级。
 
 当前源码的主要菜单入口：
 
@@ -127,6 +135,6 @@ CI 不构建 DMG、不发布 Release。工作流配置、本地开发构建、�
 
 ## 许可证与社区
 
-项目采用 [GPL-3.0-or-later](../LICENSE)，版权与第三方声明见 [COPYRIGHT](../COPYRIGHT) 和 [THIRD_PARTY.md](../THIRD_PARTY.md)。参与开发前请阅读 [贡献指南](../CONTRIBUTING.md)、[行为准则](../CODE_OF_CONDUCT.md) 和 [安全政策](../SECURITY.md)；维护与决策规则见 [GOVERNANCE.md](../GOVERNANCE.md)。
+项目采用 [GPL-3.0-or-later](../LICENSE)，版权与第三方声明见 [COPYRIGHT](../COPYRIGHT) 和 [THIRD_PARTY.md](../THIRD_PARTY.md)。参与开发前请阅读 [贡献指南](CONTRIBUTING_ZH.md)、[行为准则](../CODE_OF_CONDUCT.md) 和 [安全政策](SECURITY_ZH.md)；维护与决策规则见 [GOVERNANCE_ZH.md](GOVERNANCE_ZH.md)。
 
 完整历史版本记录见 [CHANGELOG.md](../CHANGELOG.md)。当前功能变更应以代码、测试和收尾账本为准。

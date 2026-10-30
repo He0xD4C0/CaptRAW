@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Aperture, FolderOpen, Maximize, Scan } from 'lucide-react';
+import {OUTPUT_COLOR_SPACES} from '@captraw/contracts';
 import type { Adjustments, BrushSettings, LocalMask, Point, PreviewFrame, ObjectPrompt, ObjectBox, ComparisonLayout,ImageSession } from '@captraw/contracts';
 import { canvasPoint, imagePoint, imageTransform, visibleImageRegion, rotatePoint, rotateCrop, cropHandles, cropHandlePoint, drawCrop,resizeCrop,moveCrop,type CropHandle,type CropRect,type CanvasEditTransaction } from '../lib/geometry';
 import {useMaskGesture,type MaskEditTransaction,type MaskHandle} from '../hooks/useMaskGesture';
@@ -8,7 +9,7 @@ import {useRepairGesture,type RepairInteraction} from '../hooks/useRepairGesture
 import {mappedRepairGuide,repairSourcePoint,repairDustPixels,type RepairGuide} from '../lib/repairGeometry';
 import type {useGuidedPerspective} from '../hooks/useGuidedPerspective';
 import {useStraightenGesture} from '../hooks/useStraightenGesture';
-import {LinearCanvas,type LinearPane,type ImageRect} from '../lib/LinearCanvas';
+import {LinearCanvas,loadFloatP3,P3_CONTEXT,isFloatP3Context,type LinearPane,type ImageRect} from '../lib/LinearCanvas';
 import {useRangeGesture} from '../hooks/useRangeGesture';
 import {GuidedLoupe,loupeRegion} from './GuidedLoupe';
 export type Tool = 'object' | 'hand' | 'brush' | 'eraser' | 'linear' | 'radial' | 'crop' | 'straighten' | 'perspective' | 'white-balance' | 'repair' | 'luminance' | 'color' | 'curve';
@@ -37,7 +38,7 @@ interface Props {
 }
 export function Viewport(p: Props) {
   const container = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null);
-  const linearCanvas=useRef<HTMLCanvasElement>(null),[linearRenderer,setLinearRenderer]=useState<LinearCanvas>(),[linearReady,setLinearReady]=useState(''),[linearMessage,setLinearMessage]=useState(''),[linearRetry,setLinearRetry]=useState(0);
+  const linearCanvas=useRef<HTMLCanvasElement>(null),[linearRenderer,setLinearRenderer]=useState<LinearCanvas>(),[linearReady,setLinearReady]=useState<{key:string;frame:string;detail:string;before:string;beforeDetail:string;layout:string}>(),[linearMessage,setLinearMessage]=useState(''),[linearRetry,setLinearRetry]=useState(0);
   const [size,setSize] = useState({ width: 900,height: 700 });
   const [pixelRatio,setPixelRatio]=useState(devicePixelRatio);
   useEffect(()=>{const query=matchMedia(`(resolution: ${pixelRatio}dppx)`),changed=()=>setPixelRatio(devicePixelRatio);query.addEventListener('change',changed);window.addEventListener('resize',changed);return()=>{query.removeEventListener('change',changed);window.removeEventListener('resize',changed);};},[pixelRatio]);
@@ -76,22 +77,43 @@ export function Viewport(p: Props) {
     setLuminanceDetail(undefined);if(!p.luminanceMap||!p.detailFrame?.luminance)return;
     let valid=true;const img=new Image();img.crossOrigin='anonymous';img.onload=()=>{if(valid)setLuminanceDetail(img);};img.src=p.detailFrame.luminance.url;return()=>{valid=false;};
   },[p.luminanceMap,p.detailFrame?.luminance?.url]);
+  const [p3Images,setP3Images]=useState(()=>new Map<string,HTMLCanvasElement>()),[p3Message,setP3Message]=useState(''),[p3Retry,setP3Retry]=useState(0);
+  const p3Cache=useRef(new Map<string,{promise:Promise<HTMLCanvasElement>;abort:AbortController}>());
+  const p3Frames=[p.frame,p.detailFrame,p.comparison?.frame,p.comparison?.detail].filter((frame):frame is PreviewFrame=>frame?.linear?.colorSpace==='display-p3');
+  const p3Key=p3Frames.map(frame=>frame.linear!.url).join('|');
+  useEffect(()=>{
+    let alive=true;const wanted=new Set(p3Frames.map(frame=>frame.linear!.url));
+    for(const [url,entry] of p3Cache.current)if(!wanted.has(url)){entry.abort.abort();p3Cache.current.delete(url);}
+    setP3Message('');
+    void Promise.all(p3Frames.map(async frame=>{
+      const url=frame.linear!.url;let entry=p3Cache.current.get(url);
+      if(!entry){const abort=new AbortController();entry={abort,promise:loadFloatP3(frame,abort.signal)};p3Cache.current.set(url,entry);}
+      return [url,await entry.promise] as const;
+    })).then(entries=>{if(alive)setP3Images(new Map(entries));}).catch(error=>{if(alive)setP3Message(String(error));});
+    return()=>{alive=false;};
+  },[p3Key,p3Retry]);
+  useEffect(()=>()=>{for(const entry of p3Cache.current.values())entry.abort.abort();p3Cache.current.clear();},[]);
+  const p3Image=(frame:PreviewFrame|undefined)=>frame?.linear?.colorSpace==='display-p3'?p3Images.get(frame.linear.url):undefined;
+  const p3Ready=p3Frames.length>0&&p3Frames.every(frame=>p3Images.has(frame.linear!.url));
+  const wantsP3=p.frame?.linear?.colorSpace==='display-p3'&&!p.luminanceMap&&!p.dustView?.enabled;
+  const outputPreview=p.frame?.linear?.outputProfile;
   const clippingCanvas=useMemo(()=>{
     if(!p.clipping)return undefined;
-    const source=actual&&detail?.src===p.detailFrame?.url?detail:image;if(!source?.naturalWidth)return undefined;
-    const overlay=document.createElement('canvas');overlay.width=source.naturalWidth;overlay.height=source.naturalHeight;
-    const context=overlay.getContext('2d',{willReadFrequently:true});if(!context)return undefined;
-    context.drawImage(source,0,0);let pixels;try{pixels=context.getImageData(0,0,overlay.width,overlay.height);}catch{return undefined;}
-    const marked=context.createImageData(overlay.width,overlay.height);
+    const floatSource=actual?p3Image(p.detailFrame):p3Image(p.frame);const source=floatSource||(actual&&detail?.src===p.detailFrame?.url?detail:image);if(!source)return undefined;
+    const width=source instanceof HTMLImageElement?source.naturalWidth:source.width,height=source instanceof HTMLImageElement?source.naturalHeight:source.height;if(!width||!height)return undefined;
+    const overlay=document.createElement('canvas');overlay.width=width;overlay.height=height;
+    const context=overlay.getContext('2d',floatSource?{...P3_CONTEXT,willReadFrequently:true}:{willReadFrequently:true});if(!context)return undefined;
+    context.drawImage(source,0,0);let pixels;try{pixels=context.getImageData(0,0,overlay.width,overlay.height,floatSource?{colorSpace:'display-p3',pixelFormat:'rgba-float16'}:{});}catch{return undefined;}
+    const marked=context.createImageData(overlay.width,overlay.height,{colorSpace:'srgb',pixelFormat:'rgba-unorm8'});
     for(let i=0;i<pixels.data.length;i+=4){
-      const r=pixels.data[i],g=pixels.data[i+1],b=pixels.data[i+2];
+      const scale=floatSource?255:1,r=pixels.data[i]*scale,g=pixels.data[i+1]*scale,b=pixels.data[i+2]*scale;
       if(p.clipping==='shadows'&&r<=3&&g<=3&&b<=3){marked.data[i]=30;marked.data[i+1]=100;marked.data[i+2]=255;marked.data[i+3]=210;}
       else if(p.clipping==='highlights'&&(r>=252||g>=252||b>=252)){
         marked.data[i]=255;marked.data[i+1]=45;marked.data[i+2]=35;marked.data[i+3]=210;
       }
     }
     context.putImageData(marked,0,0);return overlay;
-  },[p.clipping,actual,image,detail,p.detailFrame?.url]);
+  },[p.clipping,actual,image,detail,p.detailFrame?.url,p3Images]);
   useEffect(()=>{setZoom(1);setActual(false);setPan({x:0,y:0});},[p.sessionId]);
   const fw=p.frame?.fullWidth||1,fh=p.frame?.fullHeight||1;
   const rotation=p.adjustments?.rotation||0;
@@ -108,7 +130,8 @@ export function Viewport(p: Props) {
   const mode=p.comparison?.layout||'off',dual=mode!=='off',horizontal=mode==='top-bottom'||mode==='split-horizontal';
   const paneWidth=mode==='left-right'?size.width/2:size.width,paneHeight=mode==='top-bottom'?size.height/2:size.height;
   const t=imageTransform(fw,fh,paneWidth,paneHeight,crop,zoom,pan,actual,devicePixelRatio);
-  const wantsLinear=!!p.frame?.linear&&!p.luminanceMap&&!p.dustView?.enabled&&(!dual||!!p.comparison?.frame?.linear);
+  const monitorSpace=p.frame?.linear?.colorSpace;
+  const wantsLinear=p.frame?.linear?.colorSpace==='rec709-linear'&&!p.luminanceMap&&!p.dustView?.enabled&&(!dual||p.comparison?.frame?.linear?.colorSpace===monitorSpace);
   const dust=useMemo(()=>{
     if(!p.dustView?.enabled)return undefined;
     const convert=(source:HTMLImageElement|undefined)=>{
@@ -120,14 +143,14 @@ export function Viewport(p: Props) {
     return {fit:convert(image),detail:convert(detail)};
   },[image,detail,p.dustView?.enabled,p.dustView?.threshold]);
   const linearKey=JSON.stringify([p.frame?.linear?.url,p.detailFrame?.linear?.url,p.comparison?.frame?.linear?.url,p.comparison?.detail?.linear?.url,size.width,size.height,t.x,t.y,t.scale,crop,actual,mode,pixelRatio]);
-  const linearActive=wantsLinear&&linearReady===linearKey&&!linearMessage;
+  const linearActive=wantsLinear&&!!linearReady&&!linearMessage;
   useEffect(()=>{
-    setLinearReady('');setLinearRenderer(undefined);setLinearMessage('');if(!wantsLinear||!linearCanvas.current)return;
+    setLinearReady(undefined);setLinearRenderer(undefined);setLinearMessage('');if(!wantsLinear||!linearCanvas.current)return;
     let alive=true,renderer:LinearCanvas|undefined;
-    const failed=(message:string)=>{if(alive){setLinearMessage(message);setLinearReady('');}};
+    const failed=(message:string)=>{if(alive){setLinearMessage(message);setLinearReady(undefined);}};
     void LinearCanvas.create(linearCanvas.current,failed).then(result=>{if(!alive)result.destroy();else{renderer=result;setLinearRenderer(result);}}).catch(error=>failed(String(error)));
     return()=>{alive=false;renderer?.destroy();};
-  },[wantsLinear,linearRetry]);
+  },[wantsLinear,linearRetry,monitorSpace]);
   useEffect(()=>{
     if(!wantsLinear||!linearRenderer||!p.frame||linearMessage)return;let alive=true;
     const area=crop||{x:0,y:0,width:1,height:1};
@@ -141,7 +164,7 @@ export function Viewport(p: Props) {
       return {frame,detail:detail?.sessionId===frame.sessionId&&detail.revision===frame.revision?detail:undefined,destination,clip,actual};
     };
     const panes=dual&&p.comparison?.frame?[pane(p.comparison.frame,p.comparison.detail,false),pane(p.frame,p.detailFrame,true)]:[pane(p.frame,p.detailFrame,false)];
-    void linearRenderer.draw(panes,size.width,size.height,devicePixelRatio).then(drawn=>{if(alive&&drawn)setLinearReady(linearKey);}).catch(error=>{if(alive){setLinearMessage(String(error));setLinearReady('');}});
+    void linearRenderer.draw(panes,size.width,size.height,devicePixelRatio).then(drawn=>{if(alive&&drawn)setLinearReady({key:linearKey,frame:p.frame!.url,detail:actual?p.detailFrame?.url||'':'',before:dual?p.comparison?.frame?.url||'':'',beforeDetail:dual&&actual?p.comparison?.detail?.url||'':'',layout:mode});}).catch(error=>{if(alive){setLinearMessage(String(error));setLinearReady(undefined);}});
     return()=>{alive=false;};
   },[linearRenderer,linearKey,wantsLinear,linearMessage]);
   const viewKey=JSON.stringify([p.frame?.sessionId,p.frame?.revision,p.tool,size.width,size.height,t.x,t.y,t.scale,mode]);
@@ -234,7 +257,7 @@ export function Viewport(p: Props) {
   useEffect(()=>{
     const c=canvas.current;if(!c)return;
     const dpr=devicePixelRatio;c.width=Math.round(size.width*dpr);c.height=Math.round(size.height*dpr);
-    const ctx=c.getContext('2d',{colorSpace:'srgb'})!;ctx.scale(dpr,dpr);ctx.clearRect(0,0,size.width,size.height);
+    const ctx=c.getContext('2d',P3_CONTEXT) as CanvasRenderingContext2D;if(wantsP3&&!isFloatP3Context(ctx))setP3Message('当前图形环境未接受 P3 半浮点主画布。');ctx.scale(dpr,dpr);ctx.clearRect(0,0,size.width,size.height);
     if(!image)return;
     const gray=!dual&&p.luminanceMap&&luminanceImage?.src===p.frame?.luminance?.url?luminanceImage:undefined;
     const currentDetail=detail?.src===p.detailFrame?.url?detail:undefined;
@@ -249,17 +272,17 @@ export function Viewport(p: Props) {
       if(actual&&region&&f&&!linearActive)ctx.drawImage(region,t.x+(f.x||0)*t.scale,t.y+(f.y||0)*t.scale,f.width*t.scale,f.height*t.scale);
       ctx.restore();
     }
-    if(dual&&p.comparison?.frame?.fullWidth===fw&&p.comparison.frame.fullHeight===fh)draw(beforeImage,currentBeforeDetail,p.comparison.detail,false);
-    draw(dust?.fit||gray||image,dust?.detail&&currentDetail?dust.detail:gray?currentLuminanceDetail:currentDetail,gray&&p.detailFrame?.luminance?{...p.detailFrame,...p.detailFrame.luminance}:p.detailFrame,dual);
+    if(dual&&p.comparison?.frame?.fullWidth===fw&&p.comparison.frame.fullHeight===fh)draw(p3Image(p.comparison?.frame)||beforeImage,p3Image(p.comparison?.detail)||currentBeforeDetail,p.comparison.detail,false);
+    draw(dust?.fit||gray||p3Image(p.frame)||image,dust?.detail&&currentDetail?dust.detail:gray?currentLuminanceDetail:p3Image(p.detailFrame)||currentDetail,gray&&p.detailFrame?.luminance?{...p.detailFrame,...p.detailFrame.luminance}:p.detailFrame,dual);
     if(clippingCanvas){
       const region=actual&&detail?.src===p.detailFrame?.url?p.detailFrame:undefined;
       ctx.save();if(crop){ctx.beginPath();ctx.rect(t.x+crop.x*fw*t.scale,t.y+crop.y*fh*t.scale,crop.width*fw*t.scale,crop.height*fh*t.scale);ctx.clip();}
       if(region)ctx.drawImage(clippingCanvas,t.x+(region.x||0)*t.scale,t.y+(region.y||0)*t.scale,region.width*t.scale,region.height*t.scale);
       else ctx.drawImage(clippingCanvas,t.x,t.y,fw*t.scale,fh*t.scale);ctx.restore();
     }
-    c.dataset.luminance=gray?.src||'';c.dataset.frame=image.src;c.dataset.detail=actual?currentDetail?.src||'':'';
+    c.dataset.luminance=gray?.src||'';c.dataset.frame=wantsP3&&!p3Ready&&!p3Message||wantsLinear&&!linearMessage?'':image.src;c.dataset.colorSpace=wantsP3&&p3Ready&&!p3Message?'display-p3':'srgb';c.dataset.outputProfile=outputPreview||'';c.dataset.detail=actual?currentDetail?.src||'':'';
     c.dataset.before=dual?beforeImage?.src||'':'';c.dataset.beforeDetail=dual&&actual?currentBeforeDetail?.src||'':'';c.dataset.layout=mode;c.dataset.clipping=p.clipping||'';c.dataset.dust=dust?'true':'false';
-  },[image,detail,p.detailFrame,p.frame,luminanceImage,luminanceDetail,p.luminanceMap,size,zoom,pan,actual,p.adjustments?.crop,p.tool,mode,beforeImage,beforeDetail,p.comparison?.frame,p.comparison?.detail,clippingCanvas,p.clipping,linearActive,pixelRatio,dust]);
+  },[image,detail,p.detailFrame,p.frame,luminanceImage,luminanceDetail,p.luminanceMap,size,zoom,pan,actual,p.adjustments?.crop,p.tool,mode,beforeImage,beforeDetail,p.comparison?.frame,p.comparison?.detail,clippingCanvas,p.clipping,linearActive,linearMessage,wantsLinear,wantsP3,p3Ready,p3Message,p3Images,pixelRatio,dust]);
   useEffect(()=>{
     if((!actual&&!loupeArea)||!p.frame||p.busy)return;
     const timer=setTimeout(()=>{
@@ -375,9 +398,9 @@ export function Viewport(p: Props) {
       onWheel={e=>{if(!image||p.guided.active()||maskGesture.active()||repairGesture.active()||straighten.active()||rangeGesture.active())return;setActual(false);setZoom(z=>Math.max(.2,Math.min(12,z*Math.exp(-e.deltaY*.002))));}}
       onDragOver={e=>{e.preventDefault();setDragOver(true);}} onDragLeave={()=>setDragOver(false)}
       onDrop={e=>{e.preventDefault();setDragOver(false);p.drop(window.captraw.droppedFiles(Array.from(e.dataTransfer.files)));}}>
-      {wantsLinear&&<canvas key={linearRetry} ref={linearCanvas} className="linear-preview" aria-label="浮点显影预览" aria-hidden="true" style={{visibility:linearActive?'visible':'hidden'}} data-frame={linearActive?p.frame?.linear?.url:''} data-detail={linearActive&&actual?p.detailFrame?.linear?.url:''}/>}
-      <canvas ref={canvas} aria-label="显影预览" />
-      {!!p.frame?.linear&&!p.luminanceMap&&<div className="linear-display-status" role="status" onPointerDown={event=>event.stopPropagation()} title={linearMessage||'浮点数据和画布配置不代表屏幕物理亮度已验收。'}>{linearMessage?'已回退 SDR · 高光可能截断':!wantsLinear?'对比暂用 SDR · 高光可能截断':linearActive?'扩展范围画布 · 实际 HDR 亮度未验证':'正在准备浮点画布'}{linearMessage&&<button onClick={()=>{setLinearMessage('');setLinearRetry(n=>n+1);}}>重试浮点显示</button>}</div>}
+      {wantsLinear&&<canvas key={linearRetry} ref={linearCanvas} className="linear-preview" role={linearActive?"img":undefined} aria-label={linearActive?"显影预览":"浮点显影预览"} aria-hidden={!linearActive} style={{visibility:linearActive?'visible':'hidden'}} data-frame={linearActive?linearReady?.frame:''} data-detail={linearActive?linearReady?.detail:''} data-before={linearActive?linearReady?.before:''} data-before-detail={linearActive?linearReady?.beforeDetail:''} data-layout={linearActive?linearReady?.layout:mode} data-linear-frame={linearActive?p.frame?.linear?.url:''} data-color-space={monitorSpace}/>}
+      <canvas ref={canvas} role={linearActive?undefined:"img"} aria-label={linearActive?"显影覆盖层":"显影预览"} aria-hidden={linearActive} />
+      {p.frame&&!p.luminanceMap&&<div className="linear-display-status" role="status" onPointerDown={event=>event.stopPropagation()} title={p3Message||linearMessage||'画布声明色彩空间，显示设备转换由系统完成。'}>{p3Message||linearMessage||!p.frame.linear?'受限 sRGB 兼容预览':wantsP3?p3Ready?(outputPreview?`${OUTPUT_COLOR_SPACES[outputPreview]} 目标预览 · Display P3 监看`:'Display P3 · 浮点 SDR'):'正在准备浮点画布':!wantsLinear?'分析／对比 · sRGB 兼容预览':linearActive&&linearReady?.key===linearKey?'扩展范围画布 · 实际 HDR 亮度未验证':'正在准备浮点画布'}{(p3Message||linearMessage)&&<button onClick={()=>{for(const entry of p3Cache.current.values())entry.abort.abort();p3Cache.current.clear();setP3Message('');setP3Retry(n=>n+1);setLinearMessage('');setLinearRetry(n=>n+1);}}>重试浮点显示</button>}</div>}
       {p.beforeLabel&&image&&<div className="before-state-label" role="status">{p.beforeLabel} · 同步构图</div>}
       {dual&&image&&<div className={`comparison-labels ${horizontal?'horizontal':''}`} aria-label="前后对比"><span title="前状态沿用当前裁切、旋转、透视和镜头校正">{p.comparison?.label} · 同步构图</span><span>当前编辑</span></div>}
       {!image&&!p.busy&&<div className="welcome"><div className="welcome-mark"><Aperture size={48} strokeWidth={1}/></div><span className="eyebrow">A BETTER START FOR EVERY RAW</span><h1>从光线，开始。</h1><p>让原片的每一份细节，都有表达的空间。</p><button className="primary" onClick={p.open}><FolderOpen size={16}/>打开照片<span>⌘ O</span></button><small>或将 RAW 文件拖到这里<br/>所有显影均在本机完成，原片保持不变。</small></div>}

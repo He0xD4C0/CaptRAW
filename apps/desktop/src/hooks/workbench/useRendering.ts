@@ -1,5 +1,5 @@
 import {useRef,useState,type MutableRefObject} from 'react';
-import type {Adjustments,PreviewFrame} from '@captraw/contracts';
+import type {Adjustments,OutputColorSpace,PreviewFrame} from '@captraw/contracts';
 import {snapshot,type DocumentState} from './model';
 
 export function useRendering(updateDocument:(id:string,change:(document:DocumentState)=>DocumentState)=>void,idRef:MutableRefObject<string>){
@@ -31,5 +31,12 @@ export function useRendering(updateDocument:(id:string,change:(document:Document
       if(idRef.current===document.image.id&&rev===revision.current){setError(String(error));setBusy(false);}throw error;
     }
   }
-  return {maskId,setMaskPreview,maskRef,colorSampling,setColorSampling,colorRef,luminance,setLuminance,sampling,setSampling,luminanceRef,sampleEpoch,samplingRef,frame,setFrame,detailFrame,setDetailFrame,busy,setBusy,error,setError,status,setStatus,opening,setOpening,wbPending,setWbPending,revision,lastApplied,rendered,loading,timer,renderDocument,previewThumbnail};
+  async function previewOutput(document:DocumentState,colorSpace:OutputColorSpace|null){
+    const current=rendered.current;
+    if(!current||current.id!==document.image.id||current.revision!==revision.current)
+      throw new Error('当前预览尚未完成，请稍后再预览输出色彩空间。');
+    try{await window.captraw.previewOutput(document.image.id,current.revision,colorSpace);}
+    catch(error){if(idRef.current===document.image.id)setError(String(error));throw error;}
+  }
+  return {maskId,setMaskPreview,maskRef,colorSampling,setColorSampling,colorRef,luminance,setLuminance,sampling,setSampling,luminanceRef,sampleEpoch,samplingRef,frame,setFrame,detailFrame,setDetailFrame,busy,setBusy,error,setError,status,setStatus,opening,setOpening,wbPending,setWbPending,revision,lastApplied,rendered,loading,timer,renderDocument,previewThumbnail,previewOutput};
 }
