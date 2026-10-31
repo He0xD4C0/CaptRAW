@@ -32,6 +32,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: tests/support/requirements.txt
+      - name: Prepare QA Python
+        run: |
+          python3 -m venv build/qa-venv
+          build/qa-venv/bin/python -m pip install --disable-pip-version-check -r tests/support/requirements.txt 2>&1 | tee artifacts/monorepo/e2e/python.log
       - name: Prepare pnpm
         run: |
           corepack enable
