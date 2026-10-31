@@ -21,7 +21,7 @@ CaptRAW uses a local native core to process RAW files. It provides non-destructi
 | Item | Version | Status |
 |---|---|---|
 | Published installation baseline | 0.64 | DMG, source archive, and acceptance identity registered |
-| Installation-experience candidate | `0.66.0-beta.1` / `18ebe62fb1d00a6f` | Trustworthy color pipeline and scoped macOS photography workflow delivered; full ACR replacement remains future work |
+| Installation-experience candidate | `0.66.0-beta.1` / `ee2839c5e4c59b83` | Trustworthy color pipeline and scoped macOS photography workflow delivered; full ACR replacement remains future work |
 
 The [macOS closeout ledger](docs/CLOSEOUT.md) defines the current development and acceptance scope. Installation, signing, hashes, and prior acceptance evidence are recorded in the [acceptance log](docs/ACCEPTANCE.md). Earlier ACR research and acceptance records are retained for traceability only.
 
@@ -72,7 +72,7 @@ Tool interactions and shortcuts may change with the source. For a released build
 
 ## Build
 
-Building requires Xcode Command Line Tools, ARM64 Node.js 22.13+, pnpm 11.25.0, CMake, Ninja, pkg-config, and Homebrew. CI pins Node.js 22.23.1.
+Building requires Xcode Command Line Tools, ARM64 Node.js 24.22.2, pnpm 11.25.0, CMake, Ninja, pkg-config, and Homebrew. CI uses the same pinned Node.js 24 LTS release.
 
 ```sh
 brew install cmake ninja pkgconf autoconf automake libtool gtkmm3 exiv2 lensfun libomp nlohmann-json librsvg jpeg-turbo fftw little-cms2 aom

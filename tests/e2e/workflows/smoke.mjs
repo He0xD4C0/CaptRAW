@@ -11,6 +11,7 @@ copyFileSync(resolve('build/samples/nikon-d850.NEF'),source);
 const executablePath=process.env.CAPTRAW_APP;
 const errors=[],consoleErrors=[],diagnosticErrors=[],startedAt=new Date().toISOString();
 const performanceBudgetMs=process.env.CAPTRAW_E2E_PERF_BUDGET_MS==='5000'?5000:null;
+const exportTimeoutMs=Number(process.env.CAPTRAW_E2E_EXPORT_TIMEOUT_MS||60000);
 let app,page,firstVisibleMs,failure,diagnostics,events=[],stage='launch',backgroundWindow=false;
 const describeError=error=>({name:error.name||'Error',message:error.message||String(error),stack:error.stack});
 try{
@@ -70,7 +71,7 @@ try{
   await app.evaluate(({dialog},file)=>{dialog.showSaveDialog=async()=>({canceled:false,filePath:file});},output);
   await page.getByRole('button',{name:'导出',exact:true}).click();
   await page.getByRole('button',{name:'TIFF · 16 位'}).click();
-  await expect(page.locator('.job-toast.done')).toBeVisible({timeout:60000});
+  await expect(page.locator('.job-toast.done')).toBeVisible({timeout:exportTimeoutMs});
   await expect.poll(()=>existsSync(output)).toBe(true);
   stage='detail-1to1';
   await page.getByRole('button',{name:'1:1',exact:true}).click();
@@ -117,7 +118,7 @@ try{
   }
   writeFileSync(join(out,'stdout.log'),diagnostics?.stdout||'');
   writeFileSync(join(out,'stderr.log'),diagnostics?.stderr||'');
-  writeFileSync(join(out,'e2e-report.json'),JSON.stringify({status:failure?'failed':'passed',stage,startedAt,finishedAt:new Date().toISOString(),backgroundWindow,packaged:!!executablePath,firstVisibleMs,performanceBudgetMs,errors,consoleErrors,events,error:failure?describeError(failure):null,diagnostics,diagnosticErrors},null,2)+'\n');
+  writeFileSync(join(out,'e2e-report.json'),JSON.stringify({status:failure?'failed':'passed',stage,startedAt,finishedAt:new Date().toISOString(),backgroundWindow,packaged:!!executablePath,firstVisibleMs,performanceBudgetMs,exportTimeoutMs,errors,consoleErrors,events,error:failure?describeError(failure):null,diagnostics,diagnosticErrors},null,2)+'\n');
   if(!failure)rmSync(fixtureDirectory,{recursive:true,force:true});
 }
 if(failure)throw failure;

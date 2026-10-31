@@ -21,7 +21,7 @@ CaptRAW 使用本地原生核心处理 RAW，提供非破坏编辑、多图会�
 | 对象 | 版本 | 状态 |
 |---|---|---|
 | 已发布安装基线 | 0.64 | 已登记 DMG、源码归档和验收身份 |
-| 安装体验候选 | `0.66.0-beta.1`／`18ebe62fb1d00a6f` | 可信色彩链路与冻结范围内的 macOS 摄影工作流已交付；完整 ACR 替代仍属后续目标 |
+| 安装体验候选 | `0.66.0-beta.1`／`ee2839c5e4c59b83` | 可信色彩链路与冻结范围内的 macOS 摄影工作流已交付；完整 ACR 替代仍属后续目标 |
 
 当前施工与验收范围以 [macOS 收尾账本](CLOSEOUT.md) 为准。安装、签名、哈希与既有验收记录见 [验收记录](ACCEPTANCE.md)。旧对齐研究和历史验收仅作追溯。
 
@@ -72,7 +72,7 @@ CaptRAW 使用本地原生核心处理 RAW，提供非破坏编辑、多图会�
 
 ## 构建
 
-构建需要 Xcode Command Line Tools、ARM64 Node.js 22.13+、pnpm 11.25.0、CMake、Ninja、pkg-config 和 Homebrew。CI 固定 Node.js 22.23.1。
+构建需要 Xcode Command Line Tools、ARM64 Node.js 24.22.2、pnpm 11.25.0、CMake、Ninja、pkg-config 和 Homebrew。CI 使用相同的固定 Node.js 24 LTS 版本。
 
 ```sh
 brew install cmake ninja pkgconf autoconf automake libtool gtkmm3 exiv2 lensfun libomp nlohmann-json librsvg jpeg-turbo fftw little-cms2 aom

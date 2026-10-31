@@ -232,7 +232,10 @@ export function Viewport(p: Props) {
       const targets=await map(points),selected=spots.find(s=>s.id===p.repair?.selectedId);
       const active=selected?await mappedRepairGuide(selected,rw,rh,rotation,t.scale,map,()=>alive):undefined;
       if(alive){setRepairFailure('');setRepairMapping({key:repairKey,targets:targets.slice(0,spots.length),source:targets[spots.length],active});}
-    })().catch(error=>{if(alive){setRepairMapping(undefined);setRepairFailure(repairKey);p.error(`无法准备修复控制点：${String(error)}。单击画布重试。`);}});
+    })().catch(error=>{
+      if(!alive||String(error).includes('Stale coordinate request'))return;
+      setRepairMapping(undefined);setRepairFailure(repairKey);p.error(`无法准备修复控制点：${String(error)}。单击画布重试。`);
+    });
     return()=>{alive=false;};
   },[repairKey,repairAttempt]);
   const repairGuidePoint=(q:Point)=>({x:t.x+(q.x+.5)*t.scale,y:t.y+(q.y+.5)*t.scale});

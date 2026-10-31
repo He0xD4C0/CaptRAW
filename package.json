@@ -16,7 +16,7 @@
   "type": "module",
   "main": "apps/desktop/dist/electron/main.cjs",
   "packageManager": "pnpm@11.25.0",
-  "engines": { "node": ">=22.13.0" },
+  "engines": { "node": ">=24.22.2 <25.0.0" },
   "scripts": {
     "candidate:build": "node scripts/candidate.mjs build",
     "candidate:verify": "node scripts/candidate.mjs verify",

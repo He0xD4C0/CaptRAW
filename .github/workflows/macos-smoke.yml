@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  NODE_VERSION: '22.23.1'
+  NODE_VERSION: '24.22.2'
   PNPM_VERSION: '11.25.0'
   TURBO_CACHE: 'local:rw'
   TURBO_TELEMETRY_DISABLED: '1'
@@ -77,6 +77,7 @@ jobs:
       - name: Run macOS acceptance gate
         env:
           CAPTRAW_E2E_BACKGROUND: '1'
+          CAPTRAW_E2E_EXPORT_TIMEOUT_MS: '240000'
         run: pnpm test:gate macos-smoke 2>&1 | tee artifacts/monorepo/e2e/smoke.log
       - name: Upload smoke diagnostics
         if: always()
